@@ -1,12 +1,12 @@
 {
-  "name": "vigordns",
+  "name": "dnsentry",
   "private": true,
   "type": "module",
   "packageManager": "pnpm@11.25.0",
   "scripts": {
-    "dev": "pnpm --filter vigordns-console dev",
-    "build": "pnpm --filter vigordns-console build",
-    "check": "pnpm --filter vigordns-console check",
-    "start": "pnpm run build && go run ./cmd/vigordns"
+    "dev": "pnpm --filter dnsentry-console dev",
+    "build": "pnpm --filter dnsentry-console build",
+    "check": "pnpm --filter dnsentry-console check",
+    "start": "pnpm run build && go run ./cmd/dnsentry"
   }
 }

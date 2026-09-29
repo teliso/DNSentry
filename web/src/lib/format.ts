@@ -35,11 +35,6 @@ export function formatClock(value: string): string {
     : date.toLocaleTimeString('zh-CN', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
 }
 
-export function formatDateTime(value: string): string {
-  const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? value : date.toLocaleString('zh-CN', { hour12: false });
-}
-
 export function formatRelative(value: string | undefined, now = Date.now()): string {
   if (!value) return '—';
   const then = new Date(value).getTime();

@@ -86,7 +86,7 @@
       <div class="form-grid two">
         <ListEditor label="监听地址" hint="默认 :443" placeholder=":443" code rows={2} bind:values={dnscrypt.listens} />
         <div class="stack">
-          <Field label="Provider 名称"><input class="mono" bind:value={dnscrypt.provider_name} placeholder="vigordns" /></Field>
+          <Field label="Provider 名称"><input class="mono" bind:value={dnscrypt.provider_name} placeholder="dnsentry" /></Field>
           <Field label="证书有效期"><div class="unit"><input type="number" min="1" bind:value={dnscrypt.certificate_ttl_hours} /><span>小时</span></div></Field>
         </div>
         <Field label="Provider 私钥" hint="32 字节种子或 64 字节私钥（十六进制）；留空保持现有密钥">

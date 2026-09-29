@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/vigordns/vigordns/internal/rules"
+	"github.com/teliso/DNSentry/internal/rules"
 )
 
 func TestPersistentQueryLoggerWritesJSONLAndCloses(t *testing.T) {

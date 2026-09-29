@@ -3,7 +3,7 @@ package app
 import (
 	"context"
 	"encoding/json"
-	"github.com/vigordns/vigordns/internal/rules"
+	"github.com/teliso/DNSentry/internal/rules"
 	"net/http"
 )
 

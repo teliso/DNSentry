@@ -26,9 +26,9 @@ import (
 
 	"github.com/miekg/dns"
 	"github.com/quic-go/quic-go"
-	"github.com/vigordns/vigordns/internal/cache"
-	"github.com/vigordns/vigordns/internal/querylog"
-	"github.com/vigordns/vigordns/internal/rules"
+	"github.com/teliso/DNSentry/internal/cache"
+	"github.com/teliso/DNSentry/internal/querylog"
+	"github.com/teliso/DNSentry/internal/rules"
 	"gopkg.in/yaml.v3"
 )
 

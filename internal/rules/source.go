@@ -161,7 +161,7 @@ func downloadRules(ctx context.Context, client *http.Client, rawURL string) ([]E
 	if err != nil {
 		return nil, err
 	}
-	request.Header.Set("User-Agent", "VigorDNS/0.1")
+	request.Header.Set("User-Agent", "DNSentry/0.1")
 	response, err := client.Do(request)
 	if err != nil {
 		return nil, err

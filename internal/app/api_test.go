@@ -2,8 +2,8 @@ package app
 
 import (
 	"bytes"
-	"github.com/vigordns/vigordns/internal/cache"
-	"github.com/vigordns/vigordns/internal/querylog"
+	"github.com/teliso/DNSentry/internal/cache"
+	"github.com/teliso/DNSentry/internal/querylog"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -52,7 +52,7 @@ func TestLoopbackAPIExposesMetricsAndClearsCache(t *testing.T) {
 	request.RemoteAddr = "127.0.0.1:4000"
 	recorder := httptest.NewRecorder()
 	api.handle(recorder, request)
-	if recorder.Code != http.StatusOK || !strings.Contains(recorder.Body.String(), "vigordns_cache_hit_rate") {
+	if recorder.Code != http.StatusOK || !strings.Contains(recorder.Body.String(), "dnsentry_cache_hit_rate") {
 		t.Fatalf("expected Prometheus metrics, got status=%d body=%s", recorder.Code, recorder.Body.String())
 	}
 

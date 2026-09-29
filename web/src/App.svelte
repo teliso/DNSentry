@@ -47,9 +47,9 @@
 
 <div class="shell">
   <aside>
-    <a class="brand" href="#overview" aria-label="VigorDNS 仪表盘">
+    <a class="brand" href="#overview" aria-label="DNSentry 仪表盘">
       <span class="mark" aria-hidden="true"><Icon name="shield-check" size={18} /></span>
-      <span><strong>VigorDNS</strong><small>DNS 过滤与解析</small></span>
+      <span><strong>DNSentry</strong><small>DNS 过滤与解析</small></span>
     </a>
 
     <nav aria-label="主导航">

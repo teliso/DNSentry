@@ -8,7 +8,7 @@ import (
 
 	"github.com/miekg/dns"
 
-	"github.com/vigordns/vigordns/internal/cache"
+	"github.com/teliso/DNSentry/internal/cache"
 )
 
 func TestBlockingModes(t *testing.T) {
@@ -172,7 +172,7 @@ func TestCachedResponseIsFilteredForClient(t *testing.T) {
 	}
 	message.Extra = []dns.RR{&dns.OPT{Hdr: dns.RR_Header{Name: ".", Rrtype: dns.TypeOPT, Class: 1232}}}
 	message.AuthenticatedData = true
-	filtered := filterCachedResponse(message, newTestRequest("secure.test.", dns.TypeA))
+	filtered := normalizeClientResponse(message, newTestRequest("secure.test.", dns.TypeA), true)
 	if len(filtered.Answer) != 1 || filtered.Answer[0].Header().Rrtype != dns.TypeA || len(filtered.Extra) != 0 || filtered.AuthenticatedData {
 		t.Fatalf("expected unvalidated AD and DNSSEC/OPT records to be filtered: %#v", filtered)
 	}

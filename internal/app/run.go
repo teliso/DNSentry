@@ -17,9 +17,9 @@ import (
 
 	"github.com/miekg/dns"
 
-	"github.com/vigordns/vigordns/internal/cache"
-	"github.com/vigordns/vigordns/internal/querylog"
-	"github.com/vigordns/vigordns/internal/rules"
+	"github.com/teliso/DNSentry/internal/cache"
+	"github.com/teliso/DNSentry/internal/querylog"
+	"github.com/teliso/DNSentry/internal/rules"
 )
 
 const shutdownTimeout = 10 * time.Second
@@ -34,7 +34,7 @@ type listenerService interface {
 	Close() error
 }
 
-// Run starts VigorDNS and blocks until it receives SIGINT/SIGTERM or the Web UI
+// Run starts DNSentry and blocks until it receives SIGINT/SIGTERM or the Web UI
 // stops. static is the built Web console, rooted at its index.html.
 func Run(static fs.FS) {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
@@ -48,11 +48,11 @@ func checkWebExposure(config *Config, apiToken string) error {
 	if isLoopbackHTTPListen(config.HTTPListen) {
 		return nil
 	}
-	if os.Getenv("VIGORDNS_ALLOW_PUBLIC_WEB") != "1" {
-		return fmt.Errorf("refusing non-loopback Web listen address %q; set VIGORDNS_ALLOW_PUBLIC_WEB=1 to allow public Web access", config.HTTPListen)
+	if os.Getenv("DNSENTRY_ALLOW_PUBLIC_WEB") != "1" {
+		return fmt.Errorf("refusing non-loopback Web listen address %q; set DNSENTRY_ALLOW_PUBLIC_WEB=1 to allow public Web access", config.HTTPListen)
 	}
 	if apiToken == "" {
-		return errors.New("refusing public Web access without VIGORDNS_API_TOKEN")
+		return errors.New("refusing public Web access without DNSENTRY_API_TOKEN")
 	}
 	return nil
 }
@@ -72,7 +72,7 @@ func run(ctx context.Context, stop context.CancelFunc, static fs.FS) error {
 	if err != nil {
 		return err
 	}
-	apiToken := os.Getenv("VIGORDNS_API_TOKEN")
+	apiToken := os.Getenv("DNSENTRY_API_TOKEN")
 	if err := checkWebExposure(config, apiToken); err != nil {
 		return err
 	}
@@ -134,7 +134,7 @@ func run(ctx context.Context, stop context.CancelFunc, static fs.FS) error {
 	httpListener, err := net.Listen("tcp", config.HTTPListen)
 	if err != nil {
 		services.closeAll()
-		return fmt.Errorf("Web UI cannot listen on %s: %w", config.HTTPListen, err)
+		return fmt.Errorf("web UI cannot listen on %s: %w", config.HTTPListen, err)
 	}
 	for _, address := range dnsService.Addresses() {
 		log.Printf("DNS UDP and TCP listening on %s", address)

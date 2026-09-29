@@ -10,7 +10,7 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"github.com/vigordns/vigordns/internal/dnsname"
+	"github.com/teliso/DNSentry/internal/dnsname"
 )
 
 type Action string

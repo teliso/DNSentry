@@ -3,11 +3,10 @@ package app
 import (
 	"fmt"
 	"net"
-	"sort"
 	"strings"
 
 	"github.com/miekg/dns"
-	"github.com/vigordns/vigordns/internal/dnsname"
+	"github.com/teliso/DNSentry/internal/dnsname"
 )
 
 type LocalRecord struct {
@@ -126,16 +125,4 @@ func localRecordsEqual(left, right []LocalRecord) bool {
 		}
 	}
 	return true
-}
-
-func sortLocalRecords(records []LocalRecord) {
-	sort.Slice(records, func(left, right int) bool {
-		if records[left].Domain != records[right].Domain {
-			return records[left].Domain < records[right].Domain
-		}
-		if records[left].Type != records[right].Type {
-			return records[left].Type < records[right].Type
-		}
-		return records[left].Value < records[right].Value
-	})
 }

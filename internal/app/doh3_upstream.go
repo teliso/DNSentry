@@ -78,7 +78,7 @@ func (s *DNSServer) exchangeDoH3(request *dns.Msg, rawEndpoint string) (*dns.Msg
 	}
 	httpRequest.Header.Set("Accept", "application/dns-message")
 	httpRequest.Header.Set("Content-Type", "application/dns-message")
-	httpRequest.Header.Set("User-Agent", "VigorDNS/0.1")
+	httpRequest.Header.Set("User-Agent", "DNSentry/0.1")
 
 	entry, err := s.acquireDoH3Client(dohOrigin(parsed, port), parsed.Hostname(), port)
 	if err != nil {

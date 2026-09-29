@@ -7,8 +7,8 @@ import (
 	"time"
 
 	"github.com/miekg/dns"
-	"github.com/vigordns/vigordns/internal/cache"
-	"github.com/vigordns/vigordns/internal/dnsname"
+	"github.com/teliso/DNSentry/internal/cache"
+	"github.com/teliso/DNSentry/internal/dnsname"
 )
 
 func optimisticMaxAge(seconds uint32) time.Duration {
@@ -104,10 +104,6 @@ func isCacheableNegative(message *dns.Msg) bool {
 		}
 	}
 	return seenSOA
-}
-
-func filterCachedResponse(message, request *dns.Msg) *dns.Msg {
-	return normalizeClientResponse(message, request, true)
 }
 
 func filterResponseWithDNSSEC(message, request *dns.Msg, locallyValidated bool) *dns.Msg {
@@ -400,23 +396,6 @@ func cachedECSForRequest(message, request *dns.Msg) *dns.EDNS0_SUBNET {
 	cachedECS.Family = requestECS.Family
 	cachedECS.SourceNetmask = requestECS.SourceNetmask
 	return cachedECS
-}
-
-func responseECSOption(message *dns.Msg) *dns.EDNS0_SUBNET {
-	for _, record := range message.Extra {
-		opt, ok := record.(*dns.OPT)
-		if !ok {
-			continue
-		}
-		for _, option := range opt.Option {
-			if subnet, ok := option.(*dns.EDNS0_SUBNET); ok {
-				copy := *subnet
-				copy.Address = append(net.IP(nil), subnet.Address...)
-				return &copy
-			}
-		}
-	}
-	return nil
 }
 
 func requestCoalescingKey(request *dns.Msg) string {

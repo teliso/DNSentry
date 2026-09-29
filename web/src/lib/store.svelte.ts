@@ -7,7 +7,7 @@ const POLL_INTERVAL_MS = 10_000;
 
 function messageOf(cause: unknown, fallback: string): string {
   if (cause instanceof APIError) return cause.message;
-  if (cause instanceof TypeError) return '无法连接到 VigorDNS 服务';
+  if (cause instanceof TypeError) return '无法连接到 DNSentry 服务';
   return cause instanceof Error ? cause.message : fallback;
 }
 
@@ -68,7 +68,7 @@ class ConsoleStore {
       this.online = true;
       this.tokenRequired = false;
     } catch (cause) {
-      if (this.online) toasts.error(messageOf(cause, '无法连接到 VigorDNS 服务'));
+      if (this.online) toasts.error(messageOf(cause, '无法连接到 DNSentry 服务'));
       this.online = false;
     }
   }

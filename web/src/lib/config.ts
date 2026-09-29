@@ -6,7 +6,7 @@ const defaultDNSCrypt: DNSCryptConfig = {
   enabled: false,
   listen: '',
   listens: [],
-  provider_name: 'vigordns',
+  provider_name: 'dnsentry',
   private_key: '',
   resolver_secret: '',
   certificate_ttl_hours: 24

@@ -1,4 +1,4 @@
-// Shapes of the VigorDNS JSON API (see internal/app/api*.go).
+// Shapes of the DNSentry JSON API (see internal/app/api*.go).
 
 export type RuleAction = 'block' | 'allow';
 export type Rule = { domain: string; action: RuleAction | 'rewrite'; ip?: string; source?: string };

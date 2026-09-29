@@ -1,12 +1,12 @@
-# VigorDNS
+# DNSentry
 
-VigorDNS is a Go DNS filtering service with a Svelte management console.
+DNSentry is a Go DNS filtering service with a Svelte management console.
 
 ## 项目结构
 
 ```text
-cmd/vigordns/         服务入口（嵌入已构建的 Web 控制台）
-cmd/vigordns-query/   带端口的 DNS 查询小工具
+cmd/dnsentry/         服务入口（嵌入已构建的 Web 控制台）
+cmd/dnsentry-query/   带端口的 DNS 查询小工具
 internal/app/         DNS 服务、上游策略、加密 DNS、DNSSEC、配置与 HTTP API
 internal/rules/       过滤规则存储、匹配与远程规则源更新
 internal/querylog/    查询日志、仪表盘聚合与 JSONL 持久化
@@ -27,20 +27,20 @@ pnpm install
 pnpm start
 ```
 
-管理界面默认只监听 `127.0.0.1:18080`，本机 loopback 请求在未配置 token 时可以直接使用。如果确实需要绑定局域网或公网地址，必须同时设置 `VIGORDNS_ALLOW_PUBLIC_WEB=1` 和非空的 `VIGORDNS_API_TOKEN`；token 只从环境变量读取，不写入 `data/config.yaml`，也不会通过 API 返回。
+管理界面默认只监听 `127.0.0.1:18080`，本机 loopback 请求在未配置 token 时可以直接使用。如果确实需要绑定局域网或公网地址，必须同时设置 `DNSENTRY_ALLOW_PUBLIC_WEB=1` 和非空的 `DNSENTRY_API_TOKEN`；token 只从环境变量读取，不写入 `data/config.yaml`，也不会通过 API 返回。
 
 公开访问示例（PowerShell）：
 
 ```powershell
-$env:VIGORDNS_ALLOW_PUBLIC_WEB = '1'
-$env:VIGORDNS_API_TOKEN = 'replace-with-a-long-random-token'
+$env:DNSENTRY_ALLOW_PUBLIC_WEB = '1'
+$env:DNSENTRY_API_TOKEN = 'replace-with-a-long-random-token'
 pnpm start
 ```
 
 打开 `http://<server-address>:18080/?token=replace-with-a-long-random-token` 可让控制台读取 token 并保存到浏览器 `localStorage`。之后控制台会为 API 请求发送 `Authorization: Bearer <token>`。也可以直接调用 API：
 
 ```powershell
-$headers = @{ Authorization = "Bearer $env:VIGORDNS_API_TOKEN" }
+$headers = @{ Authorization = "Bearer $env:DNSENTRY_API_TOKEN" }
 Invoke-RestMethod http://<server-address>:18080/api/status -Headers $headers
 ```
 
@@ -48,7 +48,7 @@ Invoke-RestMethod http://<server-address>:18080/api/status -Headers $headers
 
 `pnpm start` builds the Svelte console and starts the Go DNS service. The console is served at <http://127.0.0.1:18080>. DNS listens on `:15353` by default. These development defaults avoid Windows mDNS port `5353` and common Web port conflicts.
 
-For frontend development with Vite hot reload, run the Go service with `go run ./cmd/vigordns` in one terminal and then run:
+For frontend development with Vite hot reload, run the Go service with `go run ./cmd/dnsentry` in one terminal and then run:
 
 ```sh
 pnpm run dev
@@ -57,8 +57,8 @@ pnpm run dev
 The DNS listener currently supports UDP and TCP. On Windows, `nslookup` does not accept `IP:port` as its server argument. The project includes a small query client that makes the port explicit:
 
 ```powershell
-go run ./cmd/vigordns-query -server 127.0.0.1:15353 ai.api.vigorbit.dev
-go run ./cmd/vigordns-query -server 127.0.0.1:15353 -type AAAA ai.api.vigorbit.dev
+go run ./cmd/dnsentry-query -server 127.0.0.1:15353 example.com
+go run ./cmd/dnsentry-query -server 127.0.0.1:15353 -type AAAA example.com
 ```
 
 A successful query appears in the Web console under 查询日志, or can be inspected with:
@@ -149,13 +149,13 @@ encryption:
   dnscrypt:
     enabled: false
     listen: ""
-    provider_name: "vigordns"
+    provider_name: "dnsentry"
     private_key: ""
     resolver_secret: ""
     certificate_ttl_hours: 24
 ```
 
-启用 `encryption.enabled` 后，VigorDNS 会作为入站 DoT、DoH、DoH3 和 DoQ 服务器运行；`encryption.dnscrypt.enabled` 可额外启用 DNSCrypt v2。证书和私钥既可以配置文件路径，也可以在 Web“服务设置”中直接粘贴 PEM 内容；私钥 PEM 不会通过 API 返回。证书、私钥、监听地址、DNSCrypt Provider 和证书有效期可在 Web“服务设置 → 加密 DNS 服务”中配置，保存后需要重启服务。DoH/DoH3 使用 `/dns-query`，DoT/DoQ/DNSCrypt 使用各自配置的监听地址。普通 DNS 的 `dns.listen`/`dns_listen` 与各加密协议的单数 `*_listen` 字段是兼容主地址；`dns.listens`/`dns_listens`、`dot_listens`、`doh_listens`、`doh3_listens`、`doq_listens` 是完整地址列表，每个列表最多 16 个，首项会同步到单数主地址。Web 输入框每行填写一个地址，未启用的加密协议显示为空。DoT、DoQ 默认使用 `:853`，DoH、DoH3 和 DNSCrypt 默认使用 `:443` 作为 placeholder。监听地址为空表示对应协议不监听，启用后可填写 `:端口` 绑定所有地址或填写具体地址；同一协议的多个地址可以使用不同端口。
+启用 `encryption.enabled` 后，DNSentry 会作为入站 DoT、DoH、DoH3 和 DoQ 服务器运行；`encryption.dnscrypt.enabled` 可额外启用 DNSCrypt v2。证书和私钥既可以配置文件路径，也可以在 Web“服务设置”中直接粘贴 PEM 内容；私钥 PEM 不会通过 API 返回。证书、私钥、监听地址、DNSCrypt Provider 和证书有效期可在 Web“服务设置 → 加密 DNS 服务”中配置，保存后需要重启服务。DoH/DoH3 使用 `/dns-query`，DoT/DoQ/DNSCrypt 使用各自配置的监听地址。普通 DNS 的 `dns.listen`/`dns_listen` 与各加密协议的单数 `*_listen` 字段是兼容主地址；`dns.listens`/`dns_listens`、`dot_listens`、`doh_listens`、`doh3_listens`、`doq_listens` 是完整地址列表，每个列表最多 16 个，首项会同步到单数主地址。Web 输入框每行填写一个地址，未启用的加密协议显示为空。DoT、DoQ 默认使用 `:853`，DoH、DoH3 和 DNSCrypt 默认使用 `:443` 作为 placeholder。监听地址为空表示对应协议不监听，启用后可填写 `:端口` 绑定所有地址或填写具体地址；同一协议的多个地址可以使用不同端口。
 
 上游列表支持普通 DNS、DoT（`tls://`）、DoH/HTTP2（`https://`）、DoH3（`h3://host/dns-query`）、DoQ（`quic://`）以及 DNSCrypt v2 的 `sdns://`、`sdns+udp://` 和 `sdns+tcp://` stamp；服务会验证 Provider certificate 后复用 resolver 信息。`fallback_upstreams` 是备用 DNS 列表：仅当主上游无可用响应、超时或返回 `SERVFAIL`/`REFUSED` 时才按列表尝试，不参与主上游的负载均衡、并行或最快 IP 正常请求。`upstream_timeout_seconds` 控制单个上游的连接和查询超时。`upstream_mode` 支持 `load_balance`（轮转并在故障时切换）、`parallel`（并发查询并使用首个有效响应）和 `fastest_addr`（并发查询 A/AAAA 响应，并对最多 16 个公网地址执行 TCP/443 连接测速后将最快地址前置）。后两种模式会将同一个查询发送给多个上游；`fastest_addr` 还会增加地址探测流量，且仅适合确有多线路或 CDN 调度需求的场景。Web 页面“上游 DNS”中的“测试上游”会逐个测试当前文本框里的地址，测试结果不会写入缓存。
 

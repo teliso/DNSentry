@@ -1,4 +1,4 @@
-const KEY = 'vigordns_theme';
+const KEY = 'dnsentry_theme';
 type Theme = 'light' | 'dark';
 
 function initial(): Theme {

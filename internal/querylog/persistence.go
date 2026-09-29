@@ -33,7 +33,7 @@ type persistence struct {
 const persistenceQueueSize = 1024
 
 func NewWithPersistence(max int, config PersistenceConfig) (*Logger, error) {
-	logger := newLogger(max)
+	logger := New(max)
 	if !config.Enabled {
 		return logger, nil
 	}

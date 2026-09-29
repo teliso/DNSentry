@@ -127,7 +127,7 @@ func TestCachedECSResponseUsesCurrentRequestSource(t *testing.T) {
 	}
 
 	currentRequest := ecsScopeRequest("192.0.2.200", 1, 24)
-	filtered := filterCachedResponse(cached.Copy(), currentRequest)
+	filtered := normalizeClientResponse(cached.Copy(), currentRequest, true)
 	got, ok := singleECSOption(filtered)
 	if !ok || !got.Address.Equal(net.ParseIP("192.0.2.0")) || got.SourceScope != 16 {
 		t.Fatalf("cached ECS leaked or changed scope: %#v", got)

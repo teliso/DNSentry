@@ -10,7 +10,7 @@ import (
 
 func TestDownloadRules(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
-		if request.Header.Get("User-Agent") != "VigorDNS/0.1" {
+		if request.Header.Get("User-Agent") != "DNSentry/0.1" {
 			t.Errorf("unexpected user agent: %q", request.Header.Get("User-Agent"))
 		}
 		writer.WriteHeader(http.StatusOK)

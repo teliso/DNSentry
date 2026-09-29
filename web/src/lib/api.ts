@@ -1,6 +1,6 @@
 import type { Config, LogEntry, Rule, RuleAction, RuleSource, Status, UpstreamTest } from './types';
 
-const TOKEN_KEY = 'vigordns_api_token';
+const TOKEN_KEY = 'dnsentry_api_token';
 
 export class APIError extends Error {
   constructor(

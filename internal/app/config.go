@@ -1,6 +1,6 @@
 package app
 
-import "github.com/vigordns/vigordns/internal/rules"
+import "github.com/teliso/DNSentry/internal/rules"
 
 // Config is the effective service configuration. JSON tags describe the Web API
 // shape; the on-disk YAML layout lives in config_format.go.

@@ -6,16 +6,16 @@ import (
 	"testing"
 
 	"github.com/miekg/dns"
-	"github.com/vigordns/vigordns/internal/cache"
-	"github.com/vigordns/vigordns/internal/querylog"
-	"github.com/vigordns/vigordns/internal/rules"
+	"github.com/teliso/DNSentry/internal/cache"
+	"github.com/teliso/DNSentry/internal/querylog"
+	"github.com/teliso/DNSentry/internal/rules"
 )
 
 func TestLocalRecordsAreValidatedAndServedBeforeUpstream(t *testing.T) {
 	tests := []LocalRecord{
 		{Domain: "router.home", Type: "A", Value: "192.168.1.1", TTL: 60},
 		{Domain: "alias.home", Type: "CNAME", Value: "router.home", TTL: 60},
-		{Domain: "txt.home", Type: "TXT", Value: "managed by VigorDNS", TTL: 60},
+		{Domain: "txt.home", Type: "TXT", Value: "managed by DNSentry", TTL: 60},
 	}
 	if err := validateLocalRecords(tests); err != nil {
 		t.Fatal(err)

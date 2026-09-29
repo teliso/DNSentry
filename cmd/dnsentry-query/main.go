@@ -15,7 +15,7 @@ func main() {
 	typeName := flag.String("type", "A", "DNS record type, for example A or AAAA")
 	flag.Parse()
 	if flag.NArg() != 1 {
-		fmt.Fprintln(os.Stderr, "usage: vigordns-query [-server 127.0.0.1:15353] [-type A] domain")
+		fmt.Fprintln(os.Stderr, "usage: dnsentry-query [-server 127.0.0.1:15353] [-type A] domain")
 		os.Exit(2)
 	}
 

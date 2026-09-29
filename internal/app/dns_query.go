@@ -7,9 +7,9 @@ import (
 
 	blockydnssec "github.com/0xERR0R/blocky/resolver/dnssec"
 	"github.com/miekg/dns"
-	"github.com/vigordns/vigordns/internal/dnsname"
-	"github.com/vigordns/vigordns/internal/querylog"
-	"github.com/vigordns/vigordns/internal/rules"
+	"github.com/teliso/DNSentry/internal/dnsname"
+	"github.com/teliso/DNSentry/internal/querylog"
+	"github.com/teliso/DNSentry/internal/rules"
 )
 
 const maxBackgroundRefreshes int64 = 64

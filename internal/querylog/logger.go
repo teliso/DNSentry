@@ -6,7 +6,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/vigordns/vigordns/internal/rules"
+	"github.com/teliso/DNSentry/internal/rules"
 )
 
 // Actions recorded for queries that never reached an upstream or were
@@ -79,10 +79,6 @@ type Logger struct {
 
 // New returns an in-memory logger that keeps the newest max entries.
 func New(max int) *Logger {
-	return newLogger(max)
-}
-
-func newLogger(max int) *Logger {
 	if max < 1 {
 		max = 1
 	}

@@ -8,9 +8,9 @@ import (
 	"time"
 
 	"github.com/miekg/dns"
-	"github.com/vigordns/vigordns/internal/cache"
-	"github.com/vigordns/vigordns/internal/querylog"
-	"github.com/vigordns/vigordns/internal/rules"
+	"github.com/teliso/DNSentry/internal/cache"
+	"github.com/teliso/DNSentry/internal/querylog"
+	"github.com/teliso/DNSentry/internal/rules"
 	"golang.org/x/sync/singleflight"
 )
 

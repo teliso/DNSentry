@@ -12,7 +12,7 @@ import (
 	"time"
 
 	"github.com/miekg/dns"
-	"github.com/vigordns/vigordns/internal/dnsname"
+	"github.com/teliso/DNSentry/internal/dnsname"
 )
 
 const maxClientRateLimitQPS = 1_000_000

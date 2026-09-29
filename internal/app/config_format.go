@@ -1,7 +1,7 @@
 package app
 
 import (
-	"github.com/vigordns/vigordns/internal/rules"
+	"github.com/teliso/DNSentry/internal/rules"
 	"path/filepath"
 	"strings"
 )

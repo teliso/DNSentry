@@ -9,7 +9,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/vigordns/vigordns/internal/cache"
+	"github.com/teliso/DNSentry/internal/cache"
 )
 
 func validateConfig(config *Config) (*Config, error) {
@@ -146,7 +146,7 @@ func validateConfig(config *Config) (*Config, error) {
 		}
 		config.BootstrapDNS[index] = normalized
 	}
-	if config.Encryption.Enabled == false {
+	if !config.Encryption.Enabled {
 		config.Encryption.DoTListen = ""
 		config.Encryption.DoTListens = nil
 		config.Encryption.DoHListen = ""
@@ -158,7 +158,7 @@ func validateConfig(config *Config) (*Config, error) {
 	} else if err := normalizeEncryptionListeners(&config.Encryption); err != nil {
 		return nil, err
 	}
-	if config.Encryption.DNSCrypt.Enabled == false {
+	if !config.Encryption.DNSCrypt.Enabled {
 		config.Encryption.DNSCrypt.Listen = ""
 		config.Encryption.DNSCrypt.Listens = nil
 	} else if err := normalizeDNSCryptListeners(&config.Encryption.DNSCrypt); err != nil {

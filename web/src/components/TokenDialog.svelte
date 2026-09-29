@@ -13,7 +13,7 @@
 
 <Modal title="需要 API Token" dismissible={false}>
   <form id="token-form" onsubmit={submit}>
-    <p class="muted">此实例启用了访问令牌（环境变量 <code>VIGORDNS_API_TOKEN</code>）。输入令牌后会保存在当前浏览器的 localStorage 中。</p>
+    <p class="muted">此实例启用了访问令牌（环境变量 <code>DNSENTRY_API_TOKEN</code>）。输入令牌后会保存在当前浏览器的 localStorage 中。</p>
     <Field label="API Token">
       <input type="password" bind:value={token} autocomplete="off" placeholder="粘贴令牌" />
     </Field>

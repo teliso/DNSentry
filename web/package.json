@@ -1,5 +1,5 @@
 {
-  "name": "vigordns-console",
+  "name": "dnsentry-console",
   "private": true,
   "type": "module",
   "scripts": {
