@@ -58,6 +58,7 @@ var apiRoutes = []apiRoute{
 	{http.MethodGet, "/status", (*API).getStatus},
 	{http.MethodGet, "/config", (*API).getConfig},
 	{http.MethodPut, "/config", (*API).updateConfig},
+	{http.MethodGet, "/config/history", (*API).configHistory},
 	{http.MethodPost, "/config/restore", (*API).restoreConfig},
 	{http.MethodGet, "/metrics", (*API).writeMetrics},
 	{http.MethodPost, "/cache/clear", (*API).clearCache},

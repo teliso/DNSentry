@@ -4,6 +4,7 @@
   import Icon from '../components/Icon.svelte';
   import PageHeader from '../components/PageHeader.svelte';
   import Stat from '../components/Stat.svelte';
+  import LatencySpark from '../components/LatencySpark.svelte';
   import TrafficChart from '../components/TrafficChart.svelte';
   import { formatBytes, formatCompact, formatDuration, formatNumber, formatPercent, formatRelative } from '../lib/format';
   import { store } from '../lib/store.svelte';
@@ -34,8 +35,8 @@
 
 <section class="ranks">
   <div class="col">
-  <Card title="客户端" description="按请求数排序（最近日志）">
-    <BarList items={status?.dashboard?.client_ips ?? []} />
+  <Card title="请求域名" description="被查询最多的域名">
+    <BarList items={status?.dashboard?.domains ?? []} />
   </Card>
   <Card title="被拦截域名" description="命中过滤规则最多的域名">
     <BarList items={status?.dashboard?.blocked_domains ?? []} tone="danger" empty="尚无拦截记录" />
@@ -43,16 +44,16 @@
   <Card title="上游服务器" description="请求数与平均响应时间">
     <BarList items={(status?.dashboard?.upstreams ?? []).map((item) => ({ name: item.address, count: item.count, note: formatDuration(item.average_duration_ms) }))} />
   </Card>
-  <Card title="解析失败的域名" description="上游无响应或返回错误">
-    <BarList items={status?.dashboard?.failed_domains ?? []} tone="danger" empty="没有解析失败的请求" />
-  </Card>
   </div>
   <div class="col">
-  <Card title="请求域名" description="被查询最多的域名">
-    <BarList items={status?.dashboard?.domains ?? []} />
-  </Card>
   <Card title="响应最慢的域名" description="上游解析的平均耗时（最近日志）">
     <BarList items={(status?.dashboard?.slow_domains ?? []).map((item) => ({ name: item.name, count: item.average_duration_ms, note: `${item.count} 次` }))} unit="ms" empty="暂无上游解析记录" />
+  </Card>
+  <Card title="客户端" description="按请求数排序（最近日志）">
+    <BarList items={status?.dashboard?.client_ips ?? []} />
+  </Card>
+  <Card title="解析失败的域名" description="上游无响应或返回错误">
+    <BarList items={status?.dashboard?.failed_domains ?? []} tone="danger" empty="没有解析失败的请求" />
   </Card>
   </div>
 </section>
@@ -72,7 +73,7 @@
     </dl>
   </Card>
 
-  <Card title="上游健康">
+  <Card title="上游健康" description="最近 30 分钟的响应延迟；红色竖线表示该分钟有失败">
     {#if health.length === 0}
       <p class="muted">尚未配置上游。</p>
     {:else}
@@ -82,7 +83,7 @@
             <span class="dot" class:bad={!item.healthy} title={item.healthy ? '正常' : `连续失败 ${item.failures} 次`}></span>
             <span class="addr mono" title={item.address}>{item.address}</span>
             {#if 'fallback' in item}<span class="badge">备用</span>{/if}
-            <span class="lat tabular muted">{item.requests > 0 ? formatDuration(item.latency_ms) : '—'}</span>
+            <LatencySpark points={item.history ?? []} />
           </li>
         {/each}
       </ul>
@@ -120,7 +121,6 @@
   .dot { flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--ok); }
   .dot.bad { background: var(--danger); }
   .addr { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }
-  .lat { font-size: 12px; }
   .warn-note { margin-top: 12px; color: var(--warn); font-size: 12px; }
 
   @media (max-width: 1080px) {

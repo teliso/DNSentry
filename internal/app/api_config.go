@@ -118,10 +118,31 @@ func (a *API) updateConfig(writer http.ResponseWriter, request *http.Request) {
 	a.commitConfig(writer, &next)
 }
 
-func (a *API) restoreConfig(writer http.ResponseWriter, _ *http.Request) {
-	restored, err := loadConfigBackup()
+// configHistory serves GET /config/history.
+func (a *API) configHistory(writer http.ResponseWriter, _ *http.Request) {
+	writeJSON(writer, http.StatusOK, listConfigVersions())
+}
+
+// restoreConfig serves POST /config/restore with an optional {"id": "..."};
+// without an id the newest version that differs from the current one is used.
+func (a *API) restoreConfig(writer http.ResponseWriter, request *http.Request) {
+	var input struct {
+		ID string `json:"id"`
+	}
+	if request.ContentLength != 0 && !decodeJSON(writer, request, &input, "invalid JSON") {
+		return
+	}
+	if input.ID == "" {
+		id, ok := previousConfigVersionID()
+		if !ok {
+			writeError(writer, http.StatusNotFound, "there is no earlier configuration to restore")
+			return
+		}
+		input.ID = id
+	}
+	restored, err := loadConfigVersion(input.ID)
 	if err != nil {
-		writeError(writer, http.StatusNotFound, "no valid configuration backup: "+err.Error())
+		writeError(writer, http.StatusNotFound, "cannot restore that configuration: "+err.Error())
 		return
 	}
 	a.configMu.Lock()

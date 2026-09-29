@@ -15,7 +15,7 @@
     { id: 'sec-dnscrypt', label: 'DNSCrypt' },
     { id: 'sec-access', label: '访问控制' },
     { id: 'sec-logging', label: '查询日志' },
-    { id: 'sec-maintenance', label: '备份与维护' }
+    { id: 'sec-maintenance', label: '配置历史' }
   ];
 </script>
 

@@ -160,12 +160,16 @@ func TestSaveConfigAtomicRoundTrip(t *testing.T) {
 	if decoded.Cache.Size != updated.CacheSize {
 		t.Fatalf("replacement was not committed: got %d, want %d", decoded.Cache.Size, updated.CacheSize)
 	}
-	backup, err := loadConfigBackup()
-	if err != nil {
-		t.Fatalf("configuration backup was not readable: %v", err)
+	id, ok := previousConfigVersionID()
+	if !ok {
+		t.Fatal("the replaced configuration was not kept in the history")
 	}
-	if backup.CacheSize != original.CacheSize {
-		t.Fatalf("configuration backup contains wrong version: got %d, want %d", backup.CacheSize, original.CacheSize)
+	previous, err := loadConfigVersion(id)
+	if err != nil {
+		t.Fatalf("previous configuration was not readable: %v", err)
+	}
+	if previous.CacheSize != original.CacheSize {
+		t.Fatalf("previous configuration has the wrong content: got %d, want %d", previous.CacheSize, original.CacheSize)
 	}
 
 	entries, err := os.ReadDir(filepath.Dir(configPath()))

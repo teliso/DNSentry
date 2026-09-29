@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"time"
 
 	"gopkg.in/yaml.v3"
 
@@ -20,8 +21,6 @@ const maxConfiguredUpstreams = 32
 var configFile = filepath.Join("data", "config.yaml")
 
 func configPath() string { return configFile }
-
-func configBackupPath() string { return configPath() + ".bak" }
 
 // defaultConfig is written on first start when no configuration exists. Data
 // files are placed next to the configuration file. DNSENTRY_DNS_LISTEN and
@@ -95,33 +94,6 @@ func loadConfig() (*Config, error) {
 
 var configSaveMu sync.Mutex
 
-func backupConfig(path string) error {
-	data, err := os.ReadFile(path)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return nil
-		}
-		return err
-	}
-	return fsutil.WriteFileAtomic(configBackupPath(), data, 0600)
-}
-
-func loadConfigBackup() (*Config, error) {
-	data, err := os.ReadFile(configBackupPath())
-	if err != nil {
-		return nil, err
-	}
-	fileConfig := new(yamlConfig)
-	if err := yaml.Unmarshal(data, fileConfig); err != nil {
-		return nil, fmt.Errorf("invalid YAML backup: %w", err)
-	}
-	validated, err := validateConfig(fileConfig.toConfig())
-	if err != nil {
-		return nil, fmt.Errorf("invalid configuration backup: %w", err)
-	}
-	return validated, nil
-}
-
 func saveConfig(config *Config) error {
 	configSaveMu.Lock()
 	defer configSaveMu.Unlock()
@@ -139,11 +111,24 @@ func saveConfig(config *Config) error {
 	}
 
 	path := configPath()
-	if err := backupConfig(path); err != nil {
-		return fmt.Errorf("backup config: %w", err)
+	// Keep the configuration being replaced as the baseline of the history when
+	// this installation has none yet (it predates versioning).
+	if len(configVersionIDs()) == 0 {
+		if old, err := os.ReadFile(path); err == nil {
+			modified := time.Now()
+			if info, err := os.Stat(path); err == nil {
+				modified = info.ModTime()
+			}
+			if err := archiveConfigVersion(old, modified); err != nil {
+				slog.Warn("could not archive the previous configuration", "error", err)
+			}
+		}
 	}
 	if err := fsutil.WriteFileAtomic(path, data, 0600); err != nil {
 		return fmt.Errorf("write config: %w", err)
+	}
+	if err := archiveConfigVersion(data, time.Now()); err != nil {
+		slog.Warn("could not record the configuration version", "error", err)
 	}
 	return nil
 }

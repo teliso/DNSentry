@@ -20,6 +20,7 @@ export type Dashboard = {
   failed_domains: RankedCount[];
 };
 
+export type HealthPoint = { time: string; requests: number; failures: number; average_latency_ms: number };
 export type UpstreamHealth = {
   address: string;
   healthy: boolean;
@@ -29,6 +30,8 @@ export type UpstreamHealth = {
   latency_ms: number;
   last_success?: string;
   last_failure?: string;
+  /** Last 30 minutes, oldest first, one point per minute. */
+  history: HealthPoint[];
 };
 export type UpstreamTest = { address: string; protocol: string; success: boolean; latency_ms: number; error?: string };
 
@@ -199,3 +202,5 @@ export type Config = {
   query_log_retention_days: number;
   encryption: EncryptionConfig;
 };
+
+export type ConfigVersion = { id: string; time: string; current: boolean; changes: string[]; more_changes?: number };

@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import Icon, { type IconName } from './components/Icon.svelte';
-  import RestartBanner from './components/RestartBanner.svelte';
+  import AlertBanners from './components/AlertBanners.svelte';
   import Toasts from './components/Toasts.svelte';
   import TokenDialog from './components/TokenDialog.svelte';
   import Dashboard from './pages/Dashboard.svelte';
@@ -64,7 +64,7 @@
 </header>
 
 <main>
-  <RestartBanner />
+  <AlertBanners />
   {#key router.current}
     <Page />
   {/key}

@@ -17,6 +17,8 @@ class ConsoleStore {
   sources = $state.raw<RuleSource[]>([]);
   /** Bumped after every rule change so rule views know to reload. */
   rulesVersion = $state(0);
+  /** Bumped when the saved configuration changes so the history view reloads. */
+  configVersion = $state(0);
   /** Source filter requested by another page (e.g. "查看规则" on a source). */
   ruleSourceFilter = $state('');
   online = $state(false);
@@ -101,6 +103,7 @@ class ConsoleStore {
   private async commitConfig(call: () => Promise<Config>, done: string, failure: string) {
     await this.act(async () => {
       this.adopt(await call());
+      this.configVersion++;
       await this.refreshLive();
       if (this.status?.restart_required) toasts.info(`${done}，部分设置需要重启服务后生效`);
       else toasts.success(done);
@@ -118,8 +121,8 @@ class ConsoleStore {
     await this.commitConfig(() => api.saveConfig(payload), '配置已保存', '保存配置失败');
   }
 
-  async restoreConfig() {
-    await this.commitConfig(() => api.restoreConfig(), '已恢复上次配置', '恢复配置失败');
+  async restoreConfig(id?: string) {
+    await this.commitConfig(() => api.restoreConfig(id), '配置已恢复', '恢复配置失败');
   }
 
   /**
@@ -133,6 +136,7 @@ class ConsoleStore {
       const result = normalizeConfig(await api.saveConfig(payload));
       this.saved = result;
       if (this.draft) this.draft.local_records = JSON.parse(JSON.stringify(result.local_records));
+      this.configVersion++;
       toasts.success(done);
     }, '保存本地记录失败');
   }
@@ -222,6 +226,7 @@ class ConsoleStore {
     return this.act(async () => {
       const payload = next.map(({ url, name, enabled, interval_minutes }) => ({ url, name, enabled, interval_minutes }));
       this.setSources(await api.saveSources(payload));
+      this.configVersion++;
       toasts.success(done);
       this.rulesChanged();
     }, '保存规则源失败');

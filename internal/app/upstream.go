@@ -15,6 +15,27 @@ type UpstreamHealth struct {
 	LatencyMS   int64  `json:"latency_ms"`
 	LastSuccess string `json:"last_success,omitempty"`
 	LastFailure string `json:"last_failure,omitempty"`
+	// History is the last historyMinutes minutes, oldest first, one point per
+	// minute (zero requests when idle).
+	History []HealthPoint `json:"history"`
+}
+
+// historyMinutes is how far back per-upstream latency and failures are kept.
+const historyMinutes = 30
+
+// HealthPoint aggregates the requests sent to an upstream during one minute.
+type HealthPoint struct {
+	Time             string `json:"time"`
+	Requests         uint32 `json:"requests"`
+	Failures         uint32 `json:"failures"`
+	AverageLatencyMS int64  `json:"average_latency_ms"` // of the successful requests
+}
+
+type minuteBucket struct {
+	minute     int64 // Unix minute the bucket belongs to; 0 = unused
+	requests   uint32
+	failures   uint32
+	latencySum time.Duration
 }
 
 type upstreamState struct {
@@ -26,6 +47,38 @@ type upstreamState struct {
 	successes      uint64
 	lastSuccess    time.Time
 	lastFailure    time.Time
+	history        [historyMinutes]minuteBucket
+}
+
+// record adds one request outcome to the bucket of the current minute.
+func (state *upstreamState) record(now time.Time, latency time.Duration, ok bool) {
+	minute := now.Unix() / 60
+	bucket := &state.history[minute%historyMinutes]
+	if bucket.minute != minute {
+		*bucket = minuteBucket{minute: minute}
+	}
+	bucket.requests++
+	if ok {
+		bucket.latencySum += latency
+	} else {
+		bucket.failures++
+	}
+}
+
+func (state *upstreamState) points(now time.Time) []HealthPoint {
+	current := now.Unix() / 60
+	points := make([]HealthPoint, 0, historyMinutes)
+	for minute := current - historyMinutes + 1; minute <= current; minute++ {
+		point := HealthPoint{Time: time.Unix(minute*60, 0).UTC().Format(time.RFC3339)}
+		if bucket := state.history[minute%historyMinutes]; bucket.minute == minute {
+			point.Requests, point.Failures = bucket.requests, bucket.failures
+			if successes := bucket.requests - bucket.failures; successes > 0 {
+				point.AverageLatencyMS = (bucket.latencySum / time.Duration(successes)).Milliseconds()
+			}
+		}
+		points = append(points, point)
+	}
+	return points
 }
 
 type UpstreamPool struct {
@@ -125,6 +178,7 @@ func (p *UpstreamPool) RecordSuccess(address string, latency time.Duration) {
 	state.successes++
 	state.latency = latency
 	state.lastSuccess = time.Now()
+	state.record(state.lastSuccess, latency, true)
 }
 
 func (p *UpstreamPool) RecordFailure(address string) {
@@ -136,6 +190,7 @@ func (p *UpstreamPool) RecordFailure(address string) {
 	}
 	state.failures++
 	state.lastFailure = time.Now()
+	state.record(state.lastFailure, 0, false)
 	p.probeInFlight = false
 	state.requests++
 	if state.failures >= 3 {
@@ -171,6 +226,7 @@ func (p *UpstreamPool) Health() []UpstreamHealth {
 			LatencyMS:   state.latency.Milliseconds(),
 			LastSuccess: formatOptionalTime(state.lastSuccess),
 			LastFailure: formatOptionalTime(state.lastFailure),
+			History:     state.points(now),
 		})
 	}
 	return result

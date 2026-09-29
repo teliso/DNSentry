@@ -192,3 +192,52 @@ func TestUpstreamPoolMarksFailedServers(t *testing.T) {
 		t.Fatalf("expected recovered upstream, got %#v", health)
 	}
 }
+
+func TestUpstreamHistoryAggregatesPerMinute(t *testing.T) {
+	state := &upstreamState{}
+	base := time.Date(2026, 1, 1, 12, 0, 30, 0, time.UTC)
+	state.record(base, 10*time.Millisecond, true)
+	state.record(base.Add(5*time.Second), 30*time.Millisecond, true)
+	state.record(base.Add(10*time.Second), 0, false)
+	state.record(base.Add(2*time.Minute), 50*time.Millisecond, true)
+
+	now := base.Add(2*time.Minute + 5*time.Second)
+	points := state.points(now)
+	if len(points) != historyMinutes {
+		t.Fatalf("points = %d, want %d", len(points), historyMinutes)
+	}
+	first, last := points[historyMinutes-3], points[historyMinutes-1]
+	if first.Requests != 3 || first.Failures != 1 || first.AverageLatencyMS != 20 {
+		t.Fatalf("first minute = %#v", first)
+	}
+	if idle := points[historyMinutes-2]; idle.Requests != 0 {
+		t.Fatalf("idle minute = %#v", idle)
+	}
+	if last.Requests != 1 || last.AverageLatencyMS != 50 {
+		t.Fatalf("last minute = %#v", last)
+	}
+	// A bucket reused 30 minutes later starts fresh.
+	state.record(base.Add(historyMinutes*time.Minute), 7*time.Millisecond, true)
+	points = state.points(base.Add(historyMinutes * time.Minute))
+	if latest := points[historyMinutes-1]; latest.Requests != 1 || latest.AverageLatencyMS != 7 {
+		t.Fatalf("reused bucket = %#v", latest)
+	}
+}
+
+func TestPoolHealthIncludesHistory(t *testing.T) {
+	pool := NewUpstreamPool([]string{"one:53"})
+	pool.RecordSuccess("one:53", 12*time.Millisecond)
+	pool.RecordFailure("one:53")
+	history := pool.Health()[0].History
+	if len(history) != historyMinutes {
+		t.Fatalf("history length = %d", len(history))
+	}
+	var requests, failures uint32 // summed: the two calls may straddle a minute boundary
+	for _, point := range history {
+		requests += point.Requests
+		failures += point.Failures
+	}
+	if requests != 2 || failures != 1 {
+		t.Fatalf("requests=%d failures=%d, want 2 and 1", requests, failures)
+	}
+}

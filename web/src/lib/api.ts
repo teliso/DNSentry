@@ -1,4 +1,4 @@
-import type { Config, LocalSummary, LogPage, LogQuery, Rule, RuleAction, RuleCheck, RulePage, RuleQuery, RuleSource, Status, UpstreamTest } from './types';
+import type { Config, ConfigVersion, LocalSummary, LogPage, LogQuery, Rule, RuleAction, RuleCheck, RulePage, RuleQuery, RuleSource, Status, UpstreamTest } from './types';
 
 const TOKEN_KEY = 'dnsentry_api_token';
 
@@ -80,7 +80,8 @@ export const api = {
   logs: (query: LogQuery) => request<LogPage>(`/logs?${toParams(query)}`),
   config: () => request<Config>('/config'),
   saveConfig: (config: Config) => request<Config>('/config', 'PUT', config),
-  restoreConfig: () => request<Config>('/config/restore', 'POST'),
+  configHistory: () => request<ConfigVersion[]>('/config/history'),
+  restoreConfig: (id?: string) => request<Config>('/config/restore', 'POST', id ? { id } : undefined),
   clearCache: () => request<{ status: string }>('/cache/clear', 'POST'),
   testUpstreams: (upstreams: string[]) => request<UpstreamTest[]>('/upstreams/test', 'POST', { upstreams }),
   rules: (query: RuleQuery) => request<RulePage>(`/rules?${toParams(query)}`),
