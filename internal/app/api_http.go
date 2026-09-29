@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -142,4 +143,87 @@ func withSecurityHeaders(next http.Handler) http.Handler {
 		headers.Set("Content-Security-Policy", "default-src 'self'; base-uri 'self'; frame-ancestors 'none'; object-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'")
 		next.ServeHTTP(writer, request)
 	})
+}
+
+// requestClientIP is the address of the peer that opened the connection.
+func requestClientIP(request *http.Request) string {
+	host, _, err := net.SplitHostPort(strings.TrimSpace(request.RemoteAddr))
+	if err != nil {
+		return strings.Trim(strings.TrimSpace(request.RemoteAddr), "[]")
+	}
+	return host
+}
+
+// loopbackHost reports whether a Host header names the local machine
+// directly: "localhost" (and its subdomains) or an IP literal. Any other name
+// could be attacker-controlled DNS pointing at this machine.
+func loopbackHost(hostport string) bool {
+	host := hostport
+	if h, _, err := net.SplitHostPort(hostport); err == nil {
+		host = h
+	}
+	host = strings.ToLower(strings.Trim(strings.TrimSpace(host), "[]"))
+	if host == "localhost" || strings.HasSuffix(host, ".localhost") {
+		return true
+	}
+	return net.ParseIP(host) != nil
+}
+
+const (
+	authFailureLimit  = 10
+	authFailureWindow = time.Minute
+	authTrackedLimit  = 4096
+)
+
+// authThrottle slows down token guessing: after authFailureLimit failed
+// attempts within authFailureWindow a client is refused until the window ends.
+type authThrottle struct {
+	mu       sync.Mutex
+	failures map[string]*authWindow
+}
+
+type authWindow struct {
+	count int
+	start time.Time
+}
+
+func (t *authThrottle) blocked(client string) time.Duration {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	window := t.failures[client]
+	if window == nil {
+		return 0
+	}
+	remaining := authFailureWindow - time.Since(window.start)
+	if remaining <= 0 {
+		delete(t.failures, client)
+		return 0
+	}
+	if window.count >= authFailureLimit {
+		return remaining
+	}
+	return 0
+}
+
+func (t *authThrottle) fail(client string) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if t.failures == nil {
+		t.failures = make(map[string]*authWindow)
+	}
+	window := t.failures[client]
+	if window == nil || time.Since(window.start) >= authFailureWindow {
+		if len(t.failures) >= authTrackedLimit {
+			t.failures = make(map[string]*authWindow) // bounded memory under a flood
+		}
+		window = &authWindow{start: time.Now()}
+		t.failures[client] = window
+	}
+	window.count++
+}
+
+func (t *authThrottle) succeed(client string) {
+	t.mu.Lock()
+	delete(t.failures, client)
+	t.mu.Unlock()
 }

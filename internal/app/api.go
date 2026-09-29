@@ -30,6 +30,8 @@ type API struct {
 	// awaiting a restart; nil until the first write.
 	configMu sync.Mutex
 	saved    *Config
+
+	authFailures authThrottle
 }
 
 func newAPI(ctx context.Context, apiToken string, resolver *DNSServer, updater *rules.Updater, dnscrypt *DNSCryptService) *API {
@@ -76,10 +78,23 @@ var apiRoutes = []apiRoute{
 // authorize enforces the API access policy and reports whether the request may
 // proceed; on failure it has already written the response.
 func (a *API) authorize(writer http.ResponseWriter, request *http.Request) bool {
+	client := requestClientIP(request)
+	if wait := a.authFailures.blocked(client); wait > 0 {
+		writer.Header().Set("Retry-After", strconv.Itoa(int(wait.Seconds())+1))
+		writeError(writer, http.StatusTooManyRequests, "too many failed authentication attempts")
+		return false
+	}
 	if a.apiToken == "" {
 		if !isLoopbackRequest(request) {
 			writer.Header().Set("WWW-Authenticate", "Bearer")
 			writeError(writer, http.StatusUnauthorized, "API access requires a loopback request or configured token")
+			return false
+		}
+		// Without a token the console trusts loopback callers, so a web page
+		// must not be able to reach it through DNS rebinding (a public name that
+		// resolves to 127.0.0.1). Browsers then send that name as the Host.
+		if !loopbackHost(request.Host) {
+			writeError(writer, http.StatusForbidden, "use http://localhost or an IP address to open the console, or configure DNSENTRY_API_TOKEN")
 			return false
 		}
 		if mutatingAPIRequest(request) && !sameOriginMutation(request) {
@@ -90,10 +105,14 @@ func (a *API) authorize(writer http.ResponseWriter, request *http.Request) bool 
 	}
 	provided, ok := bearerToken(request)
 	if !ok || !tokensEqual(provided, a.apiToken) {
+		if ok {
+			a.authFailures.fail(client)
+		}
 		writer.Header().Set("WWW-Authenticate", "Bearer")
 		writeError(writer, http.StatusUnauthorized, "invalid or missing API token")
 		return false
 	}
+	a.authFailures.succeed(client)
 	return true
 }
 

@@ -1,8 +1,11 @@
 package app
 
 import (
+	"fmt"
 	"net/http"
+	"path/filepath"
 	"slices"
+	"strings"
 )
 
 func publicConfig(config Config) Config {
@@ -105,6 +108,10 @@ func (a *API) updateConfig(writer http.ResponseWriter, request *http.Request) {
 	if next.Encryption.DNSCrypt.ResolverSecret == "" {
 		next.Encryption.DNSCrypt.ResolverSecret = saved.Encryption.DNSCrypt.ResolverSecret
 	}
+	if err := checkAPIPaths(next, saved); err != nil {
+		writeError(writer, http.StatusBadRequest, err.Error())
+		return
+	}
 	// Rule sources are managed through /api/sources; a config form that was
 	// loaded earlier must not roll them back.
 	next.RuleSources = a.updater.Sources()
@@ -120,4 +127,32 @@ func (a *API) restoreConfig(writer http.ResponseWriter, _ *http.Request) {
 	a.configMu.Lock()
 	defer a.configMu.Unlock()
 	a.commitConfig(writer, restored)
+}
+
+// checkAPIPaths limits file paths that can be set through the API. The
+// service reads or writes these files with its own privileges, so a client
+// holding the API token must not be able to point them anywhere on disk: a
+// changed path has to be relative and stay inside the working directory.
+// Absolute paths (e.g. /etc/ssl/...) remain possible by editing the
+// configuration file, and unchanged values are always accepted.
+func checkAPIPaths(next, saved Config) error {
+	for _, field := range []struct {
+		name        string
+		next, saved string
+	}{
+		{"rules_file", next.RulesFile, saved.RulesFile},
+		{"query_log_file", next.QueryLogFile, saved.QueryLogFile},
+		{"dnssec_trust_anchor_file", next.DNSSECTrustAnchorFile, saved.DNSSECTrustAnchorFile},
+		{"encryption.certificate", next.Encryption.Certificate, saved.Encryption.Certificate},
+		{"encryption.private_key", next.Encryption.PrivateKey, saved.Encryption.PrivateKey},
+	} {
+		if field.next == "" || field.next == field.saved {
+			continue
+		}
+		clean := filepath.Clean(field.next)
+		if filepath.IsAbs(clean) || clean == ".." || strings.HasPrefix(clean, ".."+string(filepath.Separator)) {
+			return fmt.Errorf("%s must be a relative path inside the working directory; edit the configuration file to use %q", field.name, field.next)
+		}
+	}
+	return nil
 }
