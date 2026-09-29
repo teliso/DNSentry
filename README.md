@@ -46,6 +46,10 @@ DNSENTRY_API_TOKEN=$(openssl rand -hex 24) docker compose -f deploy/compose.yaml
 
 镜像基于 distroless、以非 root 用户运行，数据卷为 `/var/lib/dnsentry`，DNS 监听 53、控制台监听 18080，并带有健康检查。容器内的控制台是“公开”地址，因此必须提供 `DNSENTRY_API_TOKEN`；[`deploy/compose.yaml`](deploy/compose.yaml) 默认只把控制台端口映射到宿主机的 127.0.0.1。
 
+## 让所有设备使用 DNSentry
+
+设备不用做任何设置，全靠路由器：DHCP 下发 DNSentry 的地址（必需），再用防火墙重定向或拦截写死 DNS 的设备和加密 DNS（推荐）。具体步骤、OpenWrt / nftables 示例、需要注意的取舍（例如重定向会让日志里丢失客户端地址）和验证方法见 [docs/enforce-dns.md](docs/enforce-dns.md)。
+
 ## 运行参数
 
 ```text
