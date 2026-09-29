@@ -7,11 +7,13 @@ import (
 	"time"
 
 	"github.com/miekg/dns"
+	"github.com/teliso/DNSentry/internal/cache"
+	"github.com/teliso/DNSentry/internal/dnsname"
 )
 
 func optimisticMaxAge(seconds uint32) time.Duration {
 	if seconds == 0 {
-		return time.Duration(defaultOptimisticMaxAgeSeconds) * time.Second
+		return time.Duration(cache.DefaultOptimisticMaxAgeSeconds) * time.Second
 	}
 	return time.Duration(seconds) * time.Second
 }
@@ -22,9 +24,9 @@ func prepareCacheResponse(message *dns.Msg, config *Config) (*dns.Msg, uint32, b
 	}
 	cached := message.Copy()
 	if cached.Rcode == dns.RcodeServerFailure {
-		return cached, servfailCacheTTL, true
+		return cached, cache.ServfailTTL, true
 	}
-	clampMessageTTL(cached, config.CacheTTLMin, config.CacheTTLMax)
+	cache.ClampTTL(cached, config.CacheTTLMin, config.CacheTTLMax)
 	ttl := cacheResponseTTL(cached)
 	if ttl == 0 {
 		return message, 0, false
@@ -104,10 +106,6 @@ func isCacheableNegative(message *dns.Msg) bool {
 	return seenSOA
 }
 
-func filterCachedResponse(message, request *dns.Msg) *dns.Msg {
-	return normalizeClientResponse(message, request, true)
-}
-
 func filterResponseWithDNSSEC(message, request *dns.Msg, locallyValidated bool) *dns.Msg {
 	response := normalizeClientResponse(message, request, false)
 	if locallyValidated && request != nil && request.AuthenticatedData && !request.CheckingDisabled {
@@ -185,7 +183,7 @@ func makeCacheKey(request *dns.Msg) (string, bool) {
 	if question.Qtype == dns.TypeAXFR || question.Qtype == dns.TypeIXFR || question.Qtype == dns.TypeANY {
 		return "", false
 	}
-	domain := normalizeDomain(question.Name)
+	domain := dnsname.Normalize(question.Name)
 	if domain == "" {
 		return "", false
 	}
@@ -400,23 +398,6 @@ func cachedECSForRequest(message, request *dns.Msg) *dns.EDNS0_SUBNET {
 	return cachedECS
 }
 
-func responseECSOption(message *dns.Msg) *dns.EDNS0_SUBNET {
-	for _, record := range message.Extra {
-		opt, ok := record.(*dns.OPT)
-		if !ok {
-			continue
-		}
-		for _, option := range opt.Option {
-			if subnet, ok := option.(*dns.EDNS0_SUBNET); ok {
-				copy := *subnet
-				copy.Address = append(net.IP(nil), subnet.Address...)
-				return &copy
-			}
-		}
-	}
-	return nil
-}
-
 func requestCoalescingKey(request *dns.Msg) string {
 	copy := request.Copy()
 	copy.Id = 0
@@ -501,22 +482,21 @@ func blockedResponse(request *dns.Msg, question dns.Question, config *Config) *d
 	return response
 }
 
-func rewriteResponse(request *dns.Msg, question dns.Question, ip net.IP) *dns.Msg {
+// noDataResponse is an empty NOERROR answer with an SOA record so clients can
+// cache the absence of data for ttl seconds (10 when zero).
+func noDataResponse(request *dns.Msg, question dns.Question, ttl uint32) *dns.Msg {
+	if ttl == 0 {
+		ttl = 10
+	}
 	response := new(dns.Msg)
 	response.SetReply(request)
 	response.RecursionAvailable = true
-	header := dns.RR_Header{Name: question.Name, Class: question.Qclass, Ttl: 300}
-	if question.Qtype == dns.TypeA && ip.To4() != nil {
-		header.Rrtype = dns.TypeA
-		response.Answer = []dns.RR{&dns.A{Hdr: header, A: ip.To4()}}
-		return response
-	}
-	if question.Qtype == dns.TypeAAAA && ip.To16() != nil && ip.To4() == nil {
-		header.Rrtype = dns.TypeAAAA
-		response.Answer = []dns.RR{&dns.AAAA{Hdr: header, AAAA: ip.To16()}}
-		return response
-	}
-	return nil
+	response.Ns = []dns.RR{&dns.SOA{
+		Hdr: dns.RR_Header{Name: question.Name, Rrtype: dns.TypeSOA, Class: question.Qclass, Ttl: ttl},
+		Ns:  "localhost.", Mbox: "hostmaster.localhost.",
+		Serial: 1, Refresh: 3600, Retry: 600, Expire: 86400, Minttl: ttl,
+	}}
+	return response
 }
 
 func responseTTL(message *dns.Msg) uint32 {
@@ -557,37 +537,4 @@ func cacheResponseTTL(message *dns.Msg) uint32 {
 		}
 	}
 	return ttl
-}
-
-func clampMessageTTL(message *dns.Msg, min, max uint32) {
-	visit := func(records []dns.RR) {
-		for _, record := range records {
-			if _, isOPT := record.(*dns.OPT); isOPT {
-				continue
-			}
-			ttl := record.Header().Ttl
-			if min > 0 && ttl < min {
-				ttl = min
-			}
-			if max > 0 && ttl > max {
-				ttl = max
-			}
-			if soa, ok := record.(*dns.SOA); ok {
-				if min > 0 && soa.Minttl < min {
-					soa.Minttl = min
-				}
-				if max > 0 && soa.Minttl > max {
-					soa.Minttl = max
-				}
-			}
-			record.Header().Ttl = ttl
-		}
-	}
-	visit(message.Answer)
-	visit(message.Ns)
-	visit(message.Extra)
-}
-
-func setMessageTTL(message *dns.Msg, ttl uint32) {
-	clampMessageTTL(message, ttl, ttl)
 }

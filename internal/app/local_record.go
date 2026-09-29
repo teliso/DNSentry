@@ -3,10 +3,11 @@ package app
 import (
 	"fmt"
 	"net"
-	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/miekg/dns"
+	"github.com/teliso/DNSentry/internal/dnsname"
 )
 
 type LocalRecord struct {
@@ -18,16 +19,19 @@ type LocalRecord struct {
 
 type localRecordSnapshot struct {
 	records map[string][]dns.RR
+	// ptr holds reverse records derived from local A/AAAA records, keyed by
+	// the normalized reverse name (e.g. "10.1.168.192.in-addr.arpa").
+	ptr map[string][]dns.RR
 }
 
 func validateLocalRecords(records []LocalRecord) error {
 	seen := make(map[string]struct{}, len(records))
 	for index := range records {
 		record := &records[index]
-		record.Domain = normalizeDomain(record.Domain)
+		record.Domain = dnsname.Normalize(record.Domain)
 		record.Type = strings.ToUpper(strings.TrimSpace(record.Type))
 		record.Value = strings.TrimSpace(record.Value)
-		if !validDomain(record.Domain) {
+		if !dnsname.Valid(record.Domain) {
 			return fmt.Errorf("invalid local_records[%d] domain", index)
 		}
 		if record.TTL == 0 {
@@ -51,7 +55,7 @@ func validateLocalRecords(records []LocalRecord) error {
 				return fmt.Errorf("local_records[%d] value must be an IPv6 address", index)
 			}
 		case "CNAME":
-			if !validDomain(normalizeDomain(record.Value)) {
+			if !dnsname.Valid(dnsname.Normalize(record.Value)) {
 				return fmt.Errorf("local_records[%d] value must be a domain", index)
 			}
 		case "TXT":
@@ -66,7 +70,7 @@ func validateLocalRecords(records []LocalRecord) error {
 }
 
 func buildLocalRecordSnapshot(records []LocalRecord) *localRecordSnapshot {
-	snapshot := &localRecordSnapshot{records: make(map[string][]dns.RR)}
+	snapshot := &localRecordSnapshot{records: make(map[string][]dns.RR), ptr: make(map[string][]dns.RR)}
 	for _, record := range records {
 		name := dns.Fqdn(record.Domain)
 		header := dns.RR_Header{Name: name, Class: dns.ClassINET, Ttl: record.TTL}
@@ -85,6 +89,14 @@ func buildLocalRecordSnapshot(records []LocalRecord) *localRecordSnapshot {
 			key := record.Domain + "\x00" + record.Type
 			snapshot.records[key] = append(snapshot.records[key], rr)
 		}
+		if record.Type == "A" || record.Type == "AAAA" {
+			if reverse, err := dns.ReverseAddr(record.Value); err == nil {
+				snapshot.ptr[dnsname.Normalize(reverse)] = append(snapshot.ptr[dnsname.Normalize(reverse)], &dns.PTR{
+					Hdr: dns.RR_Header{Name: reverse, Rrtype: dns.TypePTR, Class: dns.ClassINET, Ttl: record.TTL},
+					Ptr: name,
+				})
+			}
+		}
 	}
 	return snapshot
 }
@@ -94,14 +106,30 @@ func (s *DNSServer) setLocalRecords(records []LocalRecord) {
 	s.localRecords.Store(snapshot)
 }
 
-func (s *DNSServer) localRecordResponse(request *dns.Msg, question dns.Question) (*dns.Msg, bool) {
+// localRecordResponse answers from local records, from PTR records derived
+// from them, and — when privateReverse is set — with NXDOMAIN for reverse
+// lookups of private address ranges that no route handles, so they are
+// neither sent to a public resolver nor leak internal addressing.
+func (s *DNSServer) localRecordResponse(request *dns.Msg, question dns.Question, privateReverse bool) (*dns.Msg, bool) {
 	snapshot := s.localRecords.Load()
-	if snapshot == nil {
-		return nil, false
+	name := dnsname.Normalize(question.Name)
+	var records []dns.RR
+	if snapshot != nil {
+		if question.Qtype == dns.TypePTR {
+			records = snapshot.ptr[name]
+		} else {
+			records = snapshot.records[name+"\x00"+dns.TypeToString[question.Qtype]]
+		}
 	}
-	key := normalizeDomain(question.Name) + "\x00" + dns.TypeToString[question.Qtype]
-	records := snapshot.records[key]
 	if len(records) == 0 {
+		if privateReverse && isPrivateReverseName(name) && s.routes.Load().lookup(name) == nil {
+			response := new(dns.Msg)
+			response.SetReply(request)
+			response.Authoritative = true
+			response.RecursionAvailable = true
+			response.Rcode = dns.RcodeNameError
+			return response, true
+		}
 		return nil, false
 	}
 	response := new(dns.Msg)
@@ -115,6 +143,66 @@ func (s *DNSServer) localRecordResponse(request *dns.Msg, question dns.Question)
 	return response, true
 }
 
+// isPrivateReverseName reports whether name (normalized, without trailing dot)
+// lies in a reverse zone of loopback, link-local or private addresses.
+func isPrivateReverseName(name string) bool {
+	switch {
+	case strings.HasSuffix(name, ".in-addr.arpa"):
+		labels := strings.Split(strings.TrimSuffix(name, ".in-addr.arpa"), ".")
+		if len(labels) > 4 {
+			return false
+		}
+		octets := make([]int, len(labels))
+		for index, label := range labels {
+			value, err := strconv.Atoi(label)
+			if err != nil || value < 0 || value > 255 {
+				return false
+			}
+			octets[len(labels)-1-index] = value
+		}
+		first := octets[0]
+		if first == 10 || first == 127 {
+			return true
+		}
+		if len(octets) < 2 {
+			return false
+		}
+		second := octets[1]
+		return (first == 172 && second >= 16 && second <= 31) || (first == 192 && second == 168) || (first == 169 && second == 254)
+	case strings.HasSuffix(name, ".ip6.arpa"):
+		labels := strings.Split(strings.TrimSuffix(name, ".ip6.arpa"), ".")
+		if len(labels) > 32 {
+			return false
+		}
+		nibbles := make([]byte, len(labels))
+		for index, label := range labels {
+			if len(label) != 1 || strings.IndexByte("0123456789abcdef", label[0]) < 0 {
+				return false
+			}
+			value, _ := strconv.ParseUint(label, 16, 8)
+			nibbles[len(labels)-1-index] = byte(value)
+		}
+		if len(nibbles) == 32 { // ::1
+			loopback := nibbles[31] == 1
+			for _, nibble := range nibbles[:31] {
+				loopback = loopback && nibble == 0
+			}
+			if loopback {
+				return true
+			}
+		}
+		if len(nibbles) < 2 {
+			return false
+		}
+		first := nibbles[0]<<4 | nibbles[1]
+		if first == 0xfc || first == 0xfd { // fc00::/7
+			return true
+		}
+		return first == 0xfe && len(nibbles) >= 3 && nibbles[2] >= 8 && nibbles[2] <= 0xb // fe80::/10
+	}
+	return false
+}
+
 func localRecordsEqual(left, right []LocalRecord) bool {
 	if len(left) != len(right) {
 		return false
@@ -125,16 +213,4 @@ func localRecordsEqual(left, right []LocalRecord) bool {
 		}
 	}
 	return true
-}
-
-func sortLocalRecords(records []LocalRecord) {
-	sort.Slice(records, func(left, right int) bool {
-		if records[left].Domain != records[right].Domain {
-			return records[left].Domain < records[right].Domain
-		}
-		if records[left].Type != records[right].Type {
-			return records[left].Type < records[right].Type
-		}
-		return records[left].Value < records[right].Value
-	})
 }

@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log"
+	"log/slog"
 	"net"
 	"sync"
 
@@ -48,7 +48,7 @@ func NewDNSService(server *DNSServer, config Config) (*DNSService, error) {
 	if server == nil {
 		return nil, errors.New("DNS service requires a DNS server")
 	}
-	addresses, err := normalizeListenAddresses("dns listen", config.DNSListen, config.DNSListens)
+	addresses, err := normalizeListenAddresses("dns listen", "", config.DNSListens)
 	if err != nil {
 		return nil, err
 	}
@@ -130,7 +130,7 @@ func (s *DNSService) Start(ctx context.Context) error {
 func (s *DNSService) serve(server *dns.Server) {
 	defer s.wg.Done()
 	if err := server.ActivateAndServe(); err != nil && !errors.Is(err, net.ErrClosed) {
-		log.Printf("DNS listener stopped: %v", err)
+		slog.Error("DNS listener stopped", "error", err)
 	}
 }
 

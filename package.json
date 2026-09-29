@@ -1,19 +1,13 @@
 {
-  "name": "vigordns-console",
+  "name": "dnsentry",
   "private": true,
   "type": "module",
   "packageManager": "pnpm@11.25.0",
   "scripts": {
-    "dev": "vite",
-    "build": "vite build",
-    "start": "pnpm run build && go run .",
-    "check": "svelte-check --tsconfig ./tsconfig.json"
+    "dev": "pnpm --filter dnsentry-console dev",
+    "build": "pnpm --filter dnsentry-console build",
+    "check": "pnpm --filter dnsentry-console check",
+    "start": "pnpm run build && go run ./cmd/dnsentry"
   },
-  "devDependencies": {
-    "@sveltejs/vite-plugin-svelte": "^5.0.0",
-    "svelte": "^5.0.0",
-    "svelte-check": "^4.0.0",
-    "typescript": "^5.0.0",
-    "vite": "^6.0.0"
-  }
+  "license": "AGPL-3.0-only"
 }

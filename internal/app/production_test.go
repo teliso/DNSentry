@@ -10,6 +10,9 @@ import (
 	"time"
 
 	"github.com/miekg/dns"
+	"github.com/teliso/DNSentry/internal/cache"
+	"github.com/teliso/DNSentry/internal/querylog"
+	"github.com/teliso/DNSentry/internal/rules"
 )
 
 type captureResponseWriter struct {
@@ -56,20 +59,20 @@ func TestServeDNSCacheLifecycle(t *testing.T) {
 	if err := os.WriteFile(rulesFile, nil, 0600); err != nil {
 		t.Fatal(err)
 	}
-	rules := NewRuleStore(rulesFile)
+	rules := rules.NewStore(rulesFile)
 	if err := rules.Reload(); err != nil {
 		t.Fatal(err)
 	}
 	config := &Config{
-		DNSListen: ":15353", HTTPListen: "127.0.0.1:18080", RulesFile: rulesFile,
+		DNSListens: []string{":15353"}, HTTPListen: "127.0.0.1:18080", RulesFile: rulesFile,
 		Upstreams: []string{upstreamConn.LocalAddr().String()}, CacheEnabled: true, CacheSize: 1 << 20,
-		OptimisticAnswerTTL: defaultOptimisticAnswerTTL, OptimisticMaxAge: defaultOptimisticMaxAgeSeconds,
+		OptimisticAnswerTTL: cache.DefaultOptimisticAnswerTTL, OptimisticMaxAge: cache.DefaultOptimisticMaxAgeSeconds,
 	}
 	server := &DNSServer{
 		config: config,
 		rules:  rules,
-		cache:  NewDNSCache(config.CacheSize, true),
-		logs:   NewQueryLogger(20),
+		cache:  cache.New(config.CacheSize, true),
+		logs:   querylog.New(20),
 		client: &dns.Client{Net: "udp", Timeout: time.Second},
 		pool:   NewUpstreamPool(config.Upstreams),
 	}
@@ -122,12 +125,12 @@ func TestConcurrentIdenticalQueriesAreCoalesced(t *testing.T) {
 	if err := os.WriteFile(rulesFile, nil, 0600); err != nil {
 		t.Fatal(err)
 	}
-	rules := NewRuleStore(rulesFile)
+	rules := rules.NewStore(rulesFile)
 	if err := rules.Reload(); err != nil {
 		t.Fatal(err)
 	}
-	config := &Config{DNSListen: ":15353", HTTPListen: "127.0.0.1:18080", RulesFile: rulesFile, Upstreams: []string{upstreamConn.LocalAddr().String()}, CacheEnabled: true, CacheSize: 1 << 20, OptimisticAnswerTTL: defaultOptimisticAnswerTTL, OptimisticMaxAge: defaultOptimisticMaxAgeSeconds}
-	server := &DNSServer{config: config, rules: rules, cache: NewDNSCache(config.CacheSize, true), logs: NewQueryLogger(100), client: &dns.Client{Net: "udp", Timeout: time.Second}, pool: NewUpstreamPool(config.Upstreams)}
+	config := &Config{DNSListens: []string{":15353"}, HTTPListen: "127.0.0.1:18080", RulesFile: rulesFile, Upstreams: []string{upstreamConn.LocalAddr().String()}, CacheEnabled: true, CacheSize: 1 << 20, OptimisticAnswerTTL: cache.DefaultOptimisticAnswerTTL, OptimisticMaxAge: cache.DefaultOptimisticMaxAgeSeconds}
+	server := &DNSServer{config: config, rules: rules, cache: cache.New(config.CacheSize, true), logs: querylog.New(100), client: &dns.Client{Net: "udp", Timeout: time.Second}, pool: NewUpstreamPool(config.Upstreams)}
 	request := newTestRequest("coalesced.integration.test.", dns.TypeA)
 	var wait sync.WaitGroup
 	for index := 0; index < 20; index++ {
@@ -146,5 +149,34 @@ func TestConcurrentIdenticalQueriesAreCoalesced(t *testing.T) {
 	wait.Wait()
 	if got := upstreamCount.Load(); got != 1 {
 		t.Fatalf("expected identical concurrent queries to share one upstream request, got %d", got)
+	}
+}
+
+func TestPrefetchRefreshesPopularEntriesBeforeExpiry(t *testing.T) {
+	address, upstreamCount := startAnswerServer(t, net.IPv4(203, 0, 113, 7))
+	config := &Config{Upstreams: []string{address}, CachePrefetch: true, OptimisticAnswerTTL: cache.DefaultOptimisticAnswerTTL, OptimisticMaxAge: cache.DefaultOptimisticMaxAgeSeconds}
+	server := newRoutingServer(t, config)
+
+	query(server, "popular.test.", dns.TypeA) // miss: one upstream query, TTL 60
+	query(server, "popular.test.", dns.TypeA) // first hit
+	if upstreamCount.Load() != 1 {
+		t.Fatalf("upstream queries = %d, want 1", upstreamCount.Load())
+	}
+	offset := 55 * time.Second // last ~8% of the 60 s TTL
+	server.cache.SetClock(func() time.Time { return time.Now().Add(offset) })
+	query(server, "popular.test.", dns.TypeA) // hit that triggers the prefetch
+
+	deadline := time.Now().Add(3 * time.Second)
+	for upstreamCount.Load() < 2 && time.Now().Before(deadline) {
+		time.Sleep(10 * time.Millisecond)
+	}
+	if upstreamCount.Load() != 2 {
+		t.Fatalf("expected a background prefetch, upstream queries = %d", upstreamCount.Load())
+	}
+	for server.cache.Stats().Prefetches == 0 && time.Now().Before(deadline) {
+		time.Sleep(10 * time.Millisecond)
+	}
+	if stats := server.cache.Stats(); stats.Prefetches != 1 {
+		t.Fatalf("stats = %#v", stats)
 	}
 }

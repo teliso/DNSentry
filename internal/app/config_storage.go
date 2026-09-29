@@ -1,141 +1,98 @@
 package app
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
+	"log/slog"
 	"os"
 	"path/filepath"
-	"runtime"
+	"strings"
 	"sync"
+	"time"
 
 	"gopkg.in/yaml.v3"
+
+	"github.com/teliso/DNSentry/internal/fsutil"
 )
 
 const maxConfiguredUpstreams = 32
 
-func configPath() string { return filepath.Join("data", "config.yaml") }
+// configFile is the YAML configuration path; Run may override it once at startup.
+var configFile = filepath.Join("data", "config.yaml")
 
-func configBackupPath() string { return configPath() + ".bak" }
+func configPath() string { return configFile }
 
-func legacyConfigPath() string { return filepath.Join("data", "config.json") }
+// defaultConfig is written on first start when no configuration exists. Data
+// files are placed next to the configuration file. DNSENTRY_DNS_LISTEN and
+// DNSENTRY_WEB_LISTEN override the listen addresses of this initial
+// configuration only, which suits container images.
+func defaultConfig() *Config {
+	dir := filepath.Dir(configPath())
+	return &Config{
+		DNSListens:            []string{envOr("DNSENTRY_DNS_LISTEN", ":15353")},
+		HTTPListen:            envOr("DNSENTRY_WEB_LISTEN", "127.0.0.1:18080"),
+		Upstreams:             []string{"1.1.1.1:53", "8.8.8.8:53"},
+		BootstrapDNS:          []string{"1.1.1.1:53", "8.8.8.8:53"},
+		UpstreamMode:          "load_balance",
+		PrivateReverse:        true,
+		UpstreamTimeout:       4,
+		BlockingMode:          "nxdomain",
+		BlockingIPv4:          "0.0.0.0",
+		BlockingIPv6:          "::",
+		BlockedResponseTTL:    10,
+		RulesFile:             filepath.Join(dir, "rules.txt"),
+		CacheEnabled:          true,
+		CacheSize:             4 << 20,
+		QueryLogSize:          1000,
+		QueryLogFile:          filepath.Join(dir, "querylog"),
+		QueryLogRetentionDays: 7,
+		Access:                DNSAccessConfig{MaxConcurrentQueries: 2048},
+		Encryption:            EncryptionConfig{DNSCrypt: DNSCryptConfig{ProviderName: "dnsentry", CertificateTTLHours: 24}},
+	}
+}
 
-func loadConfig() (*Config, error) {
+func envOr(key, fallback string) string {
+	if value := strings.TrimSpace(os.Getenv(key)); value != "" {
+		return value
+	}
+	return fallback
+}
+
+// readConfig parses and validates the configuration file without side effects.
+func readConfig() (*Config, error) {
 	data, err := os.ReadFile(configPath())
-	if err == nil {
-		fileConfig := new(yamlConfig)
-		if err := yaml.Unmarshal(data, fileConfig); err != nil {
-			return nil, fmt.Errorf("invalid YAML config: %w", err)
-		}
-		validated, err := validateConfig(fileConfig.toConfig())
-		if err != nil {
-			return nil, err
-		}
-		return validated, nil
-	}
-	if !os.IsNotExist(err) {
-		return nil, err
-	}
-
-	legacyData, legacyErr := os.ReadFile(legacyConfigPath())
-	if legacyErr != nil {
-		if os.IsNotExist(legacyErr) {
-			return nil, errors.New("neither data/config.yaml nor legacy data/config.json exists")
-		}
-		return nil, legacyErr
-	}
-	legacyConfig := new(Config)
-	if err := json.Unmarshal(legacyData, legacyConfig); err != nil {
-		return nil, fmt.Errorf("invalid legacy JSON config: %w", err)
-	}
-	// The original MVP measured cache_size as entry count. Migrate it to bytes.
-	legacyConfig.CacheEnabled = true
-	if legacyConfig.CacheSize < 65536 {
-		legacyConfig.CacheSize = 4 << 20
-	}
-	legacyConfig, err = validateConfig(legacyConfig)
-	if err != nil {
-		return nil, err
-	}
-	if err := saveConfig(legacyConfig); err != nil {
-		return nil, fmt.Errorf("could not migrate JSON config to YAML: %w", err)
-	}
-	fmt.Printf("Migrated %s to %s\n", legacyConfigPath(), configPath())
-	return legacyConfig, nil
-}
-
-var configSaveMu sync.Mutex
-
-func backupConfig(path string) error {
-	data, err := os.ReadFile(path)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return nil
-		}
-		return err
-	}
-	directory := filepath.Dir(path)
-	temporary, err := os.CreateTemp(directory, ".config.yaml.bak.tmp-*")
-	if err != nil {
-		return err
-	}
-	temporaryPath := temporary.Name()
-	committed := false
-	defer func() {
-		if !committed {
-			_ = os.Remove(temporaryPath)
-		}
-	}()
-	if err := temporary.Chmod(0600); err != nil {
-		_ = temporary.Close()
-		return err
-	}
-	if written, err := temporary.Write(data); err != nil {
-		_ = temporary.Close()
-		return err
-	} else if written != len(data) {
-		_ = temporary.Close()
-		return io.ErrShortWrite
-	}
-	if err := temporary.Sync(); err != nil {
-		_ = temporary.Close()
-		return err
-	}
-	if err := temporary.Close(); err != nil {
-		return err
-	}
-	backupPath := configBackupPath()
-	if err := os.Rename(temporaryPath, backupPath); err != nil {
-		if runtime.GOOS != "windows" {
-			return err
-		}
-		if removeErr := os.Remove(backupPath); removeErr != nil && !os.IsNotExist(removeErr) {
-			return removeErr
-		}
-		if err := os.Rename(temporaryPath, backupPath); err != nil {
-			return err
-		}
-	}
-	committed = true
-	return nil
-}
-
-func loadConfigBackup() (*Config, error) {
-	data, err := os.ReadFile(configBackupPath())
 	if err != nil {
 		return nil, err
 	}
 	fileConfig := new(yamlConfig)
 	if err := yaml.Unmarshal(data, fileConfig); err != nil {
-		return nil, fmt.Errorf("invalid YAML backup: %w", err)
+		return nil, fmt.Errorf("invalid YAML in %s: %w", configPath(), err)
 	}
 	validated, err := validateConfig(fileConfig.toConfig())
 	if err != nil {
-		return nil, fmt.Errorf("invalid configuration backup: %w", err)
+		return nil, fmt.Errorf("invalid configuration in %s: %w", configPath(), err)
 	}
 	return validated, nil
 }
+
+// loadConfig reads the configuration, creating a default one on first start.
+func loadConfig() (*Config, error) {
+	config, err := readConfig()
+	if !errors.Is(err, os.ErrNotExist) {
+		return config, err
+	}
+	config, err = validateConfig(defaultConfig())
+	if err != nil {
+		return nil, err
+	}
+	if err := saveConfig(config); err != nil {
+		return nil, fmt.Errorf("create default configuration: %w", err)
+	}
+	slog.Info("created default configuration", "path", configPath())
+	return config, nil
+}
+
+var configSaveMu sync.Mutex
 
 func saveConfig(config *Config) error {
 	configSaveMu.Lock()
@@ -154,58 +111,24 @@ func saveConfig(config *Config) error {
 	}
 
 	path := configPath()
-	directory := filepath.Dir(path)
-	if err := os.MkdirAll(directory, 0755); err != nil {
-		return fmt.Errorf("create config directory: %w", err)
-	}
-
-	temporary, err := os.CreateTemp(directory, "."+filepath.Base(path)+".tmp-*")
-	if err != nil {
-		return fmt.Errorf("create temporary config: %w", err)
-	}
-	temporaryPath := temporary.Name()
-	committed := false
-	defer func() {
-		if !committed {
-			_ = os.Remove(temporaryPath)
-		}
-	}()
-
-	if err := temporary.Chmod(0600); err != nil {
-		_ = temporary.Close()
-		return fmt.Errorf("set temporary config permissions: %w", err)
-	}
-	written, err := temporary.Write(data)
-	if err != nil {
-		_ = temporary.Close()
-		return fmt.Errorf("write temporary config: %w", err)
-	}
-	if written != len(data) {
-		_ = temporary.Close()
-		return fmt.Errorf("write temporary config: %w", io.ErrShortWrite)
-	}
-	if err := temporary.Sync(); err != nil {
-		_ = temporary.Close()
-		return fmt.Errorf("sync temporary config: %w", err)
-	}
-	if err := temporary.Close(); err != nil {
-		return fmt.Errorf("close temporary config: %w", err)
-	}
-	if err := backupConfig(path); err != nil {
-		return fmt.Errorf("backup config: %w", err)
-	}
-	if err := os.Rename(temporaryPath, path); err != nil {
-		if runtime.GOOS != "windows" {
-			return fmt.Errorf("replace config: %w", err)
-		}
-		// Windows' MoveFile, used by os.Rename, does not replace an existing file.
-		if removeErr := os.Remove(path); removeErr != nil {
-			return fmt.Errorf("replace config: %w (remove existing config: %v)", err, removeErr)
-		}
-		if retryErr := os.Rename(temporaryPath, path); retryErr != nil {
-			return fmt.Errorf("replace config after removing existing config: %w", retryErr)
+	// Keep the configuration being replaced as the baseline of the history when
+	// this installation has none yet (it predates versioning).
+	if len(configVersionIDs()) == 0 {
+		if old, err := os.ReadFile(path); err == nil {
+			modified := time.Now()
+			if info, err := os.Stat(path); err == nil {
+				modified = info.ModTime()
+			}
+			if err := archiveConfigVersion(old, modified); err != nil {
+				slog.Warn("could not archive the previous configuration", "error", err)
+			}
 		}
 	}
-	committed = true
+	if err := fsutil.WriteFileAtomic(path, data, 0600); err != nil {
+		return fmt.Errorf("write config: %w", err)
+	}
+	if err := archiveConfigVersion(data, time.Now()); err != nil {
+		slog.Warn("could not record the configuration version", "error", err)
+	}
 	return nil
 }

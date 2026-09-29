@@ -8,6 +8,9 @@ import (
 	"time"
 
 	"github.com/miekg/dns"
+	"github.com/teliso/DNSentry/internal/cache"
+	"github.com/teliso/DNSentry/internal/querylog"
+	"github.com/teliso/DNSentry/internal/rules"
 	"golang.org/x/sync/singleflight"
 )
 
@@ -20,9 +23,9 @@ type DNSServer struct {
 	dnscryptMu           sync.Mutex
 	config               *Config
 	generation           uint64
-	rules                *RuleStore
-	cache                *DNSCache
-	logs                 *QueryLogger
+	rules                *rules.Store
+	cache                *cache.Cache
+	logs                 *querylog.Logger
 	client               *dns.Client
 	pool                 *UpstreamPool
 	fallbackPool         *UpstreamPool
@@ -48,6 +51,7 @@ type DNSServer struct {
 	dnssecCacheMu        sync.Mutex
 	dnssecCacheOK        map[string]struct{}
 	localRecords         atomic.Pointer[localRecordSnapshot]
+	routes               atomic.Pointer[routeTable]
 	fastestAddrProbe     addressProbeFunc
 	doh3TLSConfig        *tls.Config
 }
@@ -120,7 +124,8 @@ func (s *DNSServer) applyConfig(config Config) error {
 	s.updateConfig(config)
 	s.configureAccess(config.Access)
 	s.setLocalRecords(config.LocalRecords)
-	if previous.CacheEnabled != config.CacheEnabled || previous.CacheSize != config.CacheSize || previous.CacheTTLMin != config.CacheTTLMin || previous.CacheTTLMax != config.CacheTTLMax || previous.OptimisticCache != config.OptimisticCache || previous.OptimisticAnswerTTL != config.OptimisticAnswerTTL || previous.OptimisticMaxAge != config.OptimisticMaxAge || previous.EnableDNSSEC != config.EnableDNSSEC || dnssecChanged || previous.UpstreamMode != config.UpstreamMode || localRecordsChanged || accessChanged || !slices.Equal(previous.Upstreams, config.Upstreams) || !slices.Equal(previous.FallbackUpstreams, config.FallbackUpstreams) || !slices.Equal(previous.BootstrapDNS, config.BootstrapDNS) {
+	s.setUpstreamRoutes(config.UpstreamRoutes)
+	if previous.CacheEnabled != config.CacheEnabled || previous.CacheSize != config.CacheSize || previous.CacheTTLMin != config.CacheTTLMin || previous.CacheTTLMax != config.CacheTTLMax || previous.OptimisticCache != config.OptimisticCache || previous.OptimisticAnswerTTL != config.OptimisticAnswerTTL || previous.OptimisticMaxAge != config.OptimisticMaxAge || previous.EnableDNSSEC != config.EnableDNSSEC || dnssecChanged || previous.UpstreamMode != config.UpstreamMode || localRecordsChanged || !upstreamRoutesEqual(previous.UpstreamRoutes, config.UpstreamRoutes) || previous.PrivateReverse != config.PrivateReverse || previous.BlockAAAA != config.BlockAAAA || accessChanged || !slices.Equal(previous.Upstreams, config.Upstreams) || !slices.Equal(previous.FallbackUpstreams, config.FallbackUpstreams) || !slices.Equal(previous.BootstrapDNS, config.BootstrapDNS) {
 		s.cache.Clear()
 		s.clearDNSSECCacheMarks()
 	}

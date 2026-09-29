@@ -21,7 +21,7 @@ import (
 // omitted.
 type DNSCryptConfig struct {
 	Enabled             bool     `json:"enabled" yaml:"enabled"`
-	Listen              string   `json:"listen" yaml:"listen"`
+	Listen              string   `json:"-" yaml:"listen,omitempty"` // legacy single address: read from old files, never written
 	Listens             []string `json:"listens,omitempty" yaml:"listens,omitempty"`
 	ProviderName        string   `json:"provider_name" yaml:"provider_name"`
 	PrivateKey          string   `json:"private_key" yaml:"private_key"`
@@ -40,7 +40,7 @@ func normalizeDNSCryptListeners(config *DNSCryptConfig) error {
 		return err
 	}
 	config.Listens = addresses
-	config.Listen = firstListenAddress(addresses)
+	config.Listen = "" // input-only: folded into Listens
 	return nil
 }
 
@@ -177,12 +177,9 @@ type DNSCryptService struct {
 type DNSCryptStatus struct {
 	Enabled      bool     `json:"enabled"`
 	Running      bool     `json:"running"`
-	Listen       string   `json:"listen"`
 	Listens      []string `json:"listens,omitempty"`
 	ProviderName string   `json:"provider_name"`
 	Stamp        string   `json:"stamp,omitempty"`
-	UDP          bool     `json:"udp"`
-	TCP          bool     `json:"tcp"`
 }
 
 func NewDNSCryptService(server *DNSServer, config DNSCryptConfig) (*DNSCryptService, error) {
@@ -451,7 +448,7 @@ func (s *DNSCryptService) Stamp() (string, error) {
 	if !s.config.Enabled {
 		return "", errors.New("DNSCrypt is disabled")
 	}
-	stamp, err := s.resolverConfig.CreateStamp(s.config.Listen)
+	stamp, err := s.resolverConfig.CreateStamp(s.config.Listens[0])
 	if err != nil {
 		return "", err
 	}
@@ -459,7 +456,7 @@ func (s *DNSCryptService) Stamp() (string, error) {
 }
 
 func (s *DNSCryptService) Status() DNSCryptStatus {
-	status := DNSCryptStatus{Enabled: s.config.Enabled, Listen: s.config.Listen, Listens: append([]string(nil), s.config.Listens...), ProviderName: s.config.ProviderName, UDP: s.config.Enabled, TCP: s.config.Enabled}
+	status := DNSCryptStatus{Enabled: s.config.Enabled, Listens: append([]string(nil), s.config.Listens...), ProviderName: s.config.ProviderName}
 	s.mu.Lock()
 	status.Running = status.Enabled && s.state == dnscryptServiceRunning
 	s.mu.Unlock()

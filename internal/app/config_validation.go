@@ -8,18 +8,20 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+
+	"github.com/teliso/DNSentry/internal/cache"
+	"github.com/teliso/DNSentry/internal/rules"
 )
 
 func validateConfig(config *Config) (*Config, error) {
 	if config == nil {
 		return nil, errors.New("config is nil")
 	}
-	config.DNSListen = strings.TrimSpace(config.DNSListen)
 	config.HTTPListen = strings.TrimSpace(config.HTTPListen)
 	if config.HTTPListen == "" || strings.TrimSpace(config.RulesFile) == "" {
 		return nil, errors.New("config is missing required fields")
 	}
-	dnsListens, err := normalizeListenAddresses("dns listen", config.DNSListen, config.DNSListens)
+	dnsListens, err := normalizeListenAddresses("dns listen", "", config.DNSListens)
 	if err != nil {
 		return nil, err
 	}
@@ -27,7 +29,6 @@ func validateConfig(config *Config) (*Config, error) {
 		return nil, errors.New("dns listens must contain at least one address")
 	}
 	config.DNSListens = dnsListens
-	config.DNSListen = firstListenAddress(dnsListens)
 	if err := validateListenAddress("web listen", config.HTTPListen); err != nil {
 		return nil, err
 	}
@@ -76,10 +77,10 @@ func validateConfig(config *Config) (*Config, error) {
 		return nil, err
 	}
 	if config.OptimisticAnswerTTL == 0 {
-		config.OptimisticAnswerTTL = defaultOptimisticAnswerTTL
+		config.OptimisticAnswerTTL = cache.DefaultOptimisticAnswerTTL
 	}
 	if config.OptimisticMaxAge == 0 {
-		config.OptimisticMaxAge = defaultOptimisticMaxAgeSeconds
+		config.OptimisticMaxAge = cache.DefaultOptimisticMaxAgeSeconds
 	}
 	if config.OptimisticAnswerTTL > config.OptimisticMaxAge {
 		return nil, errors.New("cache_optimistic_answer_ttl must be less than or equal to cache_optimistic_max_age")
@@ -131,6 +132,9 @@ func validateConfig(config *Config) (*Config, error) {
 		}
 		config.FallbackUpstreams[index] = normalized
 	}
+	if err := validateUpstreamRoutes(config.UpstreamRoutes); err != nil {
+		return nil, err
+	}
 	if len(config.BootstrapDNS) == 0 {
 		config.BootstrapDNS = []string{"1.1.1.1:53", "8.8.8.8:53"}
 	}
@@ -144,19 +148,16 @@ func validateConfig(config *Config) (*Config, error) {
 		}
 		config.BootstrapDNS[index] = normalized
 	}
-	if config.Encryption.Enabled == false {
-		config.Encryption.DoTListen = ""
+	if !config.Encryption.Enabled {
+		config.Encryption.DoTListen, config.Encryption.DoHListen, config.Encryption.DoH3Listen, config.Encryption.DoQListen = "", "", "", ""
 		config.Encryption.DoTListens = nil
-		config.Encryption.DoHListen = ""
 		config.Encryption.DoHListens = nil
-		config.Encryption.DoH3Listen = ""
 		config.Encryption.DoH3Listens = nil
-		config.Encryption.DoQListen = ""
 		config.Encryption.DoQListens = nil
 	} else if err := normalizeEncryptionListeners(&config.Encryption); err != nil {
 		return nil, err
 	}
-	if config.Encryption.DNSCrypt.Enabled == false {
+	if !config.Encryption.DNSCrypt.Enabled {
 		config.Encryption.DNSCrypt.Listen = ""
 		config.Encryption.DNSCrypt.Listens = nil
 	} else if err := normalizeDNSCryptListeners(&config.Encryption.DNSCrypt); err != nil {
@@ -174,6 +175,11 @@ func validateConfig(config *Config) (*Config, error) {
 	if err := validateEncryptionConfig(config.Encryption); err != nil {
 		return nil, err
 	}
+	sources, err := rules.NormalizeSources(config.RuleSources)
+	if err != nil {
+		return nil, err
+	}
+	config.RuleSources = sources
 	return config, nil
 }
 
@@ -203,13 +209,6 @@ func normalizeListenAddresses(name, legacy string, values []string) ([]string, e
 		return nil, fmt.Errorf("%s addresses must contain at most %d listeners", name, maxConfiguredListens)
 	}
 	return addresses, nil
-}
-
-func firstListenAddress(addresses []string) string {
-	if len(addresses) == 0 {
-		return ""
-	}
-	return addresses[0]
 }
 
 func validateListenAddress(name, value string) error {

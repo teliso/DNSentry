@@ -6,13 +6,16 @@ import (
 	"testing"
 
 	"github.com/miekg/dns"
+	"github.com/teliso/DNSentry/internal/cache"
+	"github.com/teliso/DNSentry/internal/querylog"
+	"github.com/teliso/DNSentry/internal/rules"
 )
 
 func TestLocalRecordsAreValidatedAndServedBeforeUpstream(t *testing.T) {
 	tests := []LocalRecord{
 		{Domain: "router.home", Type: "A", Value: "192.168.1.1", TTL: 60},
 		{Domain: "alias.home", Type: "CNAME", Value: "router.home", TTL: 60},
-		{Domain: "txt.home", Type: "TXT", Value: "managed by VigorDNS", TTL: 60},
+		{Domain: "txt.home", Type: "TXT", Value: "managed by DNSentry", TTL: 60},
 	}
 	if err := validateLocalRecords(tests); err != nil {
 		t.Fatal(err)
@@ -23,12 +26,12 @@ func TestLocalRecordsAreValidatedAndServedBeforeUpstream(t *testing.T) {
 	if err := os.WriteFile(ruleFile, nil, 0600); err != nil {
 		t.Fatal(err)
 	}
-	rules := NewRuleStore(ruleFile)
+	rules := rules.NewStore(ruleFile)
 	if err := rules.Reload(); err != nil {
 		t.Fatal(err)
 	}
 	config := &Config{
-		DNSListen:    ":15353",
+		DNSListens:   []string{":15353"},
 		HTTPListen:   "127.0.0.1:18080",
 		RulesFile:    ruleFile,
 		CacheEnabled: true,
@@ -39,8 +42,8 @@ func TestLocalRecordsAreValidatedAndServedBeforeUpstream(t *testing.T) {
 	server := &DNSServer{
 		config: config,
 		rules:  rules,
-		cache:  NewDNSCache(config.CacheSize, true),
-		logs:   NewQueryLogger(10),
+		cache:  cache.New(config.CacheSize, true),
+		logs:   querylog.New(10),
 		client: &dns.Client{Net: "udp"},
 		pool:   NewUpstreamPool(config.Upstreams),
 	}

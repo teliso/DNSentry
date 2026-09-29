@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/miekg/dns"
+	"github.com/teliso/DNSentry/internal/dnsname"
 )
 
 const maxClientRateLimitQPS = 1_000_000
@@ -45,8 +46,8 @@ func validateDNSAccessConfig(config DNSAccessConfig) error {
 		}
 	}
 	for index, domain := range config.RebindingAllowDomains {
-		domain = normalizeDomain(domain)
-		if !validDomain(domain) {
+		domain = dnsname.Normalize(domain)
+		if !dnsname.Valid(domain) {
 			return fmt.Errorf("invalid rebinding_allow_domains[%d]", index)
 		}
 	}
@@ -94,8 +95,8 @@ func newClientAccessPolicy(config DNSAccessConfig) *clientAccessPolicy {
 		}
 	}
 	for _, domain := range config.RebindingAllowDomains {
-		domain = normalizeDomain(domain)
-		if validDomain(domain) {
+		domain = dnsname.Normalize(domain)
+		if dnsname.Valid(domain) {
 			policy.allowDomains = append(policy.allowDomains, domain)
 		}
 	}
@@ -131,8 +132,8 @@ func (p *clientAccessPolicy) allowsRebindingDomain(domain string) bool {
 	if p == nil || !p.rebinding {
 		return true
 	}
-	domain = normalizeDomain(domain)
-	for candidate := domain; candidate != ""; candidate = parentDomain(candidate) {
+	domain = dnsname.Normalize(domain)
+	for candidate := domain; candidate != ""; candidate = dnsname.Parent(candidate) {
 		for _, allowed := range p.allowDomains {
 			if candidate == allowed {
 				return true

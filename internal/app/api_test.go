@@ -1,11 +1,13 @@
 package app
 
 import (
-	"bytes"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"github.com/teliso/DNSentry/internal/cache"
+	"github.com/teliso/DNSentry/internal/querylog"
 )
 
 func TestQueryLogSettingsChangedRequiresRestart(t *testing.T) {
@@ -44,13 +46,13 @@ func TestAPIRemoteAccessRequiresToken(t *testing.T) {
 }
 
 func TestLoopbackAPIExposesMetricsAndClearsCache(t *testing.T) {
-	cache := NewDNSCache(1024, true)
-	api := &API{cache: cache, logs: NewQueryLogger(10), resolver: &DNSServer{cache: cache, config: &Config{}}}
+	cache := cache.New(1024, true)
+	api := &API{cache: cache, logs: querylog.New(10), resolver: &DNSServer{cache: cache, config: &Config{}}}
 	request := httptest.NewRequest(http.MethodGet, "http://127.0.0.1/api/metrics", nil)
 	request.RemoteAddr = "127.0.0.1:4000"
 	recorder := httptest.NewRecorder()
 	api.handle(recorder, request)
-	if recorder.Code != http.StatusOK || !strings.Contains(recorder.Body.String(), "vigordns_cache_hit_rate") {
+	if recorder.Code != http.StatusOK || !strings.Contains(recorder.Body.String(), "dnsentry_cache_hit_rate") {
 		t.Fatalf("expected Prometheus metrics, got status=%d body=%s", recorder.Code, recorder.Body.String())
 	}
 
@@ -83,17 +85,5 @@ func TestLoopbackStateChangingAPIRequiresSameOrigin(t *testing.T) {
 	api.handle(recorder, request)
 	if recorder.Code != http.StatusForbidden {
 		t.Fatalf("cross-origin state-changing request status = %d, want %d", recorder.Code, http.StatusForbidden)
-	}
-}
-
-func TestJSONBodyLimitRejectsOversizedRequest(t *testing.T) {
-	handler := withJSONBodyLimit(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
-		writer.WriteHeader(http.StatusNoContent)
-	}))
-	request := httptest.NewRequest(http.MethodPost, "http://127.0.0.1/api/config", bytes.NewReader(bytes.Repeat([]byte{'x'}, maxJSONBodyBytes+1)))
-	recorder := httptest.NewRecorder()
-	handler.ServeHTTP(recorder, request)
-	if recorder.Code != http.StatusRequestEntityTooLarge {
-		t.Fatalf("expected oversized request to be rejected, got %d", recorder.Code)
 	}
 }

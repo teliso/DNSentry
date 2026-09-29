@@ -8,12 +8,13 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/teliso/DNSentry/internal/cache"
+	"github.com/teliso/DNSentry/internal/rules"
 	"gopkg.in/yaml.v3"
 )
 
 func TestYAMLConfigRoundTrip(t *testing.T) {
 	original := &Config{
-		DNSListen:             ":15353",
 		DNSListens:            []string{":15353", "127.0.0.1:15354"},
 		HTTPListen:            ":18080",
 		Upstreams:             []string{"1.1.1.1:53", "tls://dns.google:853"},
@@ -32,7 +33,7 @@ func TestYAMLConfigRoundTrip(t *testing.T) {
 		OptimisticCache:       true,
 		OptimisticAnswerTTL:   10,
 		OptimisticMaxAge:      300,
-		RuleSources:           []RuleSource{{URL: "https://example.com/rules.txt", Enabled: true, IntervalMinutes: 360}},
+		RuleSources:           []rules.Source{{URL: "https://example.com/rules.txt", Enabled: true, IntervalMinutes: 360}},
 	}
 	data, err := yaml.Marshal(newYAMLConfig(original))
 	if err != nil {
@@ -43,7 +44,7 @@ func TestYAMLConfigRoundTrip(t *testing.T) {
 		t.Fatal(err)
 	}
 	actual := decoded.toConfig()
-	if actual.DNSListen != original.DNSListen || !slices.Equal(actual.DNSListens, original.DNSListens) || actual.HTTPListen != original.HTTPListen || actual.UpstreamMode != original.UpstreamMode || !slices.Equal(actual.FallbackUpstreams, original.FallbackUpstreams) || actual.CacheTTLMin != original.CacheTTLMin || !actual.EnableDNSSEC || !actual.OptimisticCache || actual.OptimisticAnswerTTL != original.OptimisticAnswerTTL || actual.OptimisticMaxAge != original.OptimisticMaxAge || actual.QueryLogEnabled != original.QueryLogEnabled || actual.QueryLogFile != original.QueryLogFile || actual.QueryLogRetentionDays != original.QueryLogRetentionDays || len(actual.RuleSources) != 1 {
+	if !slices.Equal(actual.DNSListens, original.DNSListens) || actual.HTTPListen != original.HTTPListen || actual.UpstreamMode != original.UpstreamMode || !slices.Equal(actual.FallbackUpstreams, original.FallbackUpstreams) || actual.CacheTTLMin != original.CacheTTLMin || !actual.EnableDNSSEC || !actual.OptimisticCache || actual.OptimisticAnswerTTL != original.OptimisticAnswerTTL || actual.OptimisticMaxAge != original.OptimisticMaxAge || actual.QueryLogEnabled != original.QueryLogEnabled || actual.QueryLogFile != original.QueryLogFile || actual.QueryLogRetentionDays != original.QueryLogRetentionDays || len(actual.RuleSources) != 1 {
 		t.Fatalf("config did not round-trip: %#v", actual)
 	}
 }
@@ -57,7 +58,7 @@ func TestLegacyYAMLDNSListenPopulatesDNSListens(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if validated.DNSListen != ":15353" || !slices.Equal(validated.DNSListens, []string{":15353"}) {
+	if !slices.Equal(validated.DNSListens, []string{":15353"}) {
 		t.Fatalf("legacy DNS listen was not normalized: %#v", validated)
 	}
 }
@@ -69,7 +70,7 @@ func TestDNSListenValidationDeduplicatesAndLimitsAddresses(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !slices.Equal(validated.DNSListens, []string{":15353", "127.0.0.1:15354"}) || validated.DNSListen != ":15353" {
+	if !slices.Equal(validated.DNSListens, []string{":15353", "127.0.0.1:15354"}) {
 		t.Fatalf("unexpected normalized DNS listeners: %#v", validated)
 	}
 	config = testConfig()
@@ -98,7 +99,7 @@ func TestYAMLCacheDefaultsToEnabled(t *testing.T) {
 
 func testConfig() *Config {
 	return &Config{
-		DNSListen:           ":15353",
+		DNSListens:          []string{":15353"},
 		HTTPListen:          "127.0.0.1:18080",
 		Upstreams:           []string{"1.1.1.1:53"},
 		RulesFile:           "data/rules.txt",
@@ -138,7 +139,7 @@ func TestSaveConfigAtomicRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if loaded.DNSListen != original.DNSListen || loaded.HTTPListen != original.HTTPListen || loaded.CacheSize != original.CacheSize || loaded.CacheTTLMin != original.CacheTTLMin || loaded.CacheTTLMax != original.CacheTTLMax || loaded.BlockingIPv4 != original.BlockingIPv4 || loaded.BlockingIPv6 != original.BlockingIPv6 || len(loaded.Upstreams) != 1 || loaded.Upstreams[0] != original.Upstreams[0] {
+	if !slices.Equal(loaded.DNSListens, original.DNSListens) || loaded.HTTPListen != original.HTTPListen || loaded.CacheSize != original.CacheSize || loaded.CacheTTLMin != original.CacheTTLMin || loaded.CacheTTLMax != original.CacheTTLMax || loaded.BlockingIPv4 != original.BlockingIPv4 || loaded.BlockingIPv6 != original.BlockingIPv6 || len(loaded.Upstreams) != 1 || loaded.Upstreams[0] != original.Upstreams[0] {
 		t.Fatalf("config did not round-trip: %#v", loaded)
 	}
 
@@ -158,12 +159,16 @@ func TestSaveConfigAtomicRoundTrip(t *testing.T) {
 	if decoded.Cache.Size != updated.CacheSize {
 		t.Fatalf("replacement was not committed: got %d, want %d", decoded.Cache.Size, updated.CacheSize)
 	}
-	backup, err := loadConfigBackup()
-	if err != nil {
-		t.Fatalf("configuration backup was not readable: %v", err)
+	id, ok := previousConfigVersionID()
+	if !ok {
+		t.Fatal("the replaced configuration was not kept in the history")
 	}
-	if backup.CacheSize != original.CacheSize {
-		t.Fatalf("configuration backup contains wrong version: got %d, want %d", backup.CacheSize, original.CacheSize)
+	previous, err := loadConfigVersion(id)
+	if err != nil {
+		t.Fatalf("previous configuration was not readable: %v", err)
+	}
+	if previous.CacheSize != original.CacheSize {
+		t.Fatalf("previous configuration has the wrong content: got %d, want %d", previous.CacheSize, original.CacheSize)
 	}
 
 	entries, err := os.ReadDir(filepath.Dir(configPath()))
@@ -222,7 +227,7 @@ func TestValidateConfigRejectsInvalidValues(t *testing.T) {
 		{"inverted cache TTL", func(config *Config) { config.CacheTTLMin = 60; config.CacheTTLMax = 30 }},
 		{"missing upstream", func(config *Config) { config.Upstreams = nil }},
 		{"empty upstream", func(config *Config) { config.Upstreams = []string{""} }},
-		{"invalid listen address", func(config *Config) { config.DNSListen = "not-an-address" }},
+		{"invalid listen address", func(config *Config) { config.DNSListens = []string{"not-an-address"} }},
 		{"invalid upstream address", func(config *Config) { config.Upstreams = []string{"https://"} }},
 		{"invalid fallback upstream address", func(config *Config) { config.FallbackUpstreams = []string{"h3://"} }},
 		{"IPv6 used as custom IPv4", func(config *Config) { config.BlockingIPv4 = "2001:db8::1" }},
@@ -284,10 +289,59 @@ func TestValidateConfigAppliesExistingDefaults(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if validated.UpstreamTimeout != 4 || validated.UpstreamMode != upstreamModeLoadBalance || validated.Access.MaxConcurrentQueries != 2048 || validated.CacheSize != 4<<20 || validated.QueryLogFile != filepath.Join("data", "querylog") || validated.QueryLogRetentionDays != 7 || validated.BlockingMode != "default" || validated.BlockingIPv4 != "0.0.0.0" || validated.BlockingIPv6 != "::" || validated.OptimisticAnswerTTL != defaultOptimisticAnswerTTL || validated.OptimisticMaxAge != defaultOptimisticMaxAgeSeconds || validated.BlockedResponseTTL != 10 {
+	if validated.UpstreamTimeout != 4 || validated.UpstreamMode != upstreamModeLoadBalance || validated.Access.MaxConcurrentQueries != 2048 || validated.CacheSize != 4<<20 || validated.QueryLogFile != filepath.Join("data", "querylog") || validated.QueryLogRetentionDays != 7 || validated.BlockingMode != "default" || validated.BlockingIPv4 != "0.0.0.0" || validated.BlockingIPv6 != "::" || validated.OptimisticAnswerTTL != cache.DefaultOptimisticAnswerTTL || validated.OptimisticMaxAge != cache.DefaultOptimisticMaxAgeSeconds || validated.BlockedResponseTTL != 10 {
 		t.Fatalf("existing defaults changed: %#v", validated)
 	}
 	if len(validated.BootstrapDNS) != 2 || validated.Upstreams[0] != "1.1.1.1:53" {
 		t.Fatalf("default or normalized upstream values changed: %#v", validated)
+	}
+}
+
+func TestLoadConfigCreatesDefaultNextToConfigFile(t *testing.T) {
+	dir := t.TempDir()
+	previous := configFile
+	configFile = filepath.Join(dir, "etc", "config.yaml")
+	t.Cleanup(func() { configFile = previous })
+
+	config, err := loadConfig()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if config.RulesFile != filepath.Join(dir, "etc", "rules.txt") || config.HTTPListen != "127.0.0.1:18080" {
+		t.Fatalf("unexpected defaults: %#v", config)
+	}
+	if _, err := readConfig(); err != nil {
+		t.Fatalf("default config is not valid on reload: %v", err)
+	}
+	if err := CheckConfig(); err != nil {
+		t.Fatalf("CheckConfig: %v", err)
+	}
+}
+
+func TestLegacySingleListenKeysAreReadButNeverWritten(t *testing.T) {
+	var file yamlConfig
+	legacy := "version: 1\ndns:\n  listen: ':15353'\n  upstreams: ['1.1.1.1:53']\nweb:\n  listen: 127.0.0.1:18080\nrules:\n  local_file: data/rules.txt\nencryption:\n  enabled: true\n  certificate: c.pem\n  private_key: k.pem\n  dot_listen: ':853'\n  dnscrypt:\n    enabled: true\n    listen: ':443'\n    provider_name: x\n"
+	if err := yaml.Unmarshal([]byte(legacy), &file); err != nil {
+		t.Fatal(err)
+	}
+	validated, err := validateConfig(file.toConfig())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(validated.DNSListens, []string{":15353"}) || !slices.Equal(validated.Encryption.DoTListens, []string{":853"}) || !slices.Equal(validated.Encryption.DNSCrypt.Listens, []string{":443"}) {
+		t.Fatalf("legacy keys were not folded into the lists: %#v", validated)
+	}
+	out, err := yaml.Marshal(newYAMLConfig(validated))
+	if err != nil {
+		t.Fatal(err)
+	}
+	singles := 0
+	for _, line := range strings.Split(string(out), "\n") {
+		if strings.HasPrefix(strings.TrimSpace(line), "listen:") {
+			singles++ // only web.listen may remain
+		}
+	}
+	if singles != 1 || strings.Contains(string(out), "dot_listen:") {
+		t.Errorf("legacy single-address keys were written back:\n%s", out)
 	}
 }

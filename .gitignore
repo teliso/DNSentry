@@ -2,3 +2,7 @@ node_modules/
 *.exe
 *.log
 .env
+
+# Runtime data (created on first start)
+/data/
+/dnsentry
