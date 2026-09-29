@@ -15,17 +15,17 @@ func publicConfig(config Config) Config {
 	return public
 }
 
-func (a *API) restoreConfig(writer http.ResponseWriter) {
+func (a *API) restoreConfig(writer http.ResponseWriter, _ *http.Request) {
 	restored, err := loadConfigBackup()
 	if err != nil {
-		writeJSON(writer, http.StatusNotFound, map[string]string{"error": "no valid configuration backup: " + err.Error()})
+		writeError(writer, http.StatusNotFound, "no valid configuration backup: "+err.Error())
 		return
 	}
 	current := a.resolver.configSnapshot()
 	restartRequired := !slices.Equal(restored.DNSListens, current.DNSListens) || restored.HTTPListen != current.HTTPListen || restored.RulesFile != current.RulesFile || queryLogSettingsChanged(*restored, current)
 	encryptionChanged := !encryptionConfigEqual(restored.Encryption, current.Encryption)
 	if err := saveConfig(restored); err != nil {
-		writeJSON(writer, http.StatusInternalServerError, map[string]string{"error": "could not restore config: " + err.Error()})
+		writeError(writer, http.StatusInternalServerError, "could not restore config: "+err.Error())
 		return
 	}
 	if restartRequired || encryptionChanged {
@@ -35,7 +35,7 @@ func (a *API) restoreConfig(writer http.ResponseWriter) {
 	a.updater.SetSources(restored.RuleSources)
 	restored.RuleSources = a.updater.Sources()
 	if err := a.resolver.applyConfig(*restored); err != nil {
-		writeJSON(writer, http.StatusInternalServerError, map[string]string{"error": "could not apply restored config: " + err.Error()})
+		writeError(writer, http.StatusInternalServerError, "could not apply restored config: "+err.Error())
 		return
 	}
 	writeJSON(writer, http.StatusOK, publicConfig(*restored))
@@ -51,7 +51,7 @@ func queryLogSettingsChanged(next, current Config) bool {
 func (a *API) updateConfig(writer http.ResponseWriter, request *http.Request) {
 	var next Config
 	if err := json.NewDecoder(request.Body).Decode(&next); err != nil || (strings.TrimSpace(next.DNSListen) == "" && len(next.DNSListens) == 0) || strings.TrimSpace(next.HTTPListen) == "" || len(next.Upstreams) == 0 {
-		writeJSON(writer, http.StatusBadRequest, map[string]string{"error": "invalid config"})
+		writeError(writer, http.StatusBadRequest, "invalid config")
 		return
 	}
 	current := a.resolver.configSnapshot()
@@ -66,7 +66,7 @@ func (a *API) updateConfig(writer http.ResponseWriter, request *http.Request) {
 	}
 	validated, err := validateConfig(&next)
 	if err != nil {
-		writeJSON(writer, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		writeError(writer, http.StatusBadRequest, err.Error())
 		return
 	}
 	next = *validated
@@ -85,7 +85,7 @@ func (a *API) updateConfig(writer http.ResponseWriter, request *http.Request) {
 	restartRequired := !slices.Equal(next.DNSListens, current.DNSListens) || next.HTTPListen != current.HTTPListen || next.RulesFile != current.RulesFile || queryLogSettingsChanged(next, current)
 	encryptionChanged := !encryptionConfigEqual(next.Encryption, current.Encryption)
 	if err := saveConfig(&next); err != nil {
-		writeJSON(writer, http.StatusInternalServerError, map[string]string{"error": "could not save config"})
+		writeError(writer, http.StatusInternalServerError, "could not save config")
 		return
 	}
 	if restartRequired || encryptionChanged {
@@ -95,7 +95,7 @@ func (a *API) updateConfig(writer http.ResponseWriter, request *http.Request) {
 	a.updater.SetSources(next.RuleSources)
 	next.RuleSources = a.updater.Sources()
 	if err := a.resolver.applyConfig(next); err != nil {
-		writeJSON(writer, http.StatusInternalServerError, map[string]string{"error": "could not apply config: " + err.Error()})
+		writeError(writer, http.StatusInternalServerError, "could not apply config: "+err.Error())
 		return
 	}
 	writeJSON(writer, http.StatusOK, publicConfig(next))

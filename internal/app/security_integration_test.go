@@ -8,6 +8,9 @@ import (
 	"time"
 
 	"github.com/miekg/dns"
+	"github.com/vigordns/vigordns/internal/cache"
+	"github.com/vigordns/vigordns/internal/querylog"
+	"github.com/vigordns/vigordns/internal/rules"
 )
 
 type securityCaptureWriter struct {
@@ -41,7 +44,7 @@ func newSecurityPipelineServer(t *testing.T, config *Config) *DNSServer {
 	if err := os.WriteFile(ruleFile, nil, 0600); err != nil {
 		t.Fatal(err)
 	}
-	rules := NewRuleStore(ruleFile)
+	rules := rules.NewStore(ruleFile)
 	if err := rules.Reload(); err != nil {
 		t.Fatal(err)
 	}
@@ -49,8 +52,8 @@ func newSecurityPipelineServer(t *testing.T, config *Config) *DNSServer {
 	return &DNSServer{
 		config: config,
 		rules:  rules,
-		cache:  NewDNSCache(1<<20, true),
-		logs:   NewQueryLogger(100),
+		cache:  cache.New(1<<20, true),
+		logs:   querylog.New(100),
 		client: &dns.Client{Net: "udp", Timeout: time.Second},
 		pool:   NewUpstreamPool(config.Upstreams),
 	}

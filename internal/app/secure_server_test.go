@@ -26,6 +26,9 @@ import (
 
 	"github.com/miekg/dns"
 	"github.com/quic-go/quic-go"
+	"github.com/vigordns/vigordns/internal/cache"
+	"github.com/vigordns/vigordns/internal/querylog"
+	"github.com/vigordns/vigordns/internal/rules"
 	"gopkg.in/yaml.v3"
 )
 
@@ -36,7 +39,7 @@ func newSecureTestServer(t *testing.T) *DNSServer {
 	if err := os.WriteFile(ruleFile, []byte("||blocked.example^\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	rules := NewRuleStore(ruleFile)
+	rules := rules.NewStore(ruleFile)
 	if err := rules.Reload(); err != nil {
 		t.Fatal(err)
 	}
@@ -48,8 +51,8 @@ func newSecureTestServer(t *testing.T) *DNSServer {
 			BlockedResponseTTL: 10,
 		},
 		rules:  rules,
-		cache:  NewDNSCache(1<<20, false),
-		logs:   NewQueryLogger(10),
+		cache:  cache.New(1<<20, false),
+		logs:   querylog.New(10),
 		client: &dns.Client{Net: "udp", Timeout: time.Second},
 	}
 }

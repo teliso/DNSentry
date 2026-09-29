@@ -3,20 +3,38 @@ package app
 import (
 	"context"
 	"encoding/json"
+	"github.com/vigordns/vigordns/internal/rules"
 	"net/http"
 )
 
+func (a *API) listRules(writer http.ResponseWriter, _ *http.Request) {
+	writeJSON(writer, http.StatusOK, a.rules.List())
+}
+
+func (a *API) reloadRules(writer http.ResponseWriter, _ *http.Request) {
+	if err := a.rules.Reload(); err != nil {
+		writeError(writer, http.StatusInternalServerError, err.Error())
+		return
+	}
+	a.resolver.clearCache()
+	writeJSON(writer, http.StatusOK, map[string]string{"status": "reloaded"})
+}
+
+func (a *API) listSources(writer http.ResponseWriter, _ *http.Request) {
+	writeJSON(writer, http.StatusOK, a.updater.Sources())
+}
+
 func (a *API) addRule(writer http.ResponseWriter, request *http.Request) {
 	var input struct {
-		Domain string     `json:"domain"`
-		Action RuleAction `json:"action"`
+		Domain string       `json:"domain"`
+		Action rules.Action `json:"action"`
 	}
 	if err := json.NewDecoder(request.Body).Decode(&input); err != nil {
-		writeJSON(writer, http.StatusBadRequest, map[string]string{"error": "invalid JSON"})
+		writeError(writer, http.StatusBadRequest, "invalid JSON")
 		return
 	}
 	if err := a.rules.Add(input.Domain, input.Action); err != nil {
-		writeJSON(writer, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		writeError(writer, http.StatusBadRequest, err.Error())
 		return
 	}
 	writeJSON(writer, http.StatusCreated, map[string]string{"status": "added"})
@@ -24,18 +42,18 @@ func (a *API) addRule(writer http.ResponseWriter, request *http.Request) {
 
 func (a *API) deleteRule(writer http.ResponseWriter, request *http.Request) {
 	domain := request.URL.Query().Get("domain")
-	action := RuleAction(request.URL.Query().Get("action"))
+	action := rules.Action(request.URL.Query().Get("action"))
 	if err := a.rules.Delete(domain, action); err != nil {
-		writeJSON(writer, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		writeError(writer, http.StatusBadRequest, err.Error())
 		return
 	}
 	writeJSON(writer, http.StatusOK, map[string]string{"status": "deleted"})
 }
 
 func (a *API) updateSources(writer http.ResponseWriter, request *http.Request) {
-	var sources []RuleSource
+	var sources []rules.Source
 	if err := json.NewDecoder(request.Body).Decode(&sources); err != nil {
-		writeJSON(writer, http.StatusBadRequest, map[string]string{"error": "invalid rule sources"})
+		writeError(writer, http.StatusBadRequest, "invalid rule sources")
 		return
 	}
 	a.updater.SetSources(sources)
@@ -47,7 +65,7 @@ func (a *API) updateSources(writer http.ResponseWriter, request *http.Request) {
 	}
 	go a.updater.RefreshNow(ctx)
 	if err := saveConfig(&config); err != nil {
-		writeJSON(writer, http.StatusInternalServerError, map[string]string{"error": "could not save rule sources"})
+		writeError(writer, http.StatusInternalServerError, "could not save rule sources")
 		return
 	}
 	a.resolver.updateConfig(config)

@@ -8,6 +8,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/vigordns/vigordns/internal/cache"
+	"github.com/vigordns/vigordns/internal/rules"
 	"gopkg.in/yaml.v3"
 )
 
@@ -32,7 +34,7 @@ func TestYAMLConfigRoundTrip(t *testing.T) {
 		OptimisticCache:       true,
 		OptimisticAnswerTTL:   10,
 		OptimisticMaxAge:      300,
-		RuleSources:           []RuleSource{{URL: "https://example.com/rules.txt", Enabled: true, IntervalMinutes: 360}},
+		RuleSources:           []rules.Source{{URL: "https://example.com/rules.txt", Enabled: true, IntervalMinutes: 360}},
 	}
 	data, err := yaml.Marshal(newYAMLConfig(original))
 	if err != nil {
@@ -284,7 +286,7 @@ func TestValidateConfigAppliesExistingDefaults(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if validated.UpstreamTimeout != 4 || validated.UpstreamMode != upstreamModeLoadBalance || validated.Access.MaxConcurrentQueries != 2048 || validated.CacheSize != 4<<20 || validated.QueryLogFile != filepath.Join("data", "querylog") || validated.QueryLogRetentionDays != 7 || validated.BlockingMode != "default" || validated.BlockingIPv4 != "0.0.0.0" || validated.BlockingIPv6 != "::" || validated.OptimisticAnswerTTL != defaultOptimisticAnswerTTL || validated.OptimisticMaxAge != defaultOptimisticMaxAgeSeconds || validated.BlockedResponseTTL != 10 {
+	if validated.UpstreamTimeout != 4 || validated.UpstreamMode != upstreamModeLoadBalance || validated.Access.MaxConcurrentQueries != 2048 || validated.CacheSize != 4<<20 || validated.QueryLogFile != filepath.Join("data", "querylog") || validated.QueryLogRetentionDays != 7 || validated.BlockingMode != "default" || validated.BlockingIPv4 != "0.0.0.0" || validated.BlockingIPv6 != "::" || validated.OptimisticAnswerTTL != cache.DefaultOptimisticAnswerTTL || validated.OptimisticMaxAge != cache.DefaultOptimisticMaxAgeSeconds || validated.BlockedResponseTTL != 10 {
 		t.Fatalf("existing defaults changed: %#v", validated)
 	}
 	if len(validated.BootstrapDNS) != 2 || validated.Upstreams[0] != "1.1.1.1:53" {

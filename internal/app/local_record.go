@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/miekg/dns"
+	"github.com/vigordns/vigordns/internal/dnsname"
 )
 
 type LocalRecord struct {
@@ -24,10 +25,10 @@ func validateLocalRecords(records []LocalRecord) error {
 	seen := make(map[string]struct{}, len(records))
 	for index := range records {
 		record := &records[index]
-		record.Domain = normalizeDomain(record.Domain)
+		record.Domain = dnsname.Normalize(record.Domain)
 		record.Type = strings.ToUpper(strings.TrimSpace(record.Type))
 		record.Value = strings.TrimSpace(record.Value)
-		if !validDomain(record.Domain) {
+		if !dnsname.Valid(record.Domain) {
 			return fmt.Errorf("invalid local_records[%d] domain", index)
 		}
 		if record.TTL == 0 {
@@ -51,7 +52,7 @@ func validateLocalRecords(records []LocalRecord) error {
 				return fmt.Errorf("local_records[%d] value must be an IPv6 address", index)
 			}
 		case "CNAME":
-			if !validDomain(normalizeDomain(record.Value)) {
+			if !dnsname.Valid(dnsname.Normalize(record.Value)) {
 				return fmt.Errorf("local_records[%d] value must be a domain", index)
 			}
 		case "TXT":
@@ -99,7 +100,7 @@ func (s *DNSServer) localRecordResponse(request *dns.Msg, question dns.Question)
 	if snapshot == nil {
 		return nil, false
 	}
-	key := normalizeDomain(question.Name) + "\x00" + dns.TypeToString[question.Qtype]
+	key := dnsname.Normalize(question.Name) + "\x00" + dns.TypeToString[question.Qtype]
 	records := snapshot.records[key]
 	if len(records) == 0 {
 		return nil, false

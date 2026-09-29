@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+
+	"github.com/vigordns/vigordns/internal/cache"
 )
 
 func validateConfig(config *Config) (*Config, error) {
@@ -76,10 +78,10 @@ func validateConfig(config *Config) (*Config, error) {
 		return nil, err
 	}
 	if config.OptimisticAnswerTTL == 0 {
-		config.OptimisticAnswerTTL = defaultOptimisticAnswerTTL
+		config.OptimisticAnswerTTL = cache.DefaultOptimisticAnswerTTL
 	}
 	if config.OptimisticMaxAge == 0 {
-		config.OptimisticMaxAge = defaultOptimisticMaxAgeSeconds
+		config.OptimisticMaxAge = cache.DefaultOptimisticMaxAgeSeconds
 	}
 	if config.OptimisticAnswerTTL > config.OptimisticMaxAge {
 		return nil, errors.New("cache_optimistic_answer_ttl must be less than or equal to cache_optimistic_max_age")

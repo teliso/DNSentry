@@ -6,6 +6,9 @@ import (
 	"testing"
 
 	"github.com/miekg/dns"
+	"github.com/vigordns/vigordns/internal/cache"
+	"github.com/vigordns/vigordns/internal/querylog"
+	"github.com/vigordns/vigordns/internal/rules"
 )
 
 func TestLocalRecordsAreValidatedAndServedBeforeUpstream(t *testing.T) {
@@ -23,7 +26,7 @@ func TestLocalRecordsAreValidatedAndServedBeforeUpstream(t *testing.T) {
 	if err := os.WriteFile(ruleFile, nil, 0600); err != nil {
 		t.Fatal(err)
 	}
-	rules := NewRuleStore(ruleFile)
+	rules := rules.NewStore(ruleFile)
 	if err := rules.Reload(); err != nil {
 		t.Fatal(err)
 	}
@@ -39,8 +42,8 @@ func TestLocalRecordsAreValidatedAndServedBeforeUpstream(t *testing.T) {
 	server := &DNSServer{
 		config: config,
 		rules:  rules,
-		cache:  NewDNSCache(config.CacheSize, true),
-		logs:   NewQueryLogger(10),
+		cache:  cache.New(config.CacheSize, true),
+		logs:   querylog.New(10),
 		client: &dns.Client{Net: "udp"},
 		pool:   NewUpstreamPool(config.Upstreams),
 	}

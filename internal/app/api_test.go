@@ -2,6 +2,8 @@ package app
 
 import (
 	"bytes"
+	"github.com/vigordns/vigordns/internal/cache"
+	"github.com/vigordns/vigordns/internal/querylog"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -44,8 +46,8 @@ func TestAPIRemoteAccessRequiresToken(t *testing.T) {
 }
 
 func TestLoopbackAPIExposesMetricsAndClearsCache(t *testing.T) {
-	cache := NewDNSCache(1024, true)
-	api := &API{cache: cache, logs: NewQueryLogger(10), resolver: &DNSServer{cache: cache, config: &Config{}}}
+	cache := cache.New(1024, true)
+	api := &API{cache: cache, logs: querylog.New(10), resolver: &DNSServer{cache: cache, config: &Config{}}}
 	request := httptest.NewRequest(http.MethodGet, "http://127.0.0.1/api/metrics", nil)
 	request.RemoteAddr = "127.0.0.1:4000"
 	recorder := httptest.NewRecorder()

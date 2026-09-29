@@ -19,6 +19,10 @@ func writeJSON(writer http.ResponseWriter, status int, value any) {
 	_ = json.NewEncoder(writer).Encode(value)
 }
 
+func writeError(writer http.ResponseWriter, status int, message string) {
+	writeJSON(writer, status, map[string]string{"error": message})
+}
+
 const (
 	maxJSONBodyBytes      = 2 << 20
 	httpMaxHeaderBytes    = 1 << 20
@@ -121,7 +125,7 @@ func withJSONBodyLimit(next http.Handler) http.Handler {
 			body, err := io.ReadAll(limitedBody)
 			_ = request.Body.Close()
 			if err != nil {
-				writeJSON(writer, http.StatusRequestEntityTooLarge, map[string]string{"error": "request body too large"})
+				writeError(writer, http.StatusRequestEntityTooLarge, "request body too large")
 				return
 			}
 			request.Body = io.NopCloser(bytes.NewReader(body))

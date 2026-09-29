@@ -25,14 +25,14 @@ func (a *API) testUpstreams(writer http.ResponseWriter, request *http.Request) {
 		Domain    string   `json:"domain"`
 	}
 	if err := json.NewDecoder(request.Body).Decode(&input); err != nil {
-		writeJSON(writer, http.StatusBadRequest, map[string]string{"error": "invalid test request"})
+		writeError(writer, http.StatusBadRequest, "invalid test request")
 		return
 	}
 	if len(input.Upstreams) == 0 {
 		input.Upstreams = a.resolver.configSnapshot().Upstreams
 	}
 	if len(input.Upstreams) > 32 {
-		writeJSON(writer, http.StatusBadRequest, map[string]string{"error": "too many upstreams"})
+		writeError(writer, http.StatusBadRequest, "too many upstreams")
 		return
 	}
 	if input.Domain == "" {

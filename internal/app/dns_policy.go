@@ -7,11 +7,13 @@ import (
 	"time"
 
 	"github.com/miekg/dns"
+	"github.com/vigordns/vigordns/internal/cache"
+	"github.com/vigordns/vigordns/internal/dnsname"
 )
 
 func optimisticMaxAge(seconds uint32) time.Duration {
 	if seconds == 0 {
-		return time.Duration(defaultOptimisticMaxAgeSeconds) * time.Second
+		return time.Duration(cache.DefaultOptimisticMaxAgeSeconds) * time.Second
 	}
 	return time.Duration(seconds) * time.Second
 }
@@ -22,9 +24,9 @@ func prepareCacheResponse(message *dns.Msg, config *Config) (*dns.Msg, uint32, b
 	}
 	cached := message.Copy()
 	if cached.Rcode == dns.RcodeServerFailure {
-		return cached, servfailCacheTTL, true
+		return cached, cache.ServfailTTL, true
 	}
-	clampMessageTTL(cached, config.CacheTTLMin, config.CacheTTLMax)
+	cache.ClampTTL(cached, config.CacheTTLMin, config.CacheTTLMax)
 	ttl := cacheResponseTTL(cached)
 	if ttl == 0 {
 		return message, 0, false
@@ -185,7 +187,7 @@ func makeCacheKey(request *dns.Msg) (string, bool) {
 	if question.Qtype == dns.TypeAXFR || question.Qtype == dns.TypeIXFR || question.Qtype == dns.TypeANY {
 		return "", false
 	}
-	domain := normalizeDomain(question.Name)
+	domain := dnsname.Normalize(question.Name)
 	if domain == "" {
 		return "", false
 	}
@@ -557,37 +559,4 @@ func cacheResponseTTL(message *dns.Msg) uint32 {
 		}
 	}
 	return ttl
-}
-
-func clampMessageTTL(message *dns.Msg, min, max uint32) {
-	visit := func(records []dns.RR) {
-		for _, record := range records {
-			if _, isOPT := record.(*dns.OPT); isOPT {
-				continue
-			}
-			ttl := record.Header().Ttl
-			if min > 0 && ttl < min {
-				ttl = min
-			}
-			if max > 0 && ttl > max {
-				ttl = max
-			}
-			if soa, ok := record.(*dns.SOA); ok {
-				if min > 0 && soa.Minttl < min {
-					soa.Minttl = min
-				}
-				if max > 0 && soa.Minttl > max {
-					soa.Minttl = max
-				}
-			}
-			record.Header().Ttl = ttl
-		}
-	}
-	visit(message.Answer)
-	visit(message.Ns)
-	visit(message.Extra)
-}
-
-func setMessageTTL(message *dns.Msg, ttl uint32) {
-	clampMessageTTL(message, ttl, ttl)
 }

@@ -1,106 +1,16 @@
 package app
 
 import (
-	"fmt"
 	"net"
 	"net/url"
-	"os"
-	"path/filepath"
-	"sync"
 	"testing"
 	"time"
 
 	"github.com/miekg/dns"
+
+	"github.com/vigordns/vigordns/internal/cache"
 )
 
-func TestParseRuleFormats(t *testing.T) {
-	tests := []struct {
-		line   string
-		domain string
-		action RuleAction
-		ip     string
-	}{
-		{"||ads.example.com^", "ads.example.com", ActionBlock, ""},
-		{"@@||trusted.example.com^", "trusted.example.com", ActionAllow, ""},
-		{"example.net", "example.net", ActionBlock, ""},
-		{"0.0.0.0 tracker.example.org", "tracker.example.org", ActionBlock, "0.0.0.0"},
-	}
-	for _, test := range tests {
-		entry, _, ok := parseRule(test.line)
-		if !ok || entry.Domain != test.domain || entry.Action != test.action || entry.IP != test.ip {
-			t.Fatalf("parseRule(%q) = %#v, ok=%v", test.line, entry, ok)
-		}
-	}
-}
-
-func TestRuleStoreWhitelistOverridesParentBlock(t *testing.T) {
-	directory := t.TempDir()
-	file := filepath.Join(directory, "rules.txt")
-	content := "||example.com^\n@@||safe.example.com^\n"
-	if err := os.WriteFile(file, []byte(content), 0600); err != nil {
-		t.Fatal(err)
-	}
-
-	store := NewRuleStore(file)
-	if err := store.Reload(); err != nil {
-		t.Fatal(err)
-	}
-	if action, _, ok := store.Match("ads.example.com"); !ok || action != ActionBlock {
-		t.Fatalf("expected subdomain to be blocked, got %q, %v", action, ok)
-	}
-	if action, _, ok := store.Match("safe.example.com"); !ok || action != ActionAllow {
-		t.Fatalf("expected whitelist to win, got %q, %v", action, ok)
-	}
-	if _, _, ok := store.Match("example.org"); ok {
-		t.Fatal("unexpected match for unrelated domain")
-	}
-}
-
-func TestRuleStoreSameDomainAllowIsOrderIndependent(t *testing.T) {
-	for _, test := range []struct {
-		name    string
-		content string
-	}{
-		{name: "block then allow", content: "||conflict.example.com^\n@@||conflict.example.com^\n"},
-		{name: "allow then block", content: "@@||conflict.example.com^\n||conflict.example.com^\n"},
-	} {
-		t.Run(test.name, func(t *testing.T) {
-			directory := t.TempDir()
-			file := filepath.Join(directory, "rules.txt")
-			if err := os.WriteFile(file, []byte(test.content), 0600); err != nil {
-				t.Fatal(err)
-			}
-
-			store := NewRuleStore(file)
-			if err := store.Reload(); err != nil {
-				t.Fatal(err)
-			}
-			if action, _, ok := store.Match("conflict.example.com"); !ok || action != ActionAllow {
-				t.Fatalf("expected allow to win regardless of order, got %q, %v", action, ok)
-			}
-		})
-	}
-}
-
-func TestRuleStoreMoreSpecificRuleOverridesParent(t *testing.T) {
-	directory := t.TempDir()
-	file := filepath.Join(directory, "rules.txt")
-	content := "@@||example.com^\n||ads.example.com^\n"
-	if err := os.WriteFile(file, []byte(content), 0600); err != nil {
-		t.Fatal(err)
-	}
-
-	store := NewRuleStore(file)
-	if err := store.Reload(); err != nil {
-		t.Fatal(err)
-	}
-	if action, _, ok := store.Match("ads.example.com"); !ok || action != ActionBlock {
-		t.Fatalf("expected specific block to win over parent allow, got %q, %v", action, ok)
-	}
-	if action, _, ok := store.Match("other.example.com"); !ok || action != ActionAllow {
-		t.Fatalf("expected parent allow for other subdomains, got %q, %v", action, ok)
-	}
-}
 func TestBlockingModes(t *testing.T) {
 	request := newTestRequest("blocked.test.", dns.TypeA)
 	config := &Config{BlockingMode: "nxdomain", BlockingIPv4: "0.0.0.0", BlockingIPv6: "::", BlockedResponseTTL: 10}
@@ -138,123 +48,6 @@ func TestRewriteResponse(t *testing.T) {
 	}
 	if got := response.Answer[0].String(); got == "" {
 		t.Fatal("expected a serialized rewrite answer")
-	}
-}
-
-func expireDNSCacheEntry(t *testing.T, cache *DNSCache, key string) {
-	t.Helper()
-	shard := cache.shardFor(key)
-	shard.mu.Lock()
-	defer shard.mu.Unlock()
-	entry, ok := shard.items[key]
-	if !ok {
-		t.Fatalf("cache entry %q is missing", key)
-	}
-	entry.expires = time.Now().Add(-time.Second)
-	shard.items[key] = entry
-}
-
-func TestDNSCacheOptimisticMode(t *testing.T) {
-	cache := NewDNSCache(2048, true)
-	message := new(dns.Msg)
-	message.Answer = []dns.RR{&dns.A{Hdr: dns.RR_Header{Name: "cached.test.", Rrtype: dns.TypeA, Class: dns.ClassINET, Ttl: 60}, A: net.IPv4(192, 0, 2, 1)}}
-	cache.Set("cached", message, 60, 300*time.Second)
-	expireDNSCacheEntry(t, cache, "cached")
-
-	if response, _ := cache.Get("cached", false, 10, 300); response != nil {
-		t.Fatal("expired entry should not be returned without optimistic caching")
-	}
-	cache.Set("cached", message, 60, 300*time.Second)
-	expireDNSCacheEntry(t, cache, "cached")
-	response, stale := cache.Get("cached", true, 10, 300)
-	if response == nil || !stale || response.Answer[0].Header().Ttl != 10 {
-		t.Fatalf("expected stale response with TTL 10, got response=%v stale=%v", response != nil, stale)
-	}
-}
-
-func TestDNSCacheUsesLRU(t *testing.T) {
-	message := new(dns.Msg)
-	message.Question = []dns.Question{{Name: "cached.test.", Qtype: dns.TypeA, Qclass: dns.ClassINET}}
-	message.Answer = []dns.RR{&dns.A{Hdr: dns.RR_Header{Name: "cached.test.", Rrtype: dns.TypeA, Class: dns.ClassINET, Ttl: 60}, A: net.IPv4(192, 0, 2, 1)}}
-	packet, err := message.Pack()
-	if err != nil {
-		t.Fatal(err)
-	}
-	cache := NewDNSCache(len(packet)*2, true)
-	cache.Set("old", message, 60, time.Minute)
-	cache.Set("new", message, 60, time.Minute)
-	if response, _ := cache.Get("old", false, 0, 0); response == nil {
-		t.Fatal("expected old entry to be present")
-	}
-	cache.Set("newest", message, 60, time.Minute)
-	if response, _ := cache.Get("new", false, 0, 0); response != nil {
-		t.Fatal("expected least recently used entry to be evicted")
-	}
-	stats := cache.Stats()
-	if stats.Evictions != 1 || stats.Entries != 2 {
-		t.Fatalf("unexpected cache stats: %#v", stats)
-	}
-}
-
-func TestDNSCacheConcurrentAccess(t *testing.T) {
-	const (
-		workers    = 16
-		iterations = 200
-	)
-
-	cache := NewDNSCache(1<<20, true)
-	if len(cache.shards) < 2 {
-		t.Fatal("expected a production-sized cache to use multiple shards")
-	}
-	message := new(dns.Msg)
-	message.Question = []dns.Question{{Name: "concurrent.test.", Qtype: dns.TypeA, Qclass: dns.ClassINET}}
-	message.Answer = []dns.RR{&dns.A{Hdr: dns.RR_Header{Name: "concurrent.test.", Rrtype: dns.TypeA, Class: dns.ClassINET, Ttl: 60}, A: net.IPv4(192, 0, 2, 1)}}
-
-	start := make(chan struct{})
-	var workersDone sync.WaitGroup
-	workersDone.Add(workers)
-	for worker := 0; worker < workers; worker++ {
-		go func(worker int) {
-			defer workersDone.Done()
-			<-start
-			for iteration := 0; iteration < iterations; iteration++ {
-				key := fmt.Sprintf("concurrent-%d-%d", worker, iteration%32)
-				cache.Set(key, message, 60, time.Minute)
-				cache.Get(key, false, 0, 0)
-				cache.RecordBypass()
-				cache.RecordRefresh(iteration%2 == 0)
-				_ = cache.Stats()
-			}
-		}(worker)
-	}
-
-	var maintenanceDone sync.WaitGroup
-	maintenanceDone.Add(1)
-	go func() {
-		defer maintenanceDone.Done()
-		<-start
-		for iteration := 0; iteration < iterations; iteration++ {
-			if iteration%3 == 0 {
-				cache.Clear()
-			}
-			if iteration%5 == 0 {
-				cache.SetEnabled(false)
-				cache.SetEnabled(true)
-			}
-			cache.SetMaxBytes(1 << 20)
-		}
-	}()
-
-	close(start)
-	workersDone.Wait()
-	maintenanceDone.Wait()
-
-	stats := cache.Stats()
-	if stats.UsedBytes > stats.MaxBytes {
-		t.Fatalf("cache exceeded max size: %#v", stats)
-	}
-	if stats.Bypasses != workers*iterations || stats.RefreshSuccess+stats.RefreshFailure != workers*iterations {
-		t.Fatalf("atomic counters lost updates: %#v", stats)
 	}
 }
 
@@ -340,8 +133,8 @@ func TestSERVFAILUsesShortCacheTTL(t *testing.T) {
 	message := newTestRequest("failure.test.", dns.TypeA)
 	message.Rcode = dns.RcodeServerFailure
 	cached, ttl, ok := prepareCacheResponse(message, &Config{})
-	if !ok || ttl != servfailCacheTTL || cached.Rcode != dns.RcodeServerFailure {
-		t.Fatalf("expected SERVFAIL cache TTL %d, got ok=%v ttl=%d", servfailCacheTTL, ok, ttl)
+	if !ok || ttl != cache.ServfailTTL || cached.Rcode != dns.RcodeServerFailure {
+		t.Fatalf("expected SERVFAIL cache TTL %d, got ok=%v ttl=%d", cache.ServfailTTL, ok, ttl)
 	}
 }
 

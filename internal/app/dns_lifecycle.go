@@ -8,6 +8,9 @@ import (
 	"time"
 
 	"github.com/miekg/dns"
+	"github.com/vigordns/vigordns/internal/cache"
+	"github.com/vigordns/vigordns/internal/querylog"
+	"github.com/vigordns/vigordns/internal/rules"
 	"golang.org/x/sync/singleflight"
 )
 
@@ -20,9 +23,9 @@ type DNSServer struct {
 	dnscryptMu           sync.Mutex
 	config               *Config
 	generation           uint64
-	rules                *RuleStore
-	cache                *DNSCache
-	logs                 *QueryLogger
+	rules                *rules.Store
+	cache                *cache.Cache
+	logs                 *querylog.Logger
 	client               *dns.Client
 	pool                 *UpstreamPool
 	fallbackPool         *UpstreamPool

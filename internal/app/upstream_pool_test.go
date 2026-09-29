@@ -177,3 +177,18 @@ func TestEncryptedEndpointPoolsClose(t *testing.T) {
 		t.Fatal("expected DoQ acquisition after Close to fail")
 	}
 }
+
+func TestUpstreamPoolMarksFailedServers(t *testing.T) {
+	pool := NewUpstreamPool([]string{"one:53", "two:53"})
+	pool.RecordFailure("one:53")
+	pool.RecordFailure("one:53")
+	pool.RecordFailure("one:53")
+	candidates := pool.Candidates()
+	if len(candidates) != 1 || candidates[0] != "two:53" {
+		t.Fatalf("expected failed upstream to be skipped, got %#v", candidates)
+	}
+	pool.RecordSuccess("one:53", 15*time.Millisecond)
+	if health := pool.Health()[0]; !health.Healthy || health.Failures != 0 || health.LatencyMS != 15 {
+		t.Fatalf("expected recovered upstream, got %#v", health)
+	}
+}

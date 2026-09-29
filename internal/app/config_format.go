@@ -1,6 +1,7 @@
 package app
 
 import (
+	"github.com/vigordns/vigordns/internal/rules"
 	"path/filepath"
 	"strings"
 )
@@ -39,8 +40,8 @@ type yamlConfig struct {
 		OptimisticMaxAge    uint32 `yaml:"optimistic_max_age"`
 	} `yaml:"cache"`
 	Rules struct {
-		LocalFile string       `yaml:"local_file"`
-		Sources   []RuleSource `yaml:"sources,omitempty"`
+		LocalFile string         `yaml:"local_file"`
+		Sources   []rules.Source `yaml:"sources,omitempty"`
 	} `yaml:"rules"`
 	Access     DNSAccessConfig  `yaml:"access"`
 	Encryption EncryptionConfig `yaml:"encryption"`

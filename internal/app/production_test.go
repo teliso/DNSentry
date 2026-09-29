@@ -10,6 +10,9 @@ import (
 	"time"
 
 	"github.com/miekg/dns"
+	"github.com/vigordns/vigordns/internal/cache"
+	"github.com/vigordns/vigordns/internal/querylog"
+	"github.com/vigordns/vigordns/internal/rules"
 )
 
 type captureResponseWriter struct {
@@ -56,20 +59,20 @@ func TestServeDNSCacheLifecycle(t *testing.T) {
 	if err := os.WriteFile(rulesFile, nil, 0600); err != nil {
 		t.Fatal(err)
 	}
-	rules := NewRuleStore(rulesFile)
+	rules := rules.NewStore(rulesFile)
 	if err := rules.Reload(); err != nil {
 		t.Fatal(err)
 	}
 	config := &Config{
 		DNSListen: ":15353", HTTPListen: "127.0.0.1:18080", RulesFile: rulesFile,
 		Upstreams: []string{upstreamConn.LocalAddr().String()}, CacheEnabled: true, CacheSize: 1 << 20,
-		OptimisticAnswerTTL: defaultOptimisticAnswerTTL, OptimisticMaxAge: defaultOptimisticMaxAgeSeconds,
+		OptimisticAnswerTTL: cache.DefaultOptimisticAnswerTTL, OptimisticMaxAge: cache.DefaultOptimisticMaxAgeSeconds,
 	}
 	server := &DNSServer{
 		config: config,
 		rules:  rules,
-		cache:  NewDNSCache(config.CacheSize, true),
-		logs:   NewQueryLogger(20),
+		cache:  cache.New(config.CacheSize, true),
+		logs:   querylog.New(20),
 		client: &dns.Client{Net: "udp", Timeout: time.Second},
 		pool:   NewUpstreamPool(config.Upstreams),
 	}
@@ -122,12 +125,12 @@ func TestConcurrentIdenticalQueriesAreCoalesced(t *testing.T) {
 	if err := os.WriteFile(rulesFile, nil, 0600); err != nil {
 		t.Fatal(err)
 	}
-	rules := NewRuleStore(rulesFile)
+	rules := rules.NewStore(rulesFile)
 	if err := rules.Reload(); err != nil {
 		t.Fatal(err)
 	}
-	config := &Config{DNSListen: ":15353", HTTPListen: "127.0.0.1:18080", RulesFile: rulesFile, Upstreams: []string{upstreamConn.LocalAddr().String()}, CacheEnabled: true, CacheSize: 1 << 20, OptimisticAnswerTTL: defaultOptimisticAnswerTTL, OptimisticMaxAge: defaultOptimisticMaxAgeSeconds}
-	server := &DNSServer{config: config, rules: rules, cache: NewDNSCache(config.CacheSize, true), logs: NewQueryLogger(100), client: &dns.Client{Net: "udp", Timeout: time.Second}, pool: NewUpstreamPool(config.Upstreams)}
+	config := &Config{DNSListen: ":15353", HTTPListen: "127.0.0.1:18080", RulesFile: rulesFile, Upstreams: []string{upstreamConn.LocalAddr().String()}, CacheEnabled: true, CacheSize: 1 << 20, OptimisticAnswerTTL: cache.DefaultOptimisticAnswerTTL, OptimisticMaxAge: cache.DefaultOptimisticMaxAgeSeconds}
+	server := &DNSServer{config: config, rules: rules, cache: cache.New(config.CacheSize, true), logs: querylog.New(100), client: &dns.Client{Net: "udp", Timeout: time.Second}, pool: NewUpstreamPool(config.Upstreams)}
 	request := newTestRequest("coalesced.integration.test.", dns.TypeA)
 	var wait sync.WaitGroup
 	for index := 0; index < 20; index++ {

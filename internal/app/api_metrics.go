@@ -7,13 +7,37 @@ import (
 	"strings"
 )
 
-func (a *API) writeMetrics(writer http.ResponseWriter) {
+func (a *API) writeMetrics(writer http.ResponseWriter, _ *http.Request) {
 	stats := a.cache.Stats()
 	total, blocked := a.logs.Stats()
 	security := a.logs.SecurityStats()
+	metrics := []struct {
+		name, kind string
+		value      any
+	}{
+		{"vigordns_dns_queries_total", "counter", total},
+		{"vigordns_dns_blocked_total", "counter", blocked},
+		{"vigordns_dns_access_denied_total", "counter", security.DeniedClients},
+		{"vigordns_dns_rate_limited_total", "counter", security.RateLimited},
+		{"vigordns_dns_overloaded_total", "counter", security.Overloaded},
+		{"vigordns_dns_rebinding_blocked_total", "counter", security.RebindingBlocked},
+		{"vigordns_cache_entries", "gauge", stats.Entries},
+		{"vigordns_cache_used_bytes", "gauge", stats.UsedBytes},
+		{"vigordns_cache_max_bytes", "gauge", stats.MaxBytes},
+		{"vigordns_cache_hits_total", "counter", stats.Hits},
+		{"vigordns_cache_misses_total", "counter", stats.Misses},
+		{"vigordns_cache_stale_hits_total", "counter", stats.StaleHits},
+		{"vigordns_cache_bypasses_total", "counter", stats.Bypasses},
+		{"vigordns_cache_evictions_total", "counter", stats.Evictions},
+		{"vigordns_cache_refresh_success_total", "counter", stats.RefreshSuccess},
+		{"vigordns_cache_refresh_failure_total", "counter", stats.RefreshFailure},
+		{"vigordns_cache_hit_rate", "gauge", fmt.Sprintf("%f", stats.HitRate)},
+	}
 	writer.Header().Set("Content-Type", "text/plain; version=0.0.4; charset=utf-8")
 	writer.WriteHeader(http.StatusOK)
-	_, _ = fmt.Fprintf(writer, "# TYPE vigordns_dns_queries_total counter\nvigordns_dns_queries_total %d\n# TYPE vigordns_dns_blocked_total counter\nvigordns_dns_blocked_total %d\n# TYPE vigordns_dns_access_denied_total counter\nvigordns_dns_access_denied_total %d\n# TYPE vigordns_dns_rate_limited_total counter\nvigordns_dns_rate_limited_total %d\n# TYPE vigordns_dns_overloaded_total counter\nvigordns_dns_overloaded_total %d\n# TYPE vigordns_dns_rebinding_blocked_total counter\nvigordns_dns_rebinding_blocked_total %d\n# TYPE vigordns_cache_entries gauge\nvigordns_cache_entries %d\n# TYPE vigordns_cache_used_bytes gauge\nvigordns_cache_used_bytes %d\n# TYPE vigordns_cache_max_bytes gauge\nvigordns_cache_max_bytes %d\n# TYPE vigordns_cache_hits_total counter\nvigordns_cache_hits_total %d\n# TYPE vigordns_cache_misses_total counter\nvigordns_cache_misses_total %d\n# TYPE vigordns_cache_stale_hits_total counter\nvigordns_cache_stale_hits_total %d\n# TYPE vigordns_cache_bypasses_total counter\nvigordns_cache_bypasses_total %d\n# TYPE vigordns_cache_evictions_total counter\nvigordns_cache_evictions_total %d\n# TYPE vigordns_cache_refresh_success_total counter\nvigordns_cache_refresh_success_total %d\n# TYPE vigordns_cache_refresh_failure_total counter\nvigordns_cache_refresh_failure_total %d\n# TYPE vigordns_cache_hit_rate gauge\nvigordns_cache_hit_rate %f\n", total, blocked, security.DeniedClients, security.RateLimited, security.Overloaded, security.RebindingBlocked, stats.Entries, stats.UsedBytes, stats.MaxBytes, stats.Hits, stats.Misses, stats.StaleHits, stats.Bypasses, stats.Evictions, stats.RefreshSuccess, stats.RefreshFailure, stats.HitRate)
+	for _, metric := range metrics {
+		_, _ = fmt.Fprintf(writer, "# TYPE %s %s\n%s %v\n", metric.name, metric.kind, metric.name, metric.value)
+	}
 	if a.resolver == nil {
 		return
 	}

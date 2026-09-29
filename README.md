@@ -2,6 +2,22 @@
 
 VigorDNS is a Go DNS filtering service with a Svelte management console.
 
+## 项目结构
+
+```text
+cmd/vigordns/         服务入口（嵌入已构建的 Web 控制台）
+cmd/vigordns-query/   带端口的 DNS 查询小工具
+internal/app/         DNS 服务、上游策略、加密 DNS、DNSSEC、配置与 HTTP API
+internal/rules/       过滤规则存储、匹配与远程规则源更新
+internal/querylog/    查询日志、仪表盘聚合与 JSONL 持久化
+internal/cache/       分片 LRU DNS 缓存
+internal/dnsname/     域名规范化与校验
+web/                  Svelte 5 + TypeScript 控制台（源码在 web/src，构建产物在 web/dist）
+data/                 默认配置与规则文件
+```
+
+前端源码按职责划分：`lib/`（API 客户端、类型、配置归一化、状态、路由）、`components/`（通用 UI）、`sections/`（配置表单分区）、`pages/`（页面）。`web/dist` 会被 `go:embed` 打包进二进制，修改前端后请运行 `pnpm build` 并一并提交。
+
 ## Run
 
 Install dependencies once, then start the complete service with one command:
@@ -32,7 +48,7 @@ Invoke-RestMethod http://<server-address>:18080/api/status -Headers $headers
 
 `pnpm start` builds the Svelte console and starts the Go DNS service. The console is served at <http://127.0.0.1:18080>. DNS listens on `:15353` by default. These development defaults avoid Windows mDNS port `5353` and common Web port conflicts.
 
-For frontend development with Vite hot reload, run the Go service with `go run .` in one terminal and then run:
+For frontend development with Vite hot reload, run the Go service with `go run ./cmd/vigordns` in one terminal and then run:
 
 ```sh
 pnpm run dev
