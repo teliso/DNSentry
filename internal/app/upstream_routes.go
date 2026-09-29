@@ -163,8 +163,6 @@ func (s *DNSServer) exchangeRoute(config Config, route *activeRoute, request *dn
 	switch config.UpstreamMode {
 	case upstreamModeParallel:
 		return s.exchangeParallel(request, candidates, route.pool)
-	case upstreamModeFastestAddr:
-		return s.exchangeFastestAddr(request, candidates, route.pool)
 	default:
 		return s.exchangeLoadBalance(request, candidates, route.pool)
 	}

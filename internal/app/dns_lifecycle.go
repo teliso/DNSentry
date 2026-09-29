@@ -52,7 +52,6 @@ type DNSServer struct {
 	dnssecCacheOK        map[string]struct{}
 	localRecords         atomic.Pointer[localRecordSnapshot]
 	routes               atomic.Pointer[routeTable]
-	fastestAddrProbe     addressProbeFunc
 	doh3TLSConfig        *tls.Config
 }
 

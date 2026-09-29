@@ -3,6 +3,7 @@ package app
 import (
 	"errors"
 	"fmt"
+	"log/slog"
 	"net"
 	"net/url"
 	"path/filepath"
@@ -41,8 +42,14 @@ func validateConfig(config *Config) (*Config, error) {
 	if config.UpstreamMode == "" {
 		config.UpstreamMode = "load_balance"
 	}
-	if config.UpstreamMode != "load_balance" && config.UpstreamMode != "parallel" && config.UpstreamMode != "fastest_addr" {
-		return nil, errors.New("invalid upstream_mode: use load_balance, parallel, or fastest_addr")
+	if config.UpstreamMode == "fastest_addr" {
+		// Removed: probing TCP/443 from the DNS server says little about what is
+		// fastest for the client. Existing configurations keep working.
+		slog.Warn("upstream_mode fastest_addr is no longer supported; using load_balance")
+		config.UpstreamMode = upstreamModeLoadBalance
+	}
+	if config.UpstreamMode != upstreamModeLoadBalance && config.UpstreamMode != upstreamModeParallel {
+		return nil, errors.New("invalid upstream_mode: use load_balance or parallel")
 	}
 	if config.CacheSize < 0 {
 		return nil, errors.New("cache_size must not be negative")

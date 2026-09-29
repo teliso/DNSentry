@@ -158,7 +158,7 @@ export type AccessConfig = {
 export type UpstreamRoute = { name?: string; domains: string[]; upstreams: string[] };
 export type RouteStatus = { name?: string; domains: string[]; upstreams: UpstreamHealth[] };
 
-export type UpstreamMode = 'load_balance' | 'parallel' | 'fastest_addr';
+export type UpstreamMode = 'load_balance' | 'parallel';
 export type BlockingMode = 'default' | 'nxdomain' | 'null_ip' | 'custom_ip' | 'refused';
 
 export type Config = {

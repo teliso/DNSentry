@@ -11,8 +11,7 @@
 
   const MODES: { value: UpstreamMode; title: string; text: string }[] = [
     { value: 'load_balance', title: '负载均衡', text: '按健康状态轮转，额外流量最少，适合常规部署。' },
-    { value: 'parallel', title: '并行请求', text: '同时询问多个上游，采用首个有效响应；更快容错，但请求量成倍增加。' },
-    { value: 'fastest_addr', title: '最快 IP 地址', text: '解析后对公网地址做 TCP/443 测速并前置最快者；仅适合 CDN 多线路优化。' }
+    { value: 'parallel', title: '并行请求', text: '同时询问多个上游，采用首个有效响应；更快容错，但请求量成倍增加。' }
   ];
 
   let results = $state<UpstreamTest[] | null>(null);
@@ -89,7 +88,7 @@
   .editors { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
   .mode-group { display: flex; flex-direction: column; gap: 8px; }
   .group-label { font-weight: 500; font-size: 13px; }
-  .modes { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+  .modes { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
   .mode {
     position: relative; display: flex; flex-direction: column; gap: 3px; padding: 12px 14px; cursor: pointer;
     border: 1px solid var(--line-strong); border-radius: var(--radius-sm); background: var(--surface);

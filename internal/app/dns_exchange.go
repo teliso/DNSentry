@@ -32,8 +32,6 @@ func (s *DNSServer) exchange(request *dns.Msg) (*dns.Msg, string, error) {
 		switch config.UpstreamMode {
 		case upstreamModeParallel:
 			response, upstream, err = s.exchangeParallel(upstreamRequest, candidates, s.pool)
-		case upstreamModeFastestAddr:
-			response, upstream, err = s.exchangeFastestAddr(upstreamRequest, candidates, s.pool)
 		default:
 			response, upstream, err = s.exchangeLoadBalance(upstreamRequest, candidates, s.pool)
 		}
