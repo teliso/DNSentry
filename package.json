@@ -8,5 +8,6 @@
     "build": "pnpm --filter dnsentry-console build",
     "check": "pnpm --filter dnsentry-console check",
     "start": "pnpm run build && go run ./cmd/dnsentry"
-  }
+  },
+  "license": "AGPL-3.0-only"
 }

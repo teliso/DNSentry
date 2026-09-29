@@ -159,6 +159,10 @@ dns:
 curl -H "Authorization: Bearer $DNSENTRY_API_TOKEN" http://127.0.0.1:18080/api/status
 ```
 
+## 发布
+
+推送形如 `v1.2.3` 的标签会触发 [发布工作流](.github/workflows/release.yml)：先跑测试，再构建 linux（amd64 / arm64 / armv7）、macOS（amd64 / arm64）、Windows（amd64）的压缩包并附上 `SHA256SUMS`，创建 GitHub Release（带 `-` 的版本如 `v1.2.3-rc1` 标记为预发布），同时向 `ghcr.io/<owner>/dnsentry` 推送多架构镜像。压缩包里包含二进制、许可证、README 和 `deploy/`。
+
 ## 开发
 
 ```sh
@@ -184,3 +188,9 @@ deploy/               配置参考、systemd 单元、Docker Compose
 ```
 
 控制台源码按职责划分：`lib/`（API 客户端、类型、状态、路由）、`components/`（通用组件）、`sections/`（设置分区）、`pages/`（页面）。
+
+## 许可证
+
+Copyright (C) 2026 Teliso Young
+
+DNSentry 以 [GNU Affero 通用公共许可证 第 3 版（AGPL-3.0）](LICENSE)发布。简单说：你可以自由使用、修改和分发它；如果你修改后通过网络向他人提供服务，也必须向这些用户提供你修改后的源代码。
