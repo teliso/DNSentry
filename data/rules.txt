@@ -1,0 +1,6 @@
+# VigorDNS filter rules
+# One domain per line, or AdGuard-style ||domain.example^
+# Prefix with @@ to allow a domain and its subdomains.
+
+# ||ads.example.com^
+# @@||trusted.example.com^
