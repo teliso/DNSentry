@@ -70,7 +70,7 @@ func secureTestMessage(t *testing.T, id uint16) []byte {
 }
 
 func TestEncryptionConfigSerializationIsStable(t *testing.T) {
-	original := EncryptionConfig{Enabled: true, Certificate: "cert.pem", PrivateKey: "key.pem", DoTListen: "127.0.0.1:853", DoTListens: []string{"127.0.0.1:853", "127.0.0.1:8853"}, DoHListen: "127.0.0.1:443", DoHListens: []string{"127.0.0.1:443"}, DoH3Listen: "127.0.0.1:8443", DoH3Listens: []string{"127.0.0.1:8443"}, DoQListen: "127.0.0.1:784", DoQListens: []string{"127.0.0.1:784"}}
+	original := EncryptionConfig{Enabled: true, Certificate: "cert.pem", PrivateKey: "key.pem", DoTListens: []string{"127.0.0.1:853", "127.0.0.1:8853"}, DoHListens: []string{"127.0.0.1:443"}, DoH3Listens: []string{"127.0.0.1:8443"}, DoQListens: []string{"127.0.0.1:784"}}
 	jsonData, err := json.Marshal(original)
 	if err != nil {
 		t.Fatal(err)
@@ -105,7 +105,7 @@ func TestSecureDNSListenerNormalizationAndLimit(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if service.config.DoTListen != "127.0.0.1:8853" || len(service.config.DoTListens) != 2 || service.config.DoTListens[1] != "127.0.0.1:8854" {
+	if len(service.config.DoTListens) != 2 || service.config.DoTListens[0] != "127.0.0.1:8853" || service.config.DoTListens[1] != "127.0.0.1:8854" {
 		t.Fatalf("unexpected normalized DoT listeners: %#v", service.config)
 	}
 	tooMany := make([]string, maxConfiguredListens+1)

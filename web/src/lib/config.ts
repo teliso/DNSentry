@@ -4,7 +4,6 @@ export const SECURE_PROTOCOLS: SecureProtocol[] = ['dot', 'doh', 'doh3', 'doq'];
 
 const defaultDNSCrypt: DNSCryptConfig = {
   enabled: false,
-  listen: '',
   listens: [],
   provider_name: 'dnsentry',
   private_key: '',
@@ -18,13 +17,9 @@ const defaultEncryption: EncryptionConfig = {
   private_key: '',
   certificate_pem: '',
   private_key_pem: '',
-  dot_listen: '',
   dot_listens: [],
-  doh_listen: '',
   doh_listens: [],
-  doh3_listen: '',
   doh3_listens: [],
-  doq_listen: '',
   doq_listens: [],
   dnscrypt: defaultDNSCrypt
 };
@@ -42,29 +37,19 @@ export function cleanList(values: readonly string[] | null | undefined): string[
   return (values ?? []).map((value) => value.trim()).filter(Boolean);
 }
 
-/** The API exposes a legacy singular "primary" address next to the full list. */
-function mergeLegacy(list: readonly string[] | undefined, legacy: string | undefined): string[] {
-  const values = cleanList(list);
-  return values.length > 0 ? values : cleanList(legacy ? [legacy] : []);
-}
-
-/** Recomputes every singular "primary" field from its list and drops listeners of disabled services. */
+/** Drops listeners of services that are turned off. */
 function finalizeListeners(config: Config): Config {
   const encryption = config.encryption;
   for (const protocol of SECURE_PROTOCOLS) {
-    const list = encryption.enabled ? cleanList(encryption[`${protocol}_listens`]) : [];
-    encryption[`${protocol}_listens`] = list;
-    encryption[`${protocol}_listen`] = list[0] ?? '';
+    encryption[`${protocol}_listens`] = encryption.enabled ? cleanList(encryption[`${protocol}_listens`]) : [];
   }
   const dnscrypt = encryption.dnscrypt;
   dnscrypt.listens = dnscrypt.enabled ? cleanList(dnscrypt.listens) : [];
-  dnscrypt.listen = dnscrypt.listens[0] ?? '';
   config.dns_listens = cleanList(config.dns_listens);
-  config.dns_listen = config.dns_listens[0] ?? '';
   return config;
 }
 
-/** Fills defaults and reconciles legacy fields so the editor always sees complete data. */
+/** Fills defaults so the editor always sees complete data. */
 export function normalizeConfig(raw: Config): Config {
   const rawEncryption = raw.encryption ?? defaultEncryption;
   const encryption: EncryptionConfig = {
@@ -72,14 +57,12 @@ export function normalizeConfig(raw: Config): Config {
     ...rawEncryption,
     dnscrypt: { ...defaultDNSCrypt, ...rawEncryption.dnscrypt }
   };
-  for (const protocol of SECURE_PROTOCOLS) {
-    encryption[`${protocol}_listens`] = mergeLegacy(rawEncryption[`${protocol}_listens`], rawEncryption[`${protocol}_listen`]);
-  }
-  encryption.dnscrypt.listens = mergeLegacy(encryption.dnscrypt.listens, encryption.dnscrypt.listen);
+  for (const protocol of SECURE_PROTOCOLS) encryption[`${protocol}_listens`] = cleanList(rawEncryption[`${protocol}_listens`]);
+  encryption.dnscrypt.listens = cleanList(encryption.dnscrypt.listens);
 
   return finalizeListeners({
     ...raw,
-    dns_listens: mergeLegacy(raw.dns_listens, raw.dns_listen),
+    dns_listens: cleanList(raw.dns_listens),
     upstreams: cleanList(raw.upstreams),
     fallback_upstreams: cleanList(raw.fallback_upstreams),
     bootstrap_dns: cleanList(raw.bootstrap_dns),
@@ -103,10 +86,10 @@ export function serializeConfig(config: Config): Config {
   copy.upstreams = cleanList(copy.upstreams);
   copy.fallback_upstreams = cleanList(copy.fallback_upstreams);
   copy.bootstrap_dns = cleanList(copy.bootstrap_dns);
+  copy.dnssec_trust_anchors = cleanList(copy.dnssec_trust_anchors);
   copy.upstream_routes = (copy.upstream_routes ?? [])
     .map((route) => ({ ...route, name: route.name?.trim() || undefined, domains: cleanList(route.domains), upstreams: cleanList(route.upstreams) }))
     .filter((route) => route.domains.length > 0 || route.upstreams.length > 0);
-  copy.dnssec_trust_anchors = cleanList(copy.dnssec_trust_anchors);
   copy.access.allowed_clients = cleanList(copy.access.allowed_clients);
   copy.access.denied_clients = cleanList(copy.access.denied_clients);
   copy.access.rebinding_allow_domains = cleanList(copy.access.rebinding_allow_domains);

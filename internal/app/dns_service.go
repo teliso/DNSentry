@@ -48,7 +48,7 @@ func NewDNSService(server *DNSServer, config Config) (*DNSService, error) {
 	if server == nil {
 		return nil, errors.New("DNS service requires a DNS server")
 	}
-	addresses, err := normalizeListenAddresses("dns listen", config.DNSListen, config.DNSListens)
+	addresses, err := normalizeListenAddresses("dns listen", "", config.DNSListens)
 	if err != nil {
 		return nil, err
 	}

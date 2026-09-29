@@ -47,7 +47,7 @@ func TestDoH3EncryptionConfigSerializationAndValidation(t *testing.T) {
 		Enabled:     true,
 		Certificate: "cert.pem",
 		PrivateKey:  "key.pem",
-		DoH3Listen:  "127.0.0.1:8443",
+		DoH3Listens: []string{"127.0.0.1:8443"},
 	}
 	jsonData, err := json.Marshal(original)
 	if err != nil {
@@ -75,7 +75,7 @@ func TestDoH3EncryptionConfigSerializationAndValidation(t *testing.T) {
 		t.Fatalf("valid DoH3 configuration rejected: %v", err)
 	}
 	invalid := original
-	invalid.DoH3Listen = "not-an-address"
+	invalid.DoH3Listens = []string{"not-an-address"}
 	if err := validateEncryptionConfig(invalid); err == nil {
 		t.Fatal("invalid DoH3 listen address was accepted")
 	}

@@ -150,7 +150,6 @@ func (a *API) getStatus(writer http.ResponseWriter, _ *http.Request) {
 		"config_path":              configPath(),
 		"rules_file":               config.RulesFile,
 		"restart_required":         pendingRestart,
-		"dns_listen":               config.DNSListen,
 		"dns_listens":              config.DNSListens,
 		"http_listen":              config.HTTPListen,
 		"upstreams":                config.Upstreams,

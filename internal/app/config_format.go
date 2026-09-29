@@ -10,7 +10,7 @@ import (
 type yamlConfig struct {
 	Version int `yaml:"version"`
 	DNS     struct {
-		Listen                string          `yaml:"listen"`
+		Listen                string          `yaml:"listen,omitempty"` // legacy single address: read from old files, never written
 		Listens               []string        `yaml:"listens,omitempty"`
 		Upstreams             []string        `yaml:"upstreams"`
 		FallbackUpstreams     []string        `yaml:"fallback_upstreams"`
@@ -59,6 +59,11 @@ type yamlConfig struct {
 }
 
 func (f yamlConfig) toConfig() *Config {
+	// "listen" is the pre-list form of "listens"; still read, never written.
+	dnsListens := append([]string(nil), f.DNS.Listens...)
+	if len(dnsListens) == 0 && strings.TrimSpace(f.DNS.Listen) != "" {
+		dnsListens = []string{f.DNS.Listen}
+	}
 	privateReverse := true
 	if f.DNS.PrivateReverse != nil {
 		privateReverse = *f.DNS.PrivateReverse
@@ -76,8 +81,7 @@ func (f yamlConfig) toConfig() *Config {
 		queryLogRetentionDays = 7
 	}
 	return &Config{
-		DNSListen:             f.DNS.Listen,
-		DNSListens:            append([]string(nil), f.DNS.Listens...),
+		DNSListens:            dnsListens,
 		HTTPListen:            f.Web.Listen,
 		Upstreams:             f.DNS.Upstreams,
 		FallbackUpstreams:     f.DNS.FallbackUpstreams,
@@ -118,7 +122,6 @@ func (f yamlConfig) toConfig() *Config {
 
 func newYAMLConfig(config *Config) yamlConfig {
 	fileConfig := yamlConfig{Version: 1}
-	fileConfig.DNS.Listen = config.DNSListen
 	fileConfig.DNS.Listens = append([]string(nil), config.DNSListens...)
 	fileConfig.DNS.Upstreams = config.Upstreams
 	fileConfig.DNS.FallbackUpstreams = config.FallbackUpstreams

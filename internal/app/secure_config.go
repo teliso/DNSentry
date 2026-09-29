@@ -16,13 +16,13 @@ type EncryptionConfig struct {
 	PrivateKey     string         `json:"private_key" yaml:"private_key"`
 	CertificatePEM string         `json:"certificate_pem,omitempty" yaml:"certificate_pem,omitempty"`
 	PrivateKeyPEM  string         `json:"private_key_pem,omitempty" yaml:"private_key_pem,omitempty"`
-	DoTListen      string         `json:"dot_listen" yaml:"dot_listen"`
+	DoTListen      string         `json:"-" yaml:"dot_listen,omitempty"`
 	DoTListens     []string       `json:"dot_listens,omitempty" yaml:"dot_listens,omitempty"`
-	DoHListen      string         `json:"doh_listen" yaml:"doh_listen"`
+	DoHListen      string         `json:"-" yaml:"doh_listen,omitempty"`
 	DoHListens     []string       `json:"doh_listens,omitempty" yaml:"doh_listens,omitempty"`
-	DoH3Listen     string         `json:"doh3_listen" yaml:"doh3_listen"`
+	DoH3Listen     string         `json:"-" yaml:"doh3_listen,omitempty"`
 	DoH3Listens    []string       `json:"doh3_listens,omitempty" yaml:"doh3_listens,omitempty"`
-	DoQListen      string         `json:"doq_listen" yaml:"doq_listen"`
+	DoQListen      string         `json:"-" yaml:"doq_listen,omitempty"`
 	DoQListens     []string       `json:"doq_listens,omitempty" yaml:"doq_listens,omitempty"`
 	DNSCrypt       DNSCryptConfig `json:"dnscrypt" yaml:"dnscrypt"`
 }
@@ -70,7 +70,7 @@ func normalizedEncryptionListeners(config EncryptionConfig) (EncryptionConfig, e
 			return EncryptionConfig{}, err
 		}
 		*listener.values = values
-		*listener.legacy = firstListenAddress(values)
+		*listener.legacy = "" // input-only: folded into the list
 	}
 	return config, nil
 }
@@ -93,16 +93,16 @@ func encryptionConfigEqual(left, right EncryptionConfig) bool {
 		left.PrivateKey == right.PrivateKey &&
 		left.CertificatePEM == right.CertificatePEM &&
 		left.PrivateKeyPEM == right.PrivateKeyPEM &&
-		left.DoTListen == right.DoTListen && slices.Equal(left.DoTListens, right.DoTListens) &&
-		left.DoHListen == right.DoHListen && slices.Equal(left.DoHListens, right.DoHListens) &&
-		left.DoH3Listen == right.DoH3Listen && slices.Equal(left.DoH3Listens, right.DoH3Listens) &&
-		left.DoQListen == right.DoQListen && slices.Equal(left.DoQListens, right.DoQListens) &&
+		slices.Equal(left.DoTListens, right.DoTListens) &&
+		slices.Equal(left.DoHListens, right.DoHListens) &&
+		slices.Equal(left.DoH3Listens, right.DoH3Listens) &&
+		slices.Equal(left.DoQListens, right.DoQListens) &&
 		dnsCryptConfigEqual(left.DNSCrypt, right.DNSCrypt)
 }
 
 func dnsCryptConfigEqual(left, right DNSCryptConfig) bool {
 	return left.Enabled == right.Enabled &&
-		left.Listen == right.Listen && slices.Equal(left.Listens, right.Listens) &&
+		slices.Equal(left.Listens, right.Listens) &&
 		left.ProviderName == right.ProviderName && left.PrivateKey == right.PrivateKey &&
 		left.ResolverSecret == right.ResolverSecret && left.CertificateTTLHours == right.CertificateTTLHours
 }

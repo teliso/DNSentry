@@ -17,12 +17,11 @@ func validateConfig(config *Config) (*Config, error) {
 	if config == nil {
 		return nil, errors.New("config is nil")
 	}
-	config.DNSListen = strings.TrimSpace(config.DNSListen)
 	config.HTTPListen = strings.TrimSpace(config.HTTPListen)
 	if config.HTTPListen == "" || strings.TrimSpace(config.RulesFile) == "" {
 		return nil, errors.New("config is missing required fields")
 	}
-	dnsListens, err := normalizeListenAddresses("dns listen", config.DNSListen, config.DNSListens)
+	dnsListens, err := normalizeListenAddresses("dns listen", "", config.DNSListens)
 	if err != nil {
 		return nil, err
 	}
@@ -30,7 +29,6 @@ func validateConfig(config *Config) (*Config, error) {
 		return nil, errors.New("dns listens must contain at least one address")
 	}
 	config.DNSListens = dnsListens
-	config.DNSListen = firstListenAddress(dnsListens)
 	if err := validateListenAddress("web listen", config.HTTPListen); err != nil {
 		return nil, err
 	}
@@ -151,13 +149,10 @@ func validateConfig(config *Config) (*Config, error) {
 		config.BootstrapDNS[index] = normalized
 	}
 	if !config.Encryption.Enabled {
-		config.Encryption.DoTListen = ""
+		config.Encryption.DoTListen, config.Encryption.DoHListen, config.Encryption.DoH3Listen, config.Encryption.DoQListen = "", "", "", ""
 		config.Encryption.DoTListens = nil
-		config.Encryption.DoHListen = ""
 		config.Encryption.DoHListens = nil
-		config.Encryption.DoH3Listen = ""
 		config.Encryption.DoH3Listens = nil
-		config.Encryption.DoQListen = ""
 		config.Encryption.DoQListens = nil
 	} else if err := normalizeEncryptionListeners(&config.Encryption); err != nil {
 		return nil, err
@@ -214,13 +209,6 @@ func normalizeListenAddresses(name, legacy string, values []string) ([]string, e
 		return nil, fmt.Errorf("%s addresses must contain at most %d listeners", name, maxConfiguredListens)
 	}
 	return addresses, nil
-}
-
-func firstListenAddress(addresses []string) string {
-	if len(addresses) == 0 {
-		return ""
-	}
-	return addresses[0]
 }
 
 func validateListenAddress(name, value string) error {

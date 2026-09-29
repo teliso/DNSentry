@@ -28,7 +28,6 @@ export type UpstreamHealth = {
   requests: number;
   successes: number;
   latency_ms: number;
-  last_success?: string;
   last_failure?: string;
   /** Last 30 minutes, oldest first, one point per minute. */
   history: HealthPoint[];
@@ -57,8 +56,6 @@ export type CacheStats = {
   stale_hits: number;
   evictions: number;
   bypasses: number;
-  refresh_success: number;
-  refresh_failure: number;
   prefetches: number;
   hit_rate: number;
 };
@@ -67,12 +64,9 @@ export type SecurityStats = { denied_clients: number; rate_limited: number; over
 export type DNSCryptStatus = {
   enabled: boolean;
   running: boolean;
-  listen: string;
   listens?: string[];
   provider_name: string;
   stamp?: string;
-  udp: boolean;
-  tcp: boolean;
 };
 
 export type Status = {
@@ -81,7 +75,6 @@ export type Status = {
   version: string;
   config_path: string;
   rules_file: string;
-  dns_listen: string;
   dns_listens: string[];
   http_listen: string;
   upstreams: string[];
@@ -122,7 +115,6 @@ export type LocalRecord = { domain: string; type: LocalRecordType; value: string
 
 export type DNSCryptConfig = {
   enabled: boolean;
-  listen: string;
   listens: string[];
   provider_name: string;
   private_key: string;
@@ -138,13 +130,9 @@ export type EncryptionConfig = {
   private_key: string;
   certificate_pem: string;
   private_key_pem: string;
-  dot_listen: string;
   dot_listens: string[];
-  doh_listen: string;
   doh_listens: string[];
-  doh3_listen: string;
   doh3_listens: string[];
-  doq_listen: string;
   doq_listens: string[];
   dnscrypt: DNSCryptConfig;
 };
@@ -165,7 +153,6 @@ export type UpstreamMode = 'load_balance' | 'parallel' | 'fastest_addr';
 export type BlockingMode = 'default' | 'nxdomain' | 'null_ip' | 'custom_ip' | 'refused';
 
 export type Config = {
-  dns_listen: string;
   dns_listens: string[];
   http_listen: string;
   upstreams: string[];

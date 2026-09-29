@@ -31,7 +31,7 @@ func TestLocalRecordsAreValidatedAndServedBeforeUpstream(t *testing.T) {
 		t.Fatal(err)
 	}
 	config := &Config{
-		DNSListen:    ":15353",
+		DNSListens:   []string{":15353"},
 		HTTPListen:   "127.0.0.1:18080",
 		RulesFile:    ruleFile,
 		CacheEnabled: true,

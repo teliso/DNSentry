@@ -5,7 +5,6 @@ import "github.com/teliso/DNSentry/internal/rules"
 // Config is the effective service configuration. JSON tags describe the Web API
 // shape; the on-disk YAML layout lives in config_format.go.
 type Config struct {
-	DNSListen             string           `json:"dns_listen"`
 	DNSListens            []string         `json:"dns_listens,omitempty"`
 	HTTPListen            string           `json:"http_listen"`
 	Upstreams             []string         `json:"upstreams"`

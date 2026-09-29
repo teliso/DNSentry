@@ -36,7 +36,7 @@ func queryLogSettingsChanged(next, current Config) bool {
 // withRunningStartupSettings returns config with the startup-only settings of
 // running, i.e. the part of config that can be applied without a restart.
 func withRunningStartupSettings(config, running Config) Config {
-	config.DNSListen, config.DNSListens = running.DNSListen, running.DNSListens
+	config.DNSListens = running.DNSListens
 	config.HTTPListen = running.HTTPListen
 	config.RulesFile = running.RulesFile
 	config.QueryLogSize, config.QueryLogEnabled = running.QueryLogSize, running.QueryLogEnabled
