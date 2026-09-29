@@ -96,21 +96,13 @@ class ConsoleStore {
     if (this.saved) this.draft = JSON.parse(JSON.stringify(this.saved)) as Config;
   }
 
-  /** Shared handling for PUT /config and POST /config/restore, which answer 409 when a restart is needed. */
-  private async applyConfigResult(call: () => Promise<Config>, done: string, restartNote: string, failure: string) {
-    return this.act(async () => {
-      try {
-        this.adopt(await call());
-        toasts.success(done);
-      } catch (cause) {
-        if (cause instanceof APIError && cause.status === 409 && cause.data?.config) {
-          this.adopt(cause.data.config);
-          toasts.info(restartNote);
-        } else {
-          throw cause;
-        }
-      }
+  /** PUT /config and POST /config/restore apply runtime settings at once; startup-only ones wait for a restart. */
+  private async commitConfig(call: () => Promise<Config>, done: string, failure: string) {
+    await this.act(async () => {
+      this.adopt(await call());
       await this.refreshLive();
+      if (this.status?.restart_required) toasts.info(`${done}，部分设置需要重启服务后生效`);
+      else toasts.success(done);
     }, failure);
   }
 
@@ -122,11 +114,11 @@ class ConsoleStore {
       toasts.error(problem);
       return;
     }
-    await this.applyConfigResult(() => api.saveConfig(payload), '配置已保存', '配置已保存，部分监听或日志设置需要重启后生效', '保存配置失败');
+    await this.commitConfig(() => api.saveConfig(payload), '配置已保存', '保存配置失败');
   }
 
   async restoreConfig() {
-    await this.applyConfigResult(() => api.restoreConfig(), '已恢复上次配置', '配置已恢复，部分设置需要重启后生效', '恢复配置失败');
+    await this.commitConfig(() => api.restoreConfig(), '已恢复上次配置', '恢复配置失败');
   }
 
   async clearCache() {

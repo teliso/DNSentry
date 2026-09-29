@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/miekg/dns"
-
 	"github.com/teliso/DNSentry/internal/cache"
 )
 

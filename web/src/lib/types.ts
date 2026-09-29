@@ -61,6 +61,8 @@ export type DNSCryptStatus = {
 };
 
 export type Status = {
+  /** Saved configuration has startup-only changes that need a service restart. */
+  restart_required: boolean;
   dns_listen: string;
   dns_listens: string[];
   http_listen: string;

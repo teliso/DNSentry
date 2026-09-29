@@ -16,7 +16,6 @@ import (
 	"time"
 
 	"github.com/miekg/dns"
-
 	"github.com/teliso/DNSentry/internal/cache"
 	"github.com/teliso/DNSentry/internal/querylog"
 	"github.com/teliso/DNSentry/internal/rules"
@@ -35,8 +34,12 @@ type listenerService interface {
 }
 
 // Run starts DNSentry and blocks until it receives SIGINT/SIGTERM or the Web UI
-// stops. static is the built Web console, rooted at its index.html.
-func Run(static fs.FS) {
+// stops. static is the built Web console, rooted at its index.html; path is the
+// YAML configuration file (empty for the default data/config.yaml).
+func Run(static fs.FS, path string) {
+	if path != "" {
+		configFile = path
+	}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	if err := run(ctx, stop, static); err != nil {
@@ -127,9 +130,7 @@ func run(ctx context.Context, stop context.CancelFunc, static fs.FS) error {
 	}
 
 	updater := rules.NewUpdater(ruleStore, config.RuleSources)
-	api := newAPI(ruleStore, server.cache, server.logs, server, updater, services.dnscrypt)
-	api.apiToken = apiToken
-	api.ctx = ctx
+	api := newAPI(ctx, apiToken, server, updater, services.dnscrypt)
 	httpServer := newHTTPServer(api, static, dnsService.Ready)
 	httpListener, err := net.Listen("tcp", config.HTTPListen)
 	if err != nil {

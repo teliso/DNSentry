@@ -1,9 +1,10 @@
 package app
 
 import (
-	"github.com/teliso/DNSentry/internal/rules"
 	"path/filepath"
 	"strings"
+
+	"github.com/teliso/DNSentry/internal/rules"
 )
 
 type yamlConfig struct {

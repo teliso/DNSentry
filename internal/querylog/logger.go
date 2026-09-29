@@ -111,18 +111,22 @@ func (l *Logger) Add(entry Entry) {
 	}
 	copy(l.entries[1:], l.entries)
 	l.entries[0] = entry
-	bucket := l.metrics[now.Unix()]
-	bucket.Time = now.Format(time.RFC3339)
+	bucket, exists := l.metrics[now.Unix()]
+	if !exists {
+		// A new minute started: drop buckets older than the retained window.
+		bucket.Time = now.Format(time.RFC3339)
+		cutoff := now.Add(-2 * time.Hour).Unix()
+		for timestamp := range l.metrics {
+			if timestamp < cutoff {
+				delete(l.metrics, timestamp)
+			}
+		}
+	}
 	bucket.Queries++
 	if entry.Action == string(rules.ActionBlock) {
 		bucket.Blocked++
 	}
 	l.metrics[now.Unix()] = bucket
-	for timestamp := range l.metrics {
-		if timestamp < now.Add(-2*time.Hour).Unix() {
-			delete(l.metrics, timestamp)
-		}
-	}
 	l.mu.Unlock()
 	l.enqueuePersistence(entry)
 }

@@ -2,10 +2,14 @@
 package main
 
 import (
+	"flag"
+
 	"github.com/teliso/DNSentry/internal/app"
 	"github.com/teliso/DNSentry/web"
 )
 
 func main() {
-	app.Run(web.Console())
+	config := flag.String("config", "data/config.yaml", "path to the YAML configuration file")
+	flag.Parse()
+	app.Run(web.Console(), *config)
 }

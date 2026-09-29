@@ -1,11 +1,10 @@
 package app
 
 import (
-	"bytes"
 	"crypto/sha256"
 	"crypto/subtle"
 	"encoding/json"
-	"io"
+	"errors"
 	"net"
 	"net/http"
 	"net/url"
@@ -115,44 +114,32 @@ func sameOriginMutation(request *http.Request) bool {
 	return sameOriginRequest(request, parsed.Scheme+"://"+parsed.Host)
 }
 
-func withJSONBodyLimit(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
-		contentType := strings.ToLower(request.Header.Get("Content-Type"))
-		isAPIRequest := strings.HasPrefix(request.URL.Path, "/api/")
-		isJSONRequest := strings.HasPrefix(contentType, "application/json")
-		if request.Body != nil && (isAPIRequest || isJSONRequest) {
-			limitedBody := http.MaxBytesReader(writer, request.Body, maxJSONBodyBytes)
-			body, err := io.ReadAll(limitedBody)
-			_ = request.Body.Close()
-			if err != nil {
-				writeError(writer, http.StatusRequestEntityTooLarge, "request body too large")
-				return
-			}
-			request.Body = io.NopCloser(bytes.NewReader(body))
-		}
-		next.ServeHTTP(writer, request)
-	})
+// decodeJSON reads a size-limited JSON request body into value. On failure it
+// writes the error response (413 for oversized bodies, 400 otherwise) and
+// returns false.
+func decodeJSON(writer http.ResponseWriter, request *http.Request, value any, invalid string) bool {
+	err := json.NewDecoder(http.MaxBytesReader(writer, request.Body, maxJSONBodyBytes)).Decode(value)
+	if err == nil {
+		return true
+	}
+	var tooLarge *http.MaxBytesError
+	if errors.As(err, &tooLarge) {
+		writeError(writer, http.StatusRequestEntityTooLarge, "request body too large")
+	} else {
+		writeError(writer, http.StatusBadRequest, invalid)
+	}
+	return false
 }
 
-func withCORS(next http.Handler) http.Handler {
+// withSecurityHeaders hardens every response. The console is served from the
+// same origin as the API, so no CORS headers are needed.
+func withSecurityHeaders(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
-		writer.Header().Set("X-Content-Type-Options", "nosniff")
-		writer.Header().Set("X-Frame-Options", "DENY")
-		writer.Header().Set("Referrer-Policy", "strict-origin-when-cross-origin")
-		writer.Header().Set("Content-Security-Policy", "default-src 'self'; base-uri 'self'; frame-ancestors 'none'; object-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'")
-
-		origin := request.Header.Get("Origin")
-		sameOrigin := origin != "" && sameOriginRequest(request, origin)
-		if sameOrigin {
-			writer.Header().Set("Access-Control-Allow-Origin", origin)
-			writer.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
-			writer.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
-			writer.Header().Add("Vary", "Origin")
-		}
-		if request.Method == http.MethodOptions && !strings.HasPrefix(request.URL.Path, "/api/") {
-			writer.WriteHeader(http.StatusNoContent)
-			return
-		}
+		headers := writer.Header()
+		headers.Set("X-Content-Type-Options", "nosniff")
+		headers.Set("X-Frame-Options", "DENY")
+		headers.Set("Referrer-Policy", "strict-origin-when-cross-origin")
+		headers.Set("Content-Security-Policy", "default-src 'self'; base-uri 'self'; frame-ancestors 'none'; object-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'")
 		next.ServeHTTP(writer, request)
 	})
 }

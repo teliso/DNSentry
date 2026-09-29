@@ -79,8 +79,14 @@ func (u *Updater) SetSources(sources []Source) {
 	}
 	u.sources = next
 	u.mu.Unlock()
+	// Rules of removed or disabled sources stop matching immediately.
 	for sourceURL := range old {
 		if _, exists := next[sourceURL]; !exists {
+			u.store.RemoveRemote(sourceURL)
+		}
+	}
+	for sourceURL, source := range next {
+		if !source.Enabled {
 			u.store.RemoveRemote(sourceURL)
 		}
 	}
@@ -97,12 +103,16 @@ func (u *Updater) Sources() []Source {
 	return result
 }
 
-func (u *Updater) RefreshNow(ctx context.Context) {
-	u.refreshDue(ctx, true)
+// RefreshDue downloads enabled sources whose rules are not loaded yet (new,
+// re-enabled or previously failed) or whose refresh interval has elapsed.
+func (u *Updater) RefreshDue(ctx context.Context) {
+	u.refreshDue(ctx, false)
 }
 
+// Run refreshes every enabled source once, then keeps them up to date until
+// ctx is cancelled.
 func (u *Updater) Run(ctx context.Context) {
-	u.RefreshNow(ctx)
+	u.refreshDue(ctx, true)
 	ticker := time.NewTicker(time.Minute)
 	defer ticker.Stop()
 	for {
@@ -123,7 +133,8 @@ func (u *Updater) refreshDue(ctx context.Context, force bool) {
 			continue
 		}
 		lastUpdated, _ := time.Parse(time.RFC3339, source.LastUpdated)
-		if !force && !lastUpdated.IsZero() && now.Before(lastUpdated.Add(time.Duration(source.IntervalMinutes)*time.Minute)) {
+		loaded := u.store.HasRemote(source.URL)
+		if !force && loaded && now.Before(lastUpdated.Add(time.Duration(source.IntervalMinutes)*time.Minute)) {
 			continue
 		}
 		u.refreshOne(ctx, source)
@@ -140,6 +151,9 @@ func (u *Updater) refreshOne(ctx context.Context, source Source) {
 	}
 	if err != nil {
 		current.LastError = err.Error()
+		if !u.store.HasRemote(source.URL) {
+			current.RuleCount = 0 // nothing from this source is active
+		}
 	} else {
 		current.LastUpdated = time.Now().Format(time.RFC3339)
 		current.LastError = ""
@@ -147,7 +161,7 @@ func (u *Updater) refreshOne(ctx context.Context, source Source) {
 	}
 	u.sources[source.URL] = current
 	u.mu.Unlock()
-	if err == nil {
+	if err == nil && current.Enabled {
 		u.store.SetRemote(source.URL, entries)
 	}
 }
@@ -193,6 +207,14 @@ func (s *Store) SetRemote(source string, entries []Entry) {
 
 func (s *Store) RemoveRemote(source string) {
 	s.removeRemote(source)
+}
+
+// HasRemote reports whether rules from source are currently loaded.
+func (s *Store) HasRemote(source string) bool {
+	s.stateMu.Lock()
+	defer s.stateMu.Unlock()
+	_, ok := s.remoteEntries[source]
+	return ok
 }
 
 type ruleCandidate struct {

@@ -2,30 +2,45 @@ package app
 
 import (
 	"context"
+	"net/http"
+	"strings"
+	"sync"
+
 	"github.com/teliso/DNSentry/internal/cache"
 	"github.com/teliso/DNSentry/internal/querylog"
 	"github.com/teliso/DNSentry/internal/rules"
-	"net/http"
-	"strings"
 )
 
+// API serves the JSON management API under /api.
 type API struct {
+	ctx      context.Context // cancelled on shutdown; bounds background work
+	apiToken string          // empty: loopback-only access
+
+	resolver *DNSServer
 	rules    *rules.Store
 	cache    *cache.Cache
 	logs     *querylog.Logger
-	resolver *DNSServer
 	updater  *rules.Updater
 	dnscrypt *DNSCryptService
-	apiToken string
-	ctx      context.Context
+
+	// configMu serialises configuration writes. saved is the configuration on
+	// disk, which may differ from the running one in startup-only settings
+	// awaiting a restart; nil until the first write.
+	configMu sync.Mutex
+	saved    *Config
 }
 
-func newAPI(rules *rules.Store, cache *cache.Cache, logs *querylog.Logger, resolver *DNSServer, updater *rules.Updater, dnscryptServices ...*DNSCryptService) *API {
-	api := &API{rules: rules, cache: cache, logs: logs, resolver: resolver, updater: updater}
-	if len(dnscryptServices) > 0 {
-		api.dnscrypt = dnscryptServices[0]
+func newAPI(ctx context.Context, apiToken string, resolver *DNSServer, updater *rules.Updater, dnscrypt *DNSCryptService) *API {
+	return &API{
+		ctx:      ctx,
+		apiToken: apiToken,
+		resolver: resolver,
+		rules:    resolver.rules,
+		cache:    resolver.cache,
+		logs:     resolver.logs,
+		updater:  updater,
+		dnscrypt: dnscrypt,
 	}
-	return api
 }
 
 type apiRoute struct {
@@ -101,7 +116,11 @@ func (a *API) getStatus(writer http.ResponseWriter, _ *http.Request) {
 	if a.resolver.fallbackPool != nil {
 		fallbackHealth = a.resolver.fallbackPool.Health()
 	}
+	a.configMu.Lock()
+	pendingRestart := restartRequired(a.savedConfig(), config)
+	a.configMu.Unlock()
 	writeJSON(writer, http.StatusOK, map[string]any{
+		"restart_required":         pendingRestart,
 		"dns_listen":               config.DNSListen,
 		"dns_listens":              config.DNSListens,
 		"http_listen":              config.HTTPListen,
@@ -120,10 +139,6 @@ func (a *API) getStatus(writer http.ResponseWriter, _ *http.Request) {
 		"series":                   a.logs.Metrics(),
 		"dashboard":                a.logs.Dashboard(),
 	})
-}
-
-func (a *API) getConfig(writer http.ResponseWriter, _ *http.Request) {
-	writeJSON(writer, http.StatusOK, publicConfig(a.resolver.configSnapshot()))
 }
 
 func (a *API) clearCache(writer http.ResponseWriter, _ *http.Request) {

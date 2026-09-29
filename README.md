@@ -48,6 +48,10 @@ Invoke-RestMethod http://<server-address>:18080/api/status -Headers $headers
 
 `pnpm start` builds the Svelte console and starts the Go DNS service. The console is served at <http://127.0.0.1:18080>. DNS listens on `:15353` by default. These development defaults avoid Windows mDNS port `5353` and common Web port conflicts.
 
+The configuration file defaults to `data/config.yaml`; pass `-config path/to/config.yaml` to use another one (relative paths inside it, such as `rules.local_file`, are resolved from the working directory).
+
+配置保存后会立即应用所有可热更新的设置；监听地址、Web 地址、规则文件、查询日志和加密 DNS 属于启动时设置，会写入配置文件但需要重启服务后生效，此时 `/api/status` 返回 `restart_required: true`，控制台会显示提示。`PUT /api/config` 不会修改规则源，规则源请通过 `/api/sources` 管理。
+
 For frontend development with Vite hot reload, run the Go service with `go run ./cmd/dnsentry` in one terminal and then run:
 
 ```sh
@@ -76,7 +80,7 @@ $source = @(@{ url = 'https://example.com/adguard.txt'; enabled = $true; interva
 Invoke-RestMethod http://127.0.0.1:18080/api/sources -Method Put -ContentType 'application/json' -Body ($source | ConvertTo-Json)
 ```
 
-Sources are fetched once after being added and then refreshed at their configured interval. A failed refresh keeps the last successful rules active.
+Sources are fetched once after being added (or re-enabled) and then refreshed at their configured interval. A failed refresh keeps the last successful rules active. Disabling or removing a source stops its rules immediately.
 
 The resolver also coalesces concurrent requests for the same cache key, skips upstreams after three consecutive failures with exponential cooldown, and exposes primary and fallback upstream health through `/api/status`. `/api/status` returns `dns_listen` as the compatibility primary address and `dns_listens` as the full ordinary DNS address list. `/healthz` reports process liveness and `/readyz` reports whether at least one ordinary DNS listener pair is bound.
 

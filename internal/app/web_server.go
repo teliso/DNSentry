@@ -23,7 +23,7 @@ func newHTTPServer(api *API, static fs.FS, ready func() bool) *http.Server {
 	})
 	mux.Handle("/", staticHandler(static))
 	return &http.Server{
-		Handler:           withCORS(withJSONBodyLimit(mux)),
+		Handler:           withSecurityHeaders(mux),
 		ReadHeaderTimeout: httpReadHeaderTimeout,
 		ReadTimeout:       httpReadTimeout,
 		WriteTimeout:      httpWriteTimeout,

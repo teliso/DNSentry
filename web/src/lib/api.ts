@@ -5,7 +5,7 @@ const TOKEN_KEY = 'dnsentry_api_token';
 export class APIError extends Error {
   constructor(
     readonly status: number,
-    readonly data: { error?: string; config?: Config; restart_required?: boolean } | null
+    readonly data: { error?: string } | null
   ) {
     super(data?.error || `请求失败 (${status})`);
     this.name = 'APIError';

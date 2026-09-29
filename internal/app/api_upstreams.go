@@ -1,7 +1,6 @@
 package app
 
 import (
-	"encoding/json"
 	"net"
 	"net/http"
 	"strings"
@@ -24,8 +23,7 @@ func (a *API) testUpstreams(writer http.ResponseWriter, request *http.Request) {
 		Upstreams []string `json:"upstreams"`
 		Domain    string   `json:"domain"`
 	}
-	if err := json.NewDecoder(request.Body).Decode(&input); err != nil {
-		writeError(writer, http.StatusBadRequest, "invalid test request")
+	if !decodeJSON(writer, request, &input, "invalid test request") {
 		return
 	}
 	if len(input.Upstreams) == 0 {

@@ -1,10 +1,8 @@
 package app
 
 import (
-	"encoding/json"
 	"net/http"
 	"slices"
-	"strings"
 )
 
 func publicConfig(config Config) Config {
@@ -15,30 +13,14 @@ func publicConfig(config Config) Config {
 	return public
 }
 
-func (a *API) restoreConfig(writer http.ResponseWriter, _ *http.Request) {
-	restored, err := loadConfigBackup()
-	if err != nil {
-		writeError(writer, http.StatusNotFound, "no valid configuration backup: "+err.Error())
-		return
-	}
-	current := a.resolver.configSnapshot()
-	restartRequired := !slices.Equal(restored.DNSListens, current.DNSListens) || restored.HTTPListen != current.HTTPListen || restored.RulesFile != current.RulesFile || queryLogSettingsChanged(*restored, current)
-	encryptionChanged := !encryptionConfigEqual(restored.Encryption, current.Encryption)
-	if err := saveConfig(restored); err != nil {
-		writeError(writer, http.StatusInternalServerError, "could not restore config: "+err.Error())
-		return
-	}
-	if restartRequired || encryptionChanged {
-		writeJSON(writer, http.StatusConflict, map[string]any{"error": "configuration restored but some settings require a restart", "restart_required": true, "config": publicConfig(*restored)})
-		return
-	}
-	a.updater.SetSources(restored.RuleSources)
-	restored.RuleSources = a.updater.Sources()
-	if err := a.resolver.applyConfig(*restored); err != nil {
-		writeError(writer, http.StatusInternalServerError, "could not apply restored config: "+err.Error())
-		return
-	}
-	writeJSON(writer, http.StatusOK, publicConfig(*restored))
+// restartRequired reports whether saved differs from running in settings that
+// are only read at startup (listeners, rules file, query log, encrypted DNS).
+func restartRequired(saved, running Config) bool {
+	return !slices.Equal(saved.DNSListens, running.DNSListens) ||
+		saved.HTTPListen != running.HTTPListen ||
+		saved.RulesFile != running.RulesFile ||
+		queryLogSettingsChanged(saved, running) ||
+		!encryptionConfigEqual(saved.Encryption, running.Encryption)
 }
 
 func queryLogSettingsChanged(next, current Config) bool {
@@ -48,55 +30,94 @@ func queryLogSettingsChanged(next, current Config) bool {
 		next.QueryLogRetentionDays != current.QueryLogRetentionDays
 }
 
-func (a *API) updateConfig(writer http.ResponseWriter, request *http.Request) {
-	var next Config
-	if err := json.NewDecoder(request.Body).Decode(&next); err != nil || (strings.TrimSpace(next.DNSListen) == "" && len(next.DNSListens) == 0) || strings.TrimSpace(next.HTTPListen) == "" || len(next.Upstreams) == 0 {
-		writeError(writer, http.StatusBadRequest, "invalid config")
-		return
+// withRunningStartupSettings returns config with the startup-only settings of
+// running, i.e. the part of config that can be applied without a restart.
+func withRunningStartupSettings(config, running Config) Config {
+	config.DNSListen, config.DNSListens = running.DNSListen, running.DNSListens
+	config.HTTPListen = running.HTTPListen
+	config.RulesFile = running.RulesFile
+	config.QueryLogSize, config.QueryLogEnabled = running.QueryLogSize, running.QueryLogEnabled
+	config.QueryLogFile, config.QueryLogRetentionDays = running.QueryLogFile, running.QueryLogRetentionDays
+	config.Encryption = running.Encryption
+	return config
+}
+
+// savedConfig is the configuration on disk. It equals the running
+// configuration except for startup-only settings that await a restart.
+func (a *API) savedConfig() Config {
+	if a.saved != nil {
+		return *a.saved
 	}
-	current := a.resolver.configSnapshot()
-	if next.Encryption.PrivateKeyPEM == "" {
-		next.Encryption.PrivateKeyPEM = current.Encryption.PrivateKeyPEM
-	}
-	if next.Encryption.DNSCrypt.PrivateKey == "" {
-		next.Encryption.DNSCrypt.PrivateKey = current.Encryption.DNSCrypt.PrivateKey
-	}
-	if next.Encryption.DNSCrypt.ResolverSecret == "" {
-		next.Encryption.DNSCrypt.ResolverSecret = current.Encryption.DNSCrypt.ResolverSecret
-	}
-	validated, err := validateConfig(&next)
+	return a.resolver.configSnapshot()
+}
+
+// configResponse is the body of GET/PUT /config and POST /config/restore.
+func (a *API) configResponse() Config {
+	config := publicConfig(a.savedConfig())
+	config.RuleSources = a.updater.Sources()
+	return config
+}
+
+// commitConfig validates, persists and applies next. Everything that can change
+// at runtime takes effect immediately; startup-only settings are saved and
+// reported through restart_required in /api/status.
+func (a *API) commitConfig(writer http.ResponseWriter, next *Config) {
+	validated, err := validateConfig(next)
 	if err != nil {
 		writeError(writer, http.StatusBadRequest, err.Error())
 		return
 	}
-	next = *validated
-	for index, upstream := range next.Upstreams {
-		next.Upstreams[index] = normalizeUpstream(upstream)
-	}
-	for index, bootstrap := range next.BootstrapDNS {
-		next.BootstrapDNS[index] = normalizeUpstream(bootstrap)
-	}
-	if next.UpstreamTimeout <= 0 {
-		next.UpstreamTimeout = 4
-	}
-	if len(next.BootstrapDNS) == 0 {
-		next.BootstrapDNS = []string{"1.1.1.1:53", "8.8.8.8:53"}
-	}
-	restartRequired := !slices.Equal(next.DNSListens, current.DNSListens) || next.HTTPListen != current.HTTPListen || next.RulesFile != current.RulesFile || queryLogSettingsChanged(next, current)
-	encryptionChanged := !encryptionConfigEqual(next.Encryption, current.Encryption)
-	if err := saveConfig(&next); err != nil {
-		writeError(writer, http.StatusInternalServerError, "could not save config")
+	if err := saveConfig(validated); err != nil {
+		writeError(writer, http.StatusInternalServerError, "could not save config: "+err.Error())
 		return
 	}
-	if restartRequired || encryptionChanged {
-		writeJSON(writer, http.StatusConflict, map[string]any{"error": "configuration was saved but requires a restart", "restart_required": true, "config": publicConfig(next)})
+	a.saved = validated
+	a.updater.SetSources(validated.RuleSources)
+	a.refreshRuleSources()
+	if err := a.resolver.applyConfig(withRunningStartupSettings(*validated, a.resolver.configSnapshot())); err != nil {
+		writeError(writer, http.StatusInternalServerError, "config was saved but could not be applied: "+err.Error())
 		return
 	}
-	a.updater.SetSources(next.RuleSources)
+	writeJSON(writer, http.StatusOK, a.configResponse())
+}
+
+func (a *API) getConfig(writer http.ResponseWriter, _ *http.Request) {
+	a.configMu.Lock()
+	defer a.configMu.Unlock()
+	writeJSON(writer, http.StatusOK, a.configResponse())
+}
+
+func (a *API) updateConfig(writer http.ResponseWriter, request *http.Request) {
+	var next Config
+	if !decodeJSON(writer, request, &next, "invalid config JSON") {
+		return
+	}
+	a.configMu.Lock()
+	defer a.configMu.Unlock()
+	saved := a.savedConfig()
+	// Secrets are never sent to the browser; an empty value means "keep".
+	if next.Encryption.PrivateKeyPEM == "" {
+		next.Encryption.PrivateKeyPEM = saved.Encryption.PrivateKeyPEM
+	}
+	if next.Encryption.DNSCrypt.PrivateKey == "" {
+		next.Encryption.DNSCrypt.PrivateKey = saved.Encryption.DNSCrypt.PrivateKey
+	}
+	if next.Encryption.DNSCrypt.ResolverSecret == "" {
+		next.Encryption.DNSCrypt.ResolverSecret = saved.Encryption.DNSCrypt.ResolverSecret
+	}
+	// Rule sources are managed through /api/sources; a config form that was
+	// loaded earlier must not roll them back.
 	next.RuleSources = a.updater.Sources()
-	if err := a.resolver.applyConfig(next); err != nil {
-		writeError(writer, http.StatusInternalServerError, "could not apply config: "+err.Error())
+	a.commitConfig(writer, &next)
+}
+
+func (a *API) restoreConfig(writer http.ResponseWriter, _ *http.Request) {
+	restored, err := loadConfigBackup()
+	if err != nil {
+		writeError(writer, http.StatusNotFound, "no valid configuration backup: "+err.Error())
 		return
 	}
-	writeJSON(writer, http.StatusOK, publicConfig(next))
+	a.configMu.Lock()
+	defer a.configMu.Unlock()
+	a.commitConfig(writer, restored)
 }

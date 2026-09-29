@@ -2,9 +2,9 @@ package app
 
 import (
 	"context"
-	"encoding/json"
-	"github.com/teliso/DNSentry/internal/rules"
 	"net/http"
+
+	"github.com/teliso/DNSentry/internal/rules"
 )
 
 func (a *API) listRules(writer http.ResponseWriter, _ *http.Request) {
@@ -29,8 +29,7 @@ func (a *API) addRule(writer http.ResponseWriter, request *http.Request) {
 		Domain string       `json:"domain"`
 		Action rules.Action `json:"action"`
 	}
-	if err := json.NewDecoder(request.Body).Decode(&input); err != nil {
-		writeError(writer, http.StatusBadRequest, "invalid JSON")
+	if !decodeJSON(writer, request, &input, "invalid JSON") {
 		return
 	}
 	if err := a.rules.Add(input.Domain, input.Action); err != nil {
@@ -52,22 +51,28 @@ func (a *API) deleteRule(writer http.ResponseWriter, request *http.Request) {
 
 func (a *API) updateSources(writer http.ResponseWriter, request *http.Request) {
 	var sources []rules.Source
-	if err := json.NewDecoder(request.Body).Decode(&sources); err != nil {
-		writeError(writer, http.StatusBadRequest, "invalid rule sources")
+	if !decodeJSON(writer, request, &sources, "invalid rule sources") {
 		return
 	}
+	a.configMu.Lock()
+	defer a.configMu.Unlock()
 	a.updater.SetSources(sources)
-	config := a.resolver.configSnapshot()
-	config.RuleSources = a.updater.Sources()
+	a.refreshRuleSources()
+	next := a.savedConfig()
+	next.RuleSources = a.updater.Sources()
+	if err := saveConfig(&next); err != nil {
+		writeError(writer, http.StatusInternalServerError, "could not save rule sources: "+err.Error())
+		return
+	}
+	a.saved = &next
+	writeJSON(writer, http.StatusOK, a.updater.Sources())
+}
+
+// refreshRuleSources downloads new or re-enabled sources in the background.
+func (a *API) refreshRuleSources() {
 	ctx := a.ctx
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	go a.updater.RefreshNow(ctx)
-	if err := saveConfig(&config); err != nil {
-		writeError(writer, http.StatusInternalServerError, "could not save rule sources")
-		return
-	}
-	a.resolver.updateConfig(config)
-	writeJSON(writer, http.StatusOK, config.RuleSources)
+	go a.updater.RefreshDue(ctx)
 }

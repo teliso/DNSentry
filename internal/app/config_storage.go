@@ -2,7 +2,6 @@ package app
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -15,11 +14,14 @@ import (
 
 const maxConfiguredUpstreams = 32
 
-func configPath() string { return filepath.Join("data", "config.yaml") }
+// configFile is the YAML configuration path; Run may override it once at startup.
+var configFile = filepath.Join("data", "config.yaml")
+
+func configPath() string { return configFile }
 
 func configBackupPath() string { return configPath() + ".bak" }
 
-func legacyConfigPath() string { return filepath.Join("data", "config.json") }
+func legacyConfigPath() string { return filepath.Join(filepath.Dir(configPath()), "config.json") }
 
 func loadConfig() (*Config, error) {
 	data, err := os.ReadFile(configPath())
@@ -41,7 +43,7 @@ func loadConfig() (*Config, error) {
 	legacyData, legacyErr := os.ReadFile(legacyConfigPath())
 	if legacyErr != nil {
 		if os.IsNotExist(legacyErr) {
-			return nil, errors.New("neither data/config.yaml nor legacy data/config.json exists")
+			return nil, fmt.Errorf("neither %s nor legacy %s exists", configPath(), legacyConfigPath())
 		}
 		return nil, legacyErr
 	}

@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import Icon, { type IconName } from './components/Icon.svelte';
+  import RestartBanner from './components/RestartBanner.svelte';
   import Toasts from './components/Toasts.svelte';
   import TokenDialog from './components/TokenDialog.svelte';
   import Dashboard from './pages/Dashboard.svelte';
@@ -80,6 +81,7 @@
 
   <main>
     <div class="page">
+      <RestartBanner />
       <Page />
     </div>
   </main>

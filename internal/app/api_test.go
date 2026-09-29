@@ -1,13 +1,13 @@
 package app
 
 import (
-	"bytes"
-	"github.com/teliso/DNSentry/internal/cache"
-	"github.com/teliso/DNSentry/internal/querylog"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"github.com/teliso/DNSentry/internal/cache"
+	"github.com/teliso/DNSentry/internal/querylog"
 )
 
 func TestQueryLogSettingsChangedRequiresRestart(t *testing.T) {
@@ -85,17 +85,5 @@ func TestLoopbackStateChangingAPIRequiresSameOrigin(t *testing.T) {
 	api.handle(recorder, request)
 	if recorder.Code != http.StatusForbidden {
 		t.Fatalf("cross-origin state-changing request status = %d, want %d", recorder.Code, http.StatusForbidden)
-	}
-}
-
-func TestJSONBodyLimitRejectsOversizedRequest(t *testing.T) {
-	handler := withJSONBodyLimit(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
-		writer.WriteHeader(http.StatusNoContent)
-	}))
-	request := httptest.NewRequest(http.MethodPost, "http://127.0.0.1/api/config", bytes.NewReader(bytes.Repeat([]byte{'x'}, maxJSONBodyBytes+1)))
-	recorder := httptest.NewRecorder()
-	handler.ServeHTTP(recorder, request)
-	if recorder.Code != http.StatusRequestEntityTooLarge {
-		t.Fatalf("expected oversized request to be rejected, got %d", recorder.Code)
 	}
 }
