@@ -33,11 +33,9 @@
 </Card>
 
 <section class="ranks">
+  <div class="col">
   <Card title="客户端" description="按请求数排序（最近日志）">
     <BarList items={status?.dashboard?.client_ips ?? []} />
-  </Card>
-  <Card title="请求域名" description="被查询最多的域名">
-    <BarList items={status?.dashboard?.domains ?? []} />
   </Card>
   <Card title="被拦截域名" description="命中过滤规则最多的域名">
     <BarList items={status?.dashboard?.blocked_domains ?? []} tone="danger" empty="尚无拦截记录" />
@@ -45,6 +43,12 @@
   <Card title="上游服务器" description="请求数与平均响应时间">
     <BarList items={(status?.dashboard?.upstreams ?? []).map((item) => ({ name: item.address, count: item.count, note: formatDuration(item.average_duration_ms) }))} />
   </Card>
+  </div>
+  <div class="col">
+  <Card title="请求域名" description="被查询最多的域名">
+    <BarList items={status?.dashboard?.domains ?? []} />
+  </Card>
+  </div>
 </section>
 
 <section class="ops">
@@ -96,8 +100,10 @@
 
 <style>
   .stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; }
-  .ranks { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
-  .ops { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+  /* Independent columns: a tall card never stretches its neighbour. */
+  .ranks { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; align-items: start; }
+  .col { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+  .ops { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; align-items: start; }
 
   .kv { display: grid; grid-template-columns: 1fr 1fr; gap: 14px 16px; margin: 0; }
   .kv dt { color: var(--muted); font-size: 12px; }
