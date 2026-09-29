@@ -112,4 +112,3 @@ func noUsableUpstreamResponse(fallback *upstreamQueryResult, lastUpstream string
 	}
 	return nil, lastUpstream, lastErr
 }
-
