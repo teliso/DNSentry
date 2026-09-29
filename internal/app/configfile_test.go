@@ -314,17 +314,3 @@ func TestLoadConfigCreatesDefaultNextToConfigFile(t *testing.T) {
 		t.Fatalf("CheckConfig: %v", err)
 	}
 }
-
-func TestRemovedFastestAddrModeFallsBackToLoadBalance(t *testing.T) {
-	config := testConfig()
-	config.UpstreamMode = "fastest_addr"
-	validated, err := validateConfig(config)
-	if err != nil || validated.UpstreamMode != upstreamModeLoadBalance {
-		t.Fatalf("mode = %q, err = %v", validated.UpstreamMode, err)
-	}
-	config = testConfig()
-	config.UpstreamMode = "random"
-	if _, err := validateConfig(config); err == nil {
-		t.Fatal("unknown upstream modes must still be rejected")
-	}
-}

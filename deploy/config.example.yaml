@@ -19,7 +19,7 @@ dns:
   # Used only when every primary upstream fails, times out or answers
   # SERVFAIL/REFUSED.
   fallback_upstreams: []
-  # load_balance | parallel
+  # load_balance | parallel | fastest_addr
   upstream_mode: "load_balance"
   # Plain-DNS servers used to resolve the host names of encrypted upstreams.
   bootstrap_dns:

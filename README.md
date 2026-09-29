@@ -3,7 +3,7 @@
 DNSentry 是一个自托管的 DNS 过滤与解析服务，带 Web 管理控制台。它在本地拦截广告、跟踪和恶意域名，把其余请求转发到你选择的上游（支持加密 DNS），并可以对外提供 DoT / DoH / DoH3 / DoQ / DNSCrypt 服务。
 
 - **过滤**：本地规则（AdGuard / hosts / 纯域名语法）+ 远程规则源订阅，下载的列表缓存在磁盘，条件请求增量更新；规则检测可解释任一域名为何被拦截或放行。
-- **解析**：域名分流（条件转发）、多上游负载均衡 / 并行，备用上游、自动熔断与恢复，Bootstrap DNS，DNSSEC 验证，本地记录。
+- **解析**：域名分流（条件转发）、多上游负载均衡 / 并行 / 最快 IP，备用上游、自动熔断与恢复，Bootstrap DNS，DNSSEC 验证，本地记录。
 - **缓存**：按字节计的分片 LRU，负缓存、TTL 限制、乐观缓存、热门条目预取（`cache.prefetch`），ECS 分片。
 - **安全**：客户端白/黑名单、单客户端限速、并发上限、DNS Rebinding 防护；控制台默认只监听本机，公开访问必须配置令牌。
 - **可观测**：查询日志（可持久化为 JSONL）、仪表盘、Prometheus 指标、`/healthz` 与 `/readyz`、结构化日志。
@@ -100,10 +100,11 @@ example.com                 # 拦截该域名及其所有子域名
 
 ## 解析与上游
 
-上游支持普通 DNS（`1.1.1.1:53`）、DoT（`tls://host:853`）、DoH（`https://host/dns-query`）、DoH3（`h3://host/dns-query`）、DoQ（`quic://host:853`）和 DNSCrypt（`sdns://`）。分发策略（旧版本的 `fastest_addr` 已移除，读取到时按 `load_balance` 处理）：
+上游支持普通 DNS（`1.1.1.1:53`）、DoT（`tls://host:853`）、DoH（`https://host/dns-query`）、DoH3（`h3://host/dns-query`）、DoQ（`quic://host:853`）和 DNSCrypt（`sdns://`）。分发策略：
 
 - `load_balance`：按健康状态轮转，额外流量最少（默认）。
 - `parallel`：同时询问多个上游，取首个有效响应。
+- `fastest_addr`：并发查询后对公网地址做 TCP/443 测速，把最快地址排在前面。
 
 连续失败 3 次的上游会按指数退避暂时跳过；`fallback_upstreams` 只在主上游全部失败、超时或返回 SERVFAIL/REFUSED 时使用。并发的相同查询会合并为一次上游请求。“DNS 设置 → 测试上游”可逐个测试地址（结果不写入缓存）。
 
