@@ -34,7 +34,7 @@
         <input type="number" min="0" bind:value={config.cache_ttl_max} disabled={!config.cache_enabled} />
       </Field>
       {#if config.cache_optimistic}
-        <Field label="乐观应答 TTL" hint="过期响应返回给客户端时使用的 TTL（秒）">
+        <Field label="乐观应答 TTL" hint="返回过期响应时的 TTL（秒）">
           <input type="number" min="0" bind:value={config.cache_optimistic_answer_ttl} />
         </Field>
         <Field label="乐观缓存最大寿命" hint="过期后继续保留旧响应的秒数">

@@ -36,12 +36,10 @@
       <span class="badge mono">quic://host:853</span>
       <span class="badge mono">sdns://…</span>
     </p>
-    <div class="form-grid two">
+    <div class="editors">
       <ListEditor label="主上游 DNS" hint="按顺序填写，最多 32 个" placeholder="1.1.1.1:53&#10;https://dns.example/dns-query" maxItems={32} code rows={5} bind:values={config.upstreams} />
-      <div class="stack">
-        <ListEditor label="备用 DNS" hint="主上游不可用时使用" placeholder="tls://backup.example:853" maxItems={32} code rows={2} bind:values={config.fallback_upstreams} />
-        <ListEditor label="Bootstrap DNS" hint="仅用于解析加密上游的域名，建议填 IP:53" placeholder="1.1.1.1:53" maxItems={16} code rows={2} bind:values={config.bootstrap_dns} />
-      </div>
+      <ListEditor label="备用 DNS" hint="主上游不可用时使用" placeholder="tls://backup.example:853" maxItems={32} code rows={5} bind:values={config.fallback_upstreams} />
+      <ListEditor label="Bootstrap DNS" hint="仅用于解析加密上游的域名" placeholder="1.1.1.1:53" maxItems={16} code rows={5} bind:values={config.bootstrap_dns} />
     </div>
 
     <hr class="divider" />
@@ -87,6 +85,8 @@
 
 <style>
   .protocols { display: flex; flex-wrap: wrap; gap: 6px; }
+  /* Three editors of the same height side by side. */
+  .editors { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
   .mode-group { display: flex; flex-direction: column; gap: 8px; }
   .group-label { font-weight: 500; font-size: 13px; }
   .modes { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
@@ -106,5 +106,6 @@
   .dot { flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--ok); }
   .dot.bad { background: var(--danger); }
   .bad-text { color: var(--danger); max-width: 40%; overflow-wrap: anywhere; font-size: 12px; }
+  @media (max-width: 1000px) { .editors { grid-template-columns: 1fr; } }
   @media (max-width: 860px) { .modes { grid-template-columns: 1fr; } }
 </style>

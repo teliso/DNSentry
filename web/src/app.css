@@ -161,10 +161,12 @@ table.data .cell-domain { font-family: var(--font-mono); font-size: 13px; word-b
 .stack { display: flex; flex-direction: column; gap: 16px; }
 .form-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 16px; }
 .form-grid.two { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.form-grid.three { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .divider { border: 0; border-top: 1px solid var(--line); margin: 4px 0; }
 /* Cards that are targets of in-page section links stop below the sticky bars. */
 [id] { scroll-margin-top: calc(var(--topbar-height) + 64px); }
 .unit { position: relative; }
 .unit input { padding-right: 44px; }
 .unit > span { position: absolute; right: 11px; top: 7px; color: var(--muted); pointer-events: none; }
-@media (max-width: 640px) { .form-grid.two { grid-template-columns: 1fr; } }
+@media (max-width: 860px) { .form-grid.three { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 640px) { .form-grid.two, .form-grid.three { grid-template-columns: 1fr; } }
