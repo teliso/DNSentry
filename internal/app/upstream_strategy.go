@@ -113,12 +113,3 @@ func noUsableUpstreamResponse(fallback *upstreamQueryResult, lastUpstream string
 	return nil, lastUpstream, lastErr
 }
 
-func fastestDNSResponse(results []upstreamQueryResult) upstreamQueryResult {
-	best := results[0]
-	for _, result := range results[1:] {
-		if result.latency < best.latency {
-			best = result
-		}
-	}
-	return best
-}
