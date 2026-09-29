@@ -61,9 +61,13 @@ var apiRoutes = []apiRoute{
 	{http.MethodGet, "/rules", (*API).listRules},
 	{http.MethodPost, "/rules", (*API).addRule},
 	{http.MethodDelete, "/rules", (*API).deleteRule},
+	{http.MethodGet, "/rules/check", (*API).checkRule},
+	{http.MethodGet, "/rules/local", (*API).getLocalRules},
+	{http.MethodPut, "/rules/local", (*API).putLocalRules},
 	{http.MethodPost, "/reload", (*API).reloadRules},
 	{http.MethodGet, "/sources", (*API).listSources},
 	{http.MethodPut, "/sources", (*API).updateSources},
+	{http.MethodPost, "/sources/refresh", (*API).refreshSources},
 	{http.MethodGet, "/logs", (*API).listLogs},
 }
 
@@ -132,6 +136,7 @@ func (a *API) getStatus(writer http.ResponseWriter, _ *http.Request) {
 		"total_queries":            total,
 		"blocked_queries":          blocked,
 		"rules":                    a.rules.Len(),
+		"local_rules":              a.rules.Counts()[rules.SourceLocal],
 		"cache":                    a.cache.Stats(),
 		"dnssec":                   a.resolver.DNSSECStats(),
 		"security":                 a.logs.SecurityStats(),

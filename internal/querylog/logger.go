@@ -17,6 +17,9 @@ const (
 	ActionOverloaded       = "overloaded"
 	ActionRebindingBlocked = "rebinding_blocked"
 	ActionLocal            = "local"
+	ActionForwarded        = "forwarded"
+	ActionCached           = "cached"
+	ActionOptimistic       = "optimistic"
 	ActionError            = "error"
 )
 
@@ -28,6 +31,10 @@ type Entry struct {
 	Action   string `json:"action"`
 	Upstream string `json:"upstream,omitempty"`
 	Duration int64  `json:"duration_ms"`
+	// Rule is the filter rule that decided the query and RuleSource the list
+	// it came from (empty for the local rules file).
+	Rule       string `json:"rule,omitempty"`
+	RuleSource string `json:"rule_source,omitempty"`
 }
 
 type MetricPoint struct {

@@ -1,7 +1,12 @@
 // Shapes of the DNSentry JSON API (see internal/app/api*.go).
 
 export type RuleAction = 'block' | 'allow';
-export type Rule = { domain: string; action: RuleAction | 'rewrite'; ip?: string; source?: string };
+/** A filter rule; `source` is empty for the local rules file, else the list URL. */
+export type Rule = { domain: string; action: RuleAction; ip?: string; source?: string };
+export type RulePage = { total: number; items: Rule[] };
+export type RuleQuery = { search?: string; action?: RuleAction | ''; source?: string; offset?: number; limit?: number };
+export type RuleCheck = { domain: string; rule?: Rule; candidates: Rule[] };
+export type LocalSummary = { rules: number; ignored: number; ignored_lines: number[] };
 
 export type MetricPoint = { time: string; queries: number; blocked: number };
 export type RankedCount = { name: string; count: number };
@@ -27,11 +32,15 @@ export type UpstreamTest = { address: string; protocol: string; success: boolean
 
 export type RuleSource = {
   url: string;
+  name?: string;
   enabled: boolean;
   interval_minutes: number;
+  // Runtime status (read-only)
   last_updated?: string;
+  last_checked?: string;
   last_error?: string;
-  rule_count: number;
+  rule_count?: number;
+  updating?: boolean;
 };
 
 export type CacheStats = {
@@ -74,6 +83,7 @@ export type Status = {
   total_queries: number;
   blocked_queries: number;
   rules: number;
+  local_rules: number;
   cache: CacheStats;
   dnssec: DNSSECStats;
   security: SecurityStats;
@@ -90,6 +100,8 @@ export type LogEntry = {
   action: string;
   upstream?: string;
   duration_ms: number;
+  rule?: string;
+  rule_source?: string;
 };
 
 export type LocalRecordType = 'A' | 'AAAA' | 'CNAME' | 'TXT';

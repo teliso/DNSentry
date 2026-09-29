@@ -3,13 +3,13 @@ package app
 import (
 	"encoding/json"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
-	"runtime"
 	"sync"
 
 	"gopkg.in/yaml.v3"
+
+	"github.com/teliso/DNSentry/internal/fsutil"
 )
 
 const maxConfiguredUpstreams = 32
@@ -77,50 +77,7 @@ func backupConfig(path string) error {
 		}
 		return err
 	}
-	directory := filepath.Dir(path)
-	temporary, err := os.CreateTemp(directory, ".config.yaml.bak.tmp-*")
-	if err != nil {
-		return err
-	}
-	temporaryPath := temporary.Name()
-	committed := false
-	defer func() {
-		if !committed {
-			_ = os.Remove(temporaryPath)
-		}
-	}()
-	if err := temporary.Chmod(0600); err != nil {
-		_ = temporary.Close()
-		return err
-	}
-	if written, err := temporary.Write(data); err != nil {
-		_ = temporary.Close()
-		return err
-	} else if written != len(data) {
-		_ = temporary.Close()
-		return io.ErrShortWrite
-	}
-	if err := temporary.Sync(); err != nil {
-		_ = temporary.Close()
-		return err
-	}
-	if err := temporary.Close(); err != nil {
-		return err
-	}
-	backupPath := configBackupPath()
-	if err := os.Rename(temporaryPath, backupPath); err != nil {
-		if runtime.GOOS != "windows" {
-			return err
-		}
-		if removeErr := os.Remove(backupPath); removeErr != nil && !os.IsNotExist(removeErr) {
-			return removeErr
-		}
-		if err := os.Rename(temporaryPath, backupPath); err != nil {
-			return err
-		}
-	}
-	committed = true
-	return nil
+	return fsutil.WriteFileAtomic(configBackupPath(), data, 0600)
 }
 
 func loadConfigBackup() (*Config, error) {
@@ -156,58 +113,11 @@ func saveConfig(config *Config) error {
 	}
 
 	path := configPath()
-	directory := filepath.Dir(path)
-	if err := os.MkdirAll(directory, 0755); err != nil {
-		return fmt.Errorf("create config directory: %w", err)
-	}
-
-	temporary, err := os.CreateTemp(directory, "."+filepath.Base(path)+".tmp-*")
-	if err != nil {
-		return fmt.Errorf("create temporary config: %w", err)
-	}
-	temporaryPath := temporary.Name()
-	committed := false
-	defer func() {
-		if !committed {
-			_ = os.Remove(temporaryPath)
-		}
-	}()
-
-	if err := temporary.Chmod(0600); err != nil {
-		_ = temporary.Close()
-		return fmt.Errorf("set temporary config permissions: %w", err)
-	}
-	written, err := temporary.Write(data)
-	if err != nil {
-		_ = temporary.Close()
-		return fmt.Errorf("write temporary config: %w", err)
-	}
-	if written != len(data) {
-		_ = temporary.Close()
-		return fmt.Errorf("write temporary config: %w", io.ErrShortWrite)
-	}
-	if err := temporary.Sync(); err != nil {
-		_ = temporary.Close()
-		return fmt.Errorf("sync temporary config: %w", err)
-	}
-	if err := temporary.Close(); err != nil {
-		return fmt.Errorf("close temporary config: %w", err)
-	}
 	if err := backupConfig(path); err != nil {
 		return fmt.Errorf("backup config: %w", err)
 	}
-	if err := os.Rename(temporaryPath, path); err != nil {
-		if runtime.GOOS != "windows" {
-			return fmt.Errorf("replace config: %w", err)
-		}
-		// Windows' MoveFile, used by os.Rename, does not replace an existing file.
-		if removeErr := os.Remove(path); removeErr != nil {
-			return fmt.Errorf("replace config: %w (remove existing config: %v)", err, removeErr)
-		}
-		if retryErr := os.Rename(temporaryPath, path); retryErr != nil {
-			return fmt.Errorf("replace config after removing existing config: %w", retryErr)
-		}
+	if err := fsutil.WriteFileAtomic(path, data, 0600); err != nil {
+		return fmt.Errorf("write config: %w", err)
 	}
-	committed = true
 	return nil
 }

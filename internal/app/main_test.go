@@ -39,17 +39,6 @@ func TestBlockingModes(t *testing.T) {
 	}
 }
 
-func TestRewriteResponse(t *testing.T) {
-	request := newTestRequest("home.lan.", 1)
-	response := rewriteResponse(request, request.Question[0], net.ParseIP("192.168.1.10"))
-	if response == nil || len(response.Answer) != 1 {
-		t.Fatal("expected one rewrite answer")
-	}
-	if got := response.Answer[0].String(); got == "" {
-		t.Fatal("expected a serialized rewrite answer")
-	}
-}
-
 func TestCacheResponsePolicies(t *testing.T) {
 	message := newTestRequest("ttl.test.", dns.TypeA)
 	message.Answer = []dns.RR{&dns.A{Hdr: dns.RR_Header{Name: "ttl.test.", Rrtype: dns.TypeA, Class: dns.ClassINET, Ttl: 5}, A: net.IPv4(192, 0, 2, 2)}}

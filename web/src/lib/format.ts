@@ -51,7 +51,6 @@ export type Tone = 'neutral' | 'ok' | 'danger' | 'warn' | 'accent';
 /** Display name and tone for the `action` recorded on each query log entry. */
 export const ACTION_LABELS: Record<string, { label: string; tone: Tone }> = {
   block: { label: '已拦截', tone: 'danger' },
-  rewrite: { label: '已改写', tone: 'accent' },
   local: { label: '本地记录', tone: 'accent' },
   cached: { label: '缓存命中', tone: 'ok' },
   optimistic: { label: '乐观缓存', tone: 'ok' },

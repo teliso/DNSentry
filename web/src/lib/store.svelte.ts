@@ -1,7 +1,7 @@
 import { api, APIError, initToken, setToken, setUnauthorizedHandler } from './api';
 import { normalizeConfig, serializeConfig, validateConfig } from './config';
 import { toasts } from './toast.svelte';
-import type { Config, LogEntry, Rule, RuleAction, RuleSource, Status, UpstreamTest } from './types';
+import type { Config, LocalSummary, LogEntry, Rule, RuleAction, RuleSource, Status, UpstreamTest } from './types';
 
 const POLL_INTERVAL_MS = 10_000;
 
@@ -15,8 +15,11 @@ function messageOf(cause: unknown, fallback: string): string {
 class ConsoleStore {
   status = $state.raw<Status | null>(null);
   logs = $state.raw<LogEntry[]>([]);
-  rules = $state.raw<Rule[]>([]);
-  rulesLoaded = $state(false);
+  sources = $state.raw<RuleSource[]>([]);
+  /** Bumped after every rule change so rule views know to reload. */
+  rulesVersion = $state(0);
+  /** Source filter requested by another page (e.g. "查看规则" on a source). */
+  ruleSourceFilter = $state('');
   online = $state(false);
   busy = $state(false);
   tokenRequired = $state(false);
@@ -26,7 +29,6 @@ class ConsoleStore {
   /** Editable copy bound to the settings forms. */
   draft = $state<Config | null>(null);
 
-  sources = $derived<RuleSource[]>(this.status?.rule_sources ?? []);
   dirty = $derived(
     this.draft !== null && this.saved !== null && JSON.stringify(serializeConfig(this.draft)) !== JSON.stringify(serializeConfig(this.saved))
   );
@@ -64,6 +66,7 @@ class ConsoleStore {
     try {
       const [status, logs] = await Promise.all([api.status(), api.logs()]);
       this.status = status;
+      this.setSources(status.rule_sources ?? []);
       this.logs = logs;
       this.online = true;
       this.tokenRequired = false;
@@ -137,46 +140,77 @@ class ConsoleStore {
     return result;
   }
 
-  async loadRules() {
-    try {
-      this.rules = await api.rules();
-      this.rulesLoaded = true;
-    } catch (cause) {
-      toasts.error(messageOf(cause, '读取规则失败'));
-    }
+  private rulesChanged() {
+    this.rulesVersion++;
+    void this.refreshLive();
   }
 
   async addRule(domain: string, action: RuleAction): Promise<boolean> {
-    const ok = await this.act(async () => {
-      await api.addRule(domain, action);
-      toasts.success('规则已添加');
-      await Promise.all([this.loadRules(), this.refreshLive()]);
+    return this.act(async () => {
+      const rule = await api.addRule(domain, action);
+      toasts.success(`已添加${rule.action === 'allow' ? '放行' : '拦截'}规则 ${rule.domain}`);
+      this.rulesChanged();
     }, '添加规则失败');
-    return ok;
   }
 
-  async removeRule(rule: Rule) {
+  async removeRule(rule: Pick<Rule, 'domain' | 'action'>) {
     await this.act(async () => {
-      await api.deleteRule({ domain: rule.domain, action: rule.action });
+      await api.deleteRule(rule);
       toasts.success('规则已删除');
-      await Promise.all([this.loadRules(), this.refreshLive()]);
+      this.rulesChanged();
     }, '删除规则失败');
+  }
+
+  async saveLocalRules(text: string): Promise<LocalSummary | null> {
+    let summary: LocalSummary | null = null;
+    await this.act(async () => {
+      summary = await api.saveLocalRules(text);
+      this.rulesChanged();
+    }, '保存规则文件失败');
+    return summary;
   }
 
   async reloadRules() {
     await this.act(async () => {
       await api.reloadRules();
-      toasts.success('规则已重新载入');
-      await Promise.all([this.loadRules(), this.refreshLive()]);
+      toasts.success('已从磁盘重新载入本地规则');
+      this.rulesChanged();
     }, '载入规则失败');
+  }
+
+  private sourcePoll = 0;
+
+  /** Adopts a source list and polls quickly while any source is downloading. */
+  private setSources(sources: RuleSource[]) {
+    const wasUpdating = this.sources.some((source) => source.updating);
+    this.sources = sources;
+    const updating = sources.some((source) => source.updating);
+    if (wasUpdating && !updating) this.rulesChanged();
+    if (updating && !this.sourcePoll) {
+      this.sourcePoll = window.setTimeout(async () => {
+        this.sourcePoll = 0;
+        try {
+          this.setSources(await api.sources());
+        } catch {
+          /* the regular poll reports connection problems */
+        }
+      }, 1500);
+    }
+  }
+
+  async refreshSources(url = ''): Promise<boolean> {
+    return this.act(async () => {
+      this.setSources(await api.refreshSources(url));
+      toasts.info(url ? '正在更新规则源' : '正在更新全部规则源');
+    }, '更新规则源失败');
   }
 
   async saveSources(next: RuleSource[], done = '规则源已保存'): Promise<boolean> {
     return this.act(async () => {
-      const payload = next.map(({ url, enabled, interval_minutes, rule_count }) => ({ url, enabled, interval_minutes, rule_count: rule_count || 0 }));
-      await api.saveSources(payload as RuleSource[]);
+      const payload = next.map(({ url, name, enabled, interval_minutes }) => ({ url, name, enabled, interval_minutes }));
+      this.setSources(await api.saveSources(payload));
       toasts.success(done);
-      await this.refreshLive();
+      this.rulesChanged();
     }, '保存规则源失败');
   }
 }

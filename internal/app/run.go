@@ -60,6 +60,12 @@ func checkWebExposure(config *Config, apiToken string) error {
 	return nil
 }
 
+// ruleCacheDir is where downloaded remote rule lists are kept, next to the
+// local rules file.
+func ruleCacheDir(rulesFile string) string {
+	return filepath.Join(filepath.Dir(rulesFile), "remote")
+}
+
 func ensureRulesFile(path string) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
 		return err
@@ -129,7 +135,7 @@ func run(ctx context.Context, stop context.CancelFunc, static fs.FS) error {
 		return err
 	}
 
-	updater := rules.NewUpdater(ruleStore, config.RuleSources)
+	updater := rules.NewUpdater(ruleStore, ruleCacheDir(config.RulesFile), config.RuleSources)
 	api := newAPI(ctx, apiToken, server, updater, services.dnscrypt)
 	httpServer := newHTTPServer(api, static, dnsService.Ready)
 	httpListener, err := net.Listen("tcp", config.HTTPListen)

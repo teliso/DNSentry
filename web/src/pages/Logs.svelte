@@ -5,6 +5,7 @@
   import PageHeader from '../components/PageHeader.svelte';
   import Pager from '../components/Pager.svelte';
   import { actionInfo, formatClock, formatDuration, formatNumber } from '../lib/format';
+  import { sourceName } from '../lib/rules';
   import { store } from '../lib/store.svelte';
 
   const PAGE_SIZE = 50;
@@ -21,6 +22,14 @@
     );
   });
   const visible = $derived(filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE));
+
+  /** Actions that ended with an answer from upstream or cache, i.e. not filtered. */
+  const RESOLVED = new Set(['forwarded', 'allow', 'cached', 'optimistic']);
+
+  function quickRule(domain: string, blocked: boolean) {
+    const verb = blocked ? '放行' : '拦截';
+    if (confirm(`为 ${domain} 及其子域名添加${verb}规则？`)) void store.addRule(domain, blocked ? 'allow' : 'block');
+  }
 
   $effect(() => {
     query;
@@ -55,7 +64,7 @@
   {:else}
     <div class="table-wrap">
       <table class="data">
-        <thead><tr><th>时间</th><th>客户端</th><th>域名</th><th>类型</th><th>结果</th><th>上游</th><th class="num">耗时</th></tr></thead>
+        <thead><tr><th>时间</th><th>客户端</th><th>域名</th><th>类型</th><th>结果</th><th>上游</th><th class="num">耗时</th><th></th></tr></thead>
         <tbody>
           {#each visible as entry, index (entry.time + entry.domain + entry.type + index)}
             {@const info = actionInfo(entry.action)}
@@ -64,9 +73,21 @@
               <td class="mono muted">{entry.client ?? '—'}</td>
               <td class="cell-domain">{entry.domain}</td>
               <td class="muted">{entry.type}</td>
-              <td><span class="badge {info.tone}">{info.label}</span></td>
+              <td>
+                <span class="badge {info.tone}">{info.label}</span>
+                {#if entry.rule}
+                  <small class="rule mono" title="来自 {sourceName(entry.rule_source, store.sources)}">{entry.rule}</small>
+                {/if}
+              </td>
               <td class="mono muted upstream" title={entry.upstream}>{entry.upstream ?? '—'}</td>
               <td class="num muted">{formatDuration(entry.duration_ms)}</td>
+              <td class="end">
+                {#if entry.action === 'block'}
+                  <button class="btn ghost sm" type="button" disabled={store.busy} onclick={() => quickRule(entry.domain, true)}>放行</button>
+                {:else if RESOLVED.has(entry.action) && !entry.rule}
+                  <button class="btn ghost sm" type="button" disabled={store.busy} onclick={() => quickRule(entry.domain, false)}>拦截</button>
+                {/if}
+              </td>
             </tr>
           {/each}
         </tbody>
@@ -83,5 +104,7 @@
   .search input { padding-left: 32px; }
   .toolbar select { width: auto; min-width: 150px; }
   .count { margin-left: auto; }
+  .rule { display: block; margin-top: 2px; color: var(--muted); font-size: 11px; max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .end { text-align: right; }
   .upstream { max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 </style>

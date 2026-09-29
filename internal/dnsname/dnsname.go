@@ -10,14 +10,22 @@ func Normalize(value string) string {
 	return strings.TrimSuffix(value, ".")
 }
 
-// Valid reports whether a normalized name is a syntactically plausible domain.
+// Valid reports whether a normalized name is a syntactically valid host name:
+// dot-separated labels of letters, digits, '-' and '_', without leading or
+// trailing hyphens.
 func Valid(name string) bool {
-	if name == "" || len(name) > 253 || strings.ContainsAny(name, " /\\,;()[]{}") {
+	if name == "" || len(name) > 253 {
 		return false
 	}
 	for _, label := range strings.Split(name, ".") {
-		if label == "" || len(label) > 63 || strings.HasPrefix(label, "-") || strings.HasSuffix(label, "-") {
+		if label == "" || len(label) > 63 || label[0] == '-' || label[len(label)-1] == '-' {
 			return false
+		}
+		for index := 0; index < len(label); index++ {
+			c := label[index]
+			if !(c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9' || c == '-' || c == '_') {
+				return false
+			}
 		}
 	}
 	return true

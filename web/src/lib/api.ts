@@ -1,4 +1,4 @@
-import type { Config, LogEntry, Rule, RuleAction, RuleSource, Status, UpstreamTest } from './types';
+import type { Config, LocalSummary, LogEntry, Rule, RuleAction, RuleCheck, RulePage, RuleQuery, RuleSource, Status, UpstreamTest } from './types';
 
 const TOKEN_KEY = 'dnsentry_api_token';
 
@@ -77,11 +77,19 @@ export const api = {
   restoreConfig: () => request<Config>('/config/restore', 'POST'),
   clearCache: () => request<{ status: string }>('/cache/clear', 'POST'),
   testUpstreams: (upstreams: string[]) => request<UpstreamTest[]>('/upstreams/test', 'POST', { upstreams }),
-  rules: () => request<Rule[] | null>('/rules').then((list) => list ?? []),
-  addRule: (domain: string, action: RuleAction) => request('/rules', 'POST', { domain, action }),
+  rules: (query: RuleQuery) => {
+    const params = new URLSearchParams();
+    for (const [key, value] of Object.entries(query)) if (value !== undefined && value !== '') params.set(key, String(value));
+    return request<RulePage>(`/rules?${params}`);
+  },
+  checkRule: (domain: string) => request<RuleCheck>(`/rules/check?domain=${encodeURIComponent(domain)}`),
+  localRules: () => request<{ text: string }>('/rules/local').then((result) => result.text),
+  saveLocalRules: (text: string) => request<LocalSummary>('/rules/local', 'PUT', { text }),
+  addRule: (domain: string, action: RuleAction) => request<Rule>('/rules', 'POST', { domain, action }),
   deleteRule: (rule: Pick<Rule, 'domain' | 'action'>) =>
     request(`/rules?domain=${encodeURIComponent(rule.domain)}&action=${rule.action}`, 'DELETE'),
   reloadRules: () => request('/reload', 'POST'),
   sources: () => request<RuleSource[]>('/sources'),
-  saveSources: (sources: RuleSource[]) => request<RuleSource[]>('/sources', 'PUT', sources)
+  saveSources: (sources: RuleSource[]) => request<RuleSource[]>('/sources', 'PUT', sources),
+  refreshSources: (url = '') => request<RuleSource[]>('/sources/refresh', 'POST', { url })
 };

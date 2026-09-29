@@ -42,7 +42,7 @@ func newConfigTestAPI(t *testing.T) *API {
 		dnssecCacheOK: make(map[string]struct{}),
 	}
 	server.configureAccess(validated.Access)
-	return newAPI(t.Context(), "", server, rules.NewUpdater(server.rules, nil), nil)
+	return newAPI(t.Context(), "", server, rules.NewUpdater(server.rules, ruleCacheDir(validated.RulesFile), nil), nil)
 }
 
 func callAPI(t *testing.T, api *API, method, path string, body any) *httptest.ResponseRecorder {

@@ -8,7 +8,8 @@ DNSentry is a Go DNS filtering service with a Svelte management console.
 cmd/dnsentry/         服务入口（嵌入已构建的 Web 控制台）
 cmd/dnsentry-query/   带端口的 DNS 查询小工具
 internal/app/         DNS 服务、上游策略、加密 DNS、DNSSEC、配置与 HTTP API
-internal/rules/       过滤规则存储、匹配与远程规则源更新
+internal/rules/       规则解析与匹配、本地规则文件、远程规则源（下载、磁盘缓存、定时更新）
+internal/fsutil/      原子写文件
 internal/querylog/    查询日志、仪表盘聚合与 JSONL 持久化
 internal/cache/       分片 LRU DNS 缓存
 internal/dnsname/     域名规范化与校验
@@ -73,24 +74,36 @@ Invoke-RestMethod http://127.0.0.1:18080/api/logs
 
 查询日志默认只保存在内存中。若需要跨重启保留记录，可在 `logging` 中启用异步 JSONL 持久化；每个日期会生成一个 `file-YYYY-MM-DD.jsonl` 文件，启动时会加载当天最近的内存日志条数，并清理超过 `retention_days` 的同前缀文件。`query_log_size` 及所有持久化日志设置的变更均需重启服务后生效。持久化日志包含客户端 IP 和查询域名，应仅在符合隐私、合规和访问控制要求时启用。
 
-Rules are loaded from `data/rules.txt`. Remote rule sources can be configured from 服务设置 or through the API:
+## 过滤规则
 
-```powershell
-$source = @(@{ url = 'https://example.com/adguard.txt'; enabled = $true; interval_minutes = 360 })
-Invoke-RestMethod http://127.0.0.1:18080/api/sources -Method Put -ContentType 'application/json' -Body ($source | ConvertTo-Json)
-```
-
-Sources are fetched once after being added (or re-enabled) and then refreshed at their configured interval. A failed refresh keeps the last successful rules active. Disabling or removing a source stops its rules immediately.
-
-The resolver also coalesces concurrent requests for the same cache key, skips upstreams after three consecutive failures with exponential cooldown, and exposes primary and fallback upstream health through `/api/status`. `/api/status` returns `dns_listen` as the compatibility primary address and `dns_listens` as the full ordinary DNS address list. `/healthz` reports process liveness and `/readyz` reports whether at least one ordinary DNS listener pair is bound.
+本地规则保存在 `data/rules.txt`，可在控制台“过滤规则”页逐条添加/删除，或直接编辑整个文件（保留注释和格式，保存后立即生效）。支持的语法：
 
 ```text
-||ads.example.com^
-@@||trusted.example.com^
-0.0.0.0 tracker.example.com
+example.com                 # 拦截该域名及其子域名
+||ads.example.com^          # AdGuard 语法，同上
+@@||trusted.example.com^    # 放行
+0.0.0.0 a.example b.example # hosts 语法（0.0.0.0 / 127.0.0.1 / ::），一行可含多个域名
 ```
 
-Whitelist rules override a matching block rule. Cache behavior is configured in `data/config.yaml` or the Web settings page:
+以 `#` 或 `!` 开头的行为注释。带修饰符（`$third-party` 等）、通配符、正则或指向其他地址的 hosts 条目不受支持，会被忽略，保存时控制台会列出这些行号。
+
+优先级：最具体的域名规则生效；同一域名上本地规则优先于规则源，同类规则中放行优先于拦截。控制台的“规则检测”可查看任一域名命中的规则及其来源，查询日志也会记录每次拦截/放行所依据的规则。
+
+远程规则源在“规则源”页或 `PUT /api/sources` 中管理（可设置名称和更新频率）：
+
+```powershell
+$source = @(@{ url = 'https://example.com/adguard.txt'; name = 'Ads'; enabled = $true; interval_minutes = 360 })
+Invoke-RestMethod http://127.0.0.1:18080/api/sources -Method Put -ContentType 'application/json' -Body (ConvertTo-Json -InputObject $source)
+```
+
+- 下载的列表缓存在规则文件同目录下的 `remote/`，重启后立即生效，无需重新下载；到期后使用 `ETag`/`Last-Modified` 条件请求，列表未变化时不会重复下载。
+- 下载失败时继续使用缓存的上一版本，并在 10 分钟（或更短的更新间隔）后重试；停用规则源会立即撤下其规则但保留缓存，删除则同时清除缓存。
+- `POST /api/sources/refresh`（`{"url": "..."}`，留空表示全部）可立即更新。
+- 更新时间、错误等运行状态保存在缓存中，不再写入 `config.yaml`。
+
+规则相关 API：`GET /api/rules?search=&action=&source=&offset=&limit=`（分页，`source` 为 `local` 或规则源 URL）、`POST`/`DELETE /api/rules`、`GET /api/rules/check?domain=`、`GET`/`PUT /api/rules/local`（整个 rules.txt 文本）、`POST /api/reload`。
+
+Cache behavior is configured in `data/config.yaml` or the Web settings page:
 
 ```yaml
 cache:

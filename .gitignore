@@ -2,3 +2,6 @@ node_modules/
 *.exe
 *.log
 .env
+data/remote/
+data/querylog*.jsonl
+data/*.bak

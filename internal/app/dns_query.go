@@ -73,8 +73,13 @@ func (s *DNSServer) ServeDNS(writer dns.ResponseWriter, request *dns.Msg) {
 	queryType := dns.TypeToString[question.Qtype]
 	started := time.Now()
 	clientIP := queryClientIP(writer)
+	var rule rules.Entry // filter rule that decided the query, if any
 	logQuery := func(action, upstream string) {
-		s.logs.Add(querylog.Entry{Time: time.Now().Format(time.RFC3339), Client: clientIP, Domain: domain, Type: queryType, Action: action, Upstream: upstream, Duration: time.Since(started).Milliseconds()})
+		entry := querylog.Entry{Time: time.Now().Format(time.RFC3339), Client: clientIP, Domain: domain, Type: queryType, Action: action, Upstream: upstream, Duration: time.Since(started).Milliseconds()}
+		if rule.Domain != "" {
+			entry.Rule, entry.RuleSource = rule.Text(), rule.Source
+		}
+		s.logs.Add(entry)
 	}
 	if !s.clientAllowed(clientIP) {
 		response := new(dns.Msg)
@@ -98,24 +103,12 @@ func (s *DNSServer) ServeDNS(writer dns.ResponseWriter, request *dns.Msg) {
 		return
 	}
 	defer s.releaseQuerySlot()
-	action, rewriteIP, matched := s.rules.Match(domain)
-	if matched && action == rules.ActionAllow {
-		action = "forwarded"
-	}
-
-	if matched && action == rules.ActionBlock {
+	rule, _ = s.rules.Match(domain)
+	if rule.Action == rules.ActionBlock {
 		response := blockedResponse(request, question, &config)
 		_ = writer.WriteMsg(filterUpstreamResponse(response, request))
 		logQuery(string(rules.ActionBlock), "")
 		return
-	}
-	if matched && action == rules.ActionRewrite && rewriteIP != nil {
-		response := rewriteResponse(request, question, rewriteIP)
-		if response != nil {
-			_ = writer.WriteMsg(response)
-			logQuery(string(rules.ActionRewrite), "")
-			return
-		}
 	}
 	if response, ok := s.localRecordResponse(request, question); ok {
 		_ = writer.WriteMsg(filterUpstreamResponse(response, request))
@@ -135,12 +128,12 @@ func (s *DNSServer) ServeDNS(writer dns.ResponseWriter, request *dns.Msg) {
 			validated = validated && !rebindingBlocked
 			response = filterCachedResponseWithDNSSEC(response, request, validated)
 			_ = writer.WriteMsg(response)
-			logAction := "cached"
+			logAction := querylog.ActionCached
 			if rebindingBlocked {
 				logAction = querylog.ActionRebindingBlocked
 			}
 			if stale {
-				logAction = "optimistic"
+				logAction = querylog.ActionOptimistic
 				s.refreshInBackground(request.Copy(), cacheKey)
 			}
 			logQuery(logAction, "")
@@ -200,11 +193,11 @@ func (s *DNSServer) ServeDNS(writer dns.ResponseWriter, request *dns.Msg) {
 	clientResponse := filterResponseWithDNSSEC(result.response.Copy(), request, config.DNSSECValidate && result.dnssecValidated)
 	clientResponse.Id = request.Id
 	_ = writer.WriteMsg(clientResponse)
-	logAction := string(rules.ActionAllow)
+	logAction := querylog.ActionForwarded
 	if result.rebindingBlocked {
 		logAction = querylog.ActionRebindingBlocked
-	} else if action == "" {
-		logAction = "forwarded"
+	} else if rule.Action == rules.ActionAllow {
+		logAction = string(rules.ActionAllow)
 	}
 	logQuery(logAction, result.upstream)
 }

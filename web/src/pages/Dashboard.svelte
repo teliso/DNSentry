@@ -24,7 +24,7 @@
 <section class="stats" aria-label="服务概览">
   <Stat label="累计查询" value={formatCompact(status?.total_queries ?? 0)} sub="本次启动以来" />
   <Stat label="已拦截" value={formatCompact(status?.blocked_queries ?? 0)} sub="{formatPercent(blockedRatio)} 的请求被过滤" tone="danger" />
-  <Stat label="活动规则" value={formatCompact(status?.rules ?? 0)} sub="本地与远程规则" tone="ok" />
+  <Stat label="活动规则" value={formatCompact(status?.rules ?? 0)} sub="本地 {formatNumber(status?.local_rules ?? 0)} 条 · 规则源 {store.sources.filter((source) => source.enabled).length} 个" tone="ok" />
   <Stat label="平均处理时间" value={formatDuration(status?.dashboard?.average_processing_ms ?? 0)} sub="DNS 请求端到端耗时" tone="neutral" />
 </section>
 

@@ -6,102 +6,186 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"sync/atomic"
 	"testing"
 	"time"
 )
 
-func TestDownloadRules(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
-		if request.Header.Get("User-Agent") != "DNSentry/0.1" {
-			t.Errorf("unexpected user agent: %q", request.Header.Get("User-Agent"))
+// listServer serves a rule list with an ETag and counts full downloads.
+type listServer struct {
+	*httptest.Server
+	body      atomic.Value // string
+	fail      atomic.Bool
+	downloads atomic.Int32
+	checks    atomic.Int32
+}
+
+func newListServer(t *testing.T, body string) *listServer {
+	server := &listServer{}
+	server.body.Store(body)
+	server.Server = httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		if request.Header.Get("User-Agent") != userAgent {
+			t.Errorf("unexpected User-Agent %q", request.Header.Get("User-Agent"))
 		}
-		writer.WriteHeader(http.StatusOK)
-		_, _ = writer.Write([]byte("! comment\n||ads.remote.test^\n@@||safe.remote.test^\n"))
+		if server.fail.Load() {
+			http.Error(writer, "down", http.StatusBadGateway)
+			return
+		}
+		server.checks.Add(1)
+		body := server.body.Load().(string)
+		etag := `"` + cacheKey(body) + `"`
+		if request.Header.Get("If-None-Match") == etag {
+			writer.WriteHeader(http.StatusNotModified)
+			return
+		}
+		server.downloads.Add(1)
+		writer.Header().Set("ETag", etag)
+		_, _ = writer.Write([]byte(body))
 	}))
-	defer server.Close()
+	t.Cleanup(server.Close)
+	return server
+}
 
-	entries, err := downloadRules(t.Context(), server.Client(), server.URL)
-	if err != nil {
+func newTestUpdater(t *testing.T, cacheDir string, sources ...Source) (*Store, *Updater) {
+	t.Helper()
+	store := NewStore(filepath.Join(t.TempDir(), "rules.txt"))
+	return store, NewUpdater(store, cacheDir, sources)
+}
+
+func TestRemoteRulesAreCachedAndRestoredAfterRestart(t *testing.T) {
+	server := newListServer(t, "||ads.remote.test^\n0.0.0.0 a.test b.test\n")
+	cacheDir := t.TempDir()
+	source := Source{URL: server.URL, Enabled: true, IntervalMinutes: 60}
+
+	store, updater := newTestUpdater(t, cacheDir, source)
+	updater.RefreshDue(context.Background())
+	if rule := mustMatch(t, store, "ads.remote.test", ActionBlock); rule.Source != server.URL {
+		t.Fatalf("rule source = %q", rule.Source)
+	}
+	if got := updater.Sources()[0]; got.RuleCount != 3 || got.LastUpdated == "" || got.LastError != "" {
+		t.Fatalf("status after download = %#v", got.SourceStatus)
+	}
+
+	// Restart while the source is unreachable: cached rules are active at once.
+	server.fail.Store(true)
+	store, updater = newTestUpdater(t, cacheDir, source)
+	mustMatch(t, store, "b.test", ActionBlock)
+	updater.RefreshDue(context.Background()) // within interval: no request
+	if server.downloads.Load() != 1 {
+		t.Fatalf("downloads = %d, want 1", server.downloads.Load())
+	}
+
+	// A forced refresh that fails keeps the cached rules and reports the error.
+	if err := updater.StartRefresh(context.Background(), server.URL); err != nil {
 		t.Fatal(err)
 	}
-	if len(entries) != 2 || entries[0].Domain != "ads.remote.test" || entries[1].Action != ActionAllow {
-		t.Fatalf("unexpected entries: %#v", entries)
+	waitFor(t, func() bool { return !updater.Sources()[0].Updating })
+	if got := updater.Sources()[0]; got.LastError == "" || got.RuleCount != 3 {
+		t.Fatalf("status after failure = %#v", got.SourceStatus)
+	}
+	mustMatch(t, store, "ads.remote.test", ActionBlock)
+}
+
+func TestConditionalRefreshAndChangedList(t *testing.T) {
+	server := newListServer(t, "||one.test^\n")
+	store, updater := newTestUpdater(t, t.TempDir(), Source{URL: server.URL, Enabled: true})
+	updater.RefreshDue(context.Background())
+
+	refreshNow := func() {
+		t.Helper()
+		if err := updater.StartRefresh(context.Background(), ""); err != nil {
+			t.Fatal(err)
+		}
+		waitFor(t, func() bool { return !updater.Sources()[0].Updating })
+	}
+	refreshNow()
+	if server.downloads.Load() != 1 || server.checks.Load() != 2 {
+		t.Fatalf("unchanged list should be revalidated, not downloaded: downloads=%d checks=%d", server.downloads.Load(), server.checks.Load())
+	}
+	server.body.Store("||two.test^\n")
+	refreshNow()
+	mustMatch(t, store, "two.test", ActionBlock)
+	if _, ok := store.Match("one.test"); ok {
+		t.Fatal("rules from the previous list version are still active")
 	}
 }
 
-func TestLocalRulesOverrideRemoteRules(t *testing.T) {
-	for _, test := range []struct {
-		name         string
-		localLine    string
-		remoteAction Action
-		want         Action
-	}{
-		{name: "local block over remote allow", localLine: "||conflict.example.com^\n", remoteAction: ActionAllow, want: ActionBlock},
-		{name: "local allow over remote block", localLine: "@@||conflict.example.com^\n", remoteAction: ActionBlock, want: ActionAllow},
+func TestDisableEnableAndRemoveSource(t *testing.T) {
+	server := newListServer(t, "||ads.remote.test^\n")
+	cacheDir := t.TempDir()
+	source := Source{URL: server.URL, Name: "Ads", Enabled: true}
+	store, updater := newTestUpdater(t, cacheDir, source)
+	updater.RefreshDue(context.Background())
+
+	source.Enabled = false
+	if err := updater.SetSources([]Source{source}); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := store.Match("ads.remote.test"); ok {
+		t.Fatal("disabled source still matches")
+	}
+	source.Enabled = true
+	if err := updater.SetSources([]Source{source}); err != nil {
+		t.Fatal(err)
+	}
+	mustMatch(t, store, "ads.remote.test", ActionBlock) // restored from cache, no download
+	if server.downloads.Load() != 1 {
+		t.Fatalf("re-enabling should use the cache, downloads=%d", server.downloads.Load())
+	}
+
+	if err := updater.SetSources(nil); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := store.Match("ads.remote.test"); ok {
+		t.Fatal("removed source still matches")
+	}
+	if entries, _ := os.ReadDir(cacheDir); len(entries) != 0 {
+		t.Fatalf("cache of removed source was kept: %v", entries)
+	}
+}
+
+func TestNormalizeSourcesRejectsInvalidConfiguration(t *testing.T) {
+	for name, sources := range map[string][]Source{
+		"scheme":    {{URL: "ftp://example.com/list"}},
+		"duplicate": {{URL: "https://a.test/l"}, {URL: " https://a.test/l "}},
+		"interval":  {{URL: "https://a.test/l", IntervalMinutes: -1}},
 	} {
-		t.Run(test.name, func(t *testing.T) {
-			directory := t.TempDir()
-			file := filepath.Join(directory, "rules.txt")
-			if err := os.WriteFile(file, []byte(test.localLine), 0600); err != nil {
-				t.Fatal(err)
-			}
-
-			store := NewStore(file)
-			if err := store.Reload(); err != nil {
-				t.Fatal(err)
-			}
-			store.SetRemote("https://rules.example/filters", []Entry{{Domain: "conflict.example.com", Action: test.remoteAction}})
-			if action, _, ok := store.Match("conflict.example.com"); !ok || action != test.want {
-				t.Fatalf("expected %s to override remote %s, got %q, %v", test.want, test.remoteAction, action, ok)
-			}
-		})
+		if _, err := NormalizeSources(sources); err == nil {
+			t.Errorf("%s: expected an error", name)
+		}
+	}
+	normalized, err := NormalizeSources([]Source{{URL: " https://a.test/l ", SourceStatus: SourceStatus{RuleCount: 9}}})
+	if err != nil || normalized[0].URL != "https://a.test/l" || normalized[0].IntervalMinutes != DefaultIntervalMinutes || normalized[0].RuleCount != 0 {
+		t.Fatalf("normalized = %#v, %v", normalized, err)
 	}
 }
 
-func TestDisablingSourceRemovesItsRules(t *testing.T) {
-	file := filepath.Join(t.TempDir(), "rules.txt")
-	if err := os.WriteFile(file, nil, 0600); err != nil {
+func TestPruneRemovesOrphanedCacheFiles(t *testing.T) {
+	cacheDir := t.TempDir()
+	orphan := filepath.Join(cacheDir, cacheKey("https://gone.test/list")+".rules")
+	if err := os.WriteFile(orphan, []byte("||x.test^\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	store := NewStore(file)
-	const url = "https://rules.example/list"
-	updater := NewUpdater(store, []Source{{URL: url, Enabled: true}})
-	store.SetRemote(url, []Entry{{Domain: "ads.remote.test", Action: ActionBlock, Source: url}})
-	if _, _, ok := store.Match("ads.remote.test"); !ok {
-		t.Fatal("expected remote rule to match")
+	unrelated := filepath.Join(cacheDir, "README")
+	if err := os.WriteFile(unrelated, nil, 0600); err != nil {
+		t.Fatal(err)
 	}
-
-	updater.SetSources([]Source{{URL: url, Enabled: false}})
-	if _, _, ok := store.Match("ads.remote.test"); ok {
-		t.Fatal("disabled source should no longer match")
+	newTestUpdater(t, cacheDir)
+	if _, err := os.Stat(orphan); !os.IsNotExist(err) {
+		t.Fatal("orphaned cache file was kept")
 	}
-	if store.HasRemote(url) {
-		t.Fatal("disabled source should not keep loaded rules")
+	if _, err := os.Stat(unrelated); err != nil {
+		t.Fatal("unrelated file was removed")
 	}
 }
 
-func TestRefreshDueFetchesSourcesWithoutLoadedRules(t *testing.T) {
-	var requests int
-	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
-		requests++
-		_, _ = writer.Write([]byte("||ads.remote.test^\n"))
-	}))
-	defer server.Close()
-
-	file := filepath.Join(t.TempDir(), "rules.txt")
-	if err := os.WriteFile(file, nil, 0600); err != nil {
-		t.Fatal(err)
-	}
-	store := NewStore(file)
-	// A recent LastUpdated (e.g. restored from config) must not hide the fact
-	// that nothing is loaded.
-	updater := NewUpdater(store, []Source{{URL: server.URL, Enabled: true, IntervalMinutes: 60, LastUpdated: time.Now().Format(time.RFC3339)}})
-	updater.RefreshDue(context.Background())
-	if requests != 1 || !store.HasRemote(server.URL) {
-		t.Fatalf("expected one download, got %d (loaded=%v)", requests, store.HasRemote(server.URL))
-	}
-	updater.RefreshDue(context.Background())
-	if requests != 1 {
-		t.Fatalf("loaded source within its interval should not be downloaded again, got %d requests", requests)
+func waitFor(t *testing.T, condition func() bool) {
+	t.Helper()
+	deadline := time.Now().Add(5 * time.Second)
+	for !condition() {
+		if time.Now().After(deadline) {
+			t.Fatal("condition not met in time")
+		}
+		time.Sleep(5 * time.Millisecond)
 	}
 }

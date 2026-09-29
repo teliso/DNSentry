@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/teliso/DNSentry/internal/cache"
+	"github.com/teliso/DNSentry/internal/rules"
 )
 
 func validateConfig(config *Config) (*Config, error) {
@@ -176,6 +177,11 @@ func validateConfig(config *Config) (*Config, error) {
 	if err := validateEncryptionConfig(config.Encryption); err != nil {
 		return nil, err
 	}
+	sources, err := rules.NormalizeSources(config.RuleSources)
+	if err != nil {
+		return nil, err
+	}
+	config.RuleSources = sources
 	return config, nil
 }
 

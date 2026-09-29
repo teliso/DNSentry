@@ -482,24 +482,6 @@ func blockedResponse(request *dns.Msg, question dns.Question, config *Config) *d
 	return response
 }
 
-func rewriteResponse(request *dns.Msg, question dns.Question, ip net.IP) *dns.Msg {
-	response := new(dns.Msg)
-	response.SetReply(request)
-	response.RecursionAvailable = true
-	header := dns.RR_Header{Name: question.Name, Class: question.Qclass, Ttl: 300}
-	if question.Qtype == dns.TypeA && ip.To4() != nil {
-		header.Rrtype = dns.TypeA
-		response.Answer = []dns.RR{&dns.A{Hdr: header, A: ip.To4()}}
-		return response
-	}
-	if question.Qtype == dns.TypeAAAA && ip.To16() != nil && ip.To4() == nil {
-		header.Rrtype = dns.TypeAAAA
-		response.Answer = []dns.RR{&dns.AAAA{Hdr: header, AAAA: ip.To16()}}
-		return response
-	}
-	return nil
-}
-
 func responseTTL(message *dns.Msg) uint32 {
 	if message == nil {
 		return 0
