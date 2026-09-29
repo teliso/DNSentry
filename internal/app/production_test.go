@@ -151,3 +151,32 @@ func TestConcurrentIdenticalQueriesAreCoalesced(t *testing.T) {
 		t.Fatalf("expected identical concurrent queries to share one upstream request, got %d", got)
 	}
 }
+
+func TestPrefetchRefreshesPopularEntriesBeforeExpiry(t *testing.T) {
+	address, upstreamCount := startAnswerServer(t, net.IPv4(203, 0, 113, 7))
+	config := &Config{Upstreams: []string{address}, CachePrefetch: true, OptimisticAnswerTTL: cache.DefaultOptimisticAnswerTTL, OptimisticMaxAge: cache.DefaultOptimisticMaxAgeSeconds}
+	server := newRoutingServer(t, config)
+
+	query(server, "popular.test.", dns.TypeA) // miss: one upstream query, TTL 60
+	query(server, "popular.test.", dns.TypeA) // first hit
+	if upstreamCount.Load() != 1 {
+		t.Fatalf("upstream queries = %d, want 1", upstreamCount.Load())
+	}
+	offset := 55 * time.Second // last ~8% of the 60 s TTL
+	server.cache.SetClock(func() time.Time { return time.Now().Add(offset) })
+	query(server, "popular.test.", dns.TypeA) // hit that triggers the prefetch
+
+	deadline := time.Now().Add(3 * time.Second)
+	for upstreamCount.Load() < 2 && time.Now().Before(deadline) {
+		time.Sleep(10 * time.Millisecond)
+	}
+	if upstreamCount.Load() != 2 {
+		t.Fatalf("expected a background prefetch, upstream queries = %d", upstreamCount.Load())
+	}
+	for server.cache.Stats().Prefetches == 0 && time.Now().Before(deadline) {
+		time.Sleep(10 * time.Millisecond)
+	}
+	if stats := server.cache.Stats(); stats.Prefetches != 1 {
+		t.Fatalf("stats = %#v", stats)
+	}
+}

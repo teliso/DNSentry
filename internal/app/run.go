@@ -141,6 +141,7 @@ func run(ctx context.Context, stop context.CancelFunc, static fs.FS) error {
 	}
 	server.configureAccess(config.Access)
 	server.setLocalRecords(config.LocalRecords)
+	server.setUpstreamRoutes(config.UpstreamRoutes)
 	if config.DNSSECValidate {
 		if err := server.rebuildDNSSECValidator(*config); err != nil {
 			return fmt.Errorf("initialize DNSSEC validator: %w", err)

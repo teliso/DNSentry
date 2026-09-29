@@ -16,6 +16,8 @@ export type Dashboard = {
   domains: RankedCount[];
   blocked_domains: RankedCount[];
   upstreams: { address: string; count: number; average_duration_ms: number }[];
+  slow_domains: { name: string; count: number; average_duration_ms: number }[];
+  failed_domains: RankedCount[];
 };
 
 export type UpstreamHealth = {
@@ -54,6 +56,7 @@ export type CacheStats = {
   bypasses: number;
   refresh_success: number;
   refresh_failure: number;
+  prefetches: number;
   hit_rate: number;
 };
 export type DNSSECStats = { secure: number; insecure: number; bogus: number; indeterminate: number };
@@ -81,6 +84,7 @@ export type Status = {
   upstreams: string[];
   fallback_upstreams: string[];
   upstream_health: UpstreamHealth[];
+  upstream_routes: RouteStatus[];
   fallback_upstream_health: UpstreamHealth[];
   rule_sources: RuleSource[];
   total_queries: number;
@@ -151,6 +155,9 @@ export type AccessConfig = {
   rebinding_allow_domains: string[];
 };
 
+export type UpstreamRoute = { name?: string; domains: string[]; upstreams: string[] };
+export type RouteStatus = { name?: string; domains: string[]; upstreams: UpstreamHealth[] };
+
 export type UpstreamMode = 'load_balance' | 'parallel' | 'fastest_addr';
 export type BlockingMode = 'default' | 'nxdomain' | 'null_ip' | 'custom_ip' | 'refused';
 
@@ -162,6 +169,9 @@ export type Config = {
   fallback_upstreams: string[];
   upstream_mode: UpstreamMode;
   local_records: LocalRecord[];
+  upstream_routes: UpstreamRoute[];
+  private_reverse: boolean;
+  block_aaaa: boolean;
   access: AccessConfig;
   bootstrap_dns: string[];
   upstream_timeout_seconds: number;
@@ -179,6 +189,7 @@ export type Config = {
   cache_size: number;
   cache_ttl_min: number;
   cache_ttl_max: number;
+  cache_prefetch: boolean;
   cache_optimistic: boolean;
   cache_optimistic_answer_ttl: number;
   cache_optimistic_max_age: number;

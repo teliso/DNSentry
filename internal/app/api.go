@@ -136,6 +136,7 @@ func (a *API) getStatus(writer http.ResponseWriter, _ *http.Request) {
 		"upstreams":                config.Upstreams,
 		"fallback_upstreams":       config.FallbackUpstreams,
 		"upstream_health":          a.resolver.pool.Health(),
+		"upstream_routes":          a.resolver.routeStatus(),
 		"fallback_upstream_health": fallbackHealth,
 		"rule_sources":             a.updater.Sources(),
 		"total_queries":            total,

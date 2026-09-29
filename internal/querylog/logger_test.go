@@ -145,3 +145,24 @@ func TestQueryFiltersAndPages(t *testing.T) {
 		t.Fatalf("actions = %v", page.Actions)
 	}
 }
+
+func TestDashboardSlowAndFailedDomains(t *testing.T) {
+	logger := New(20)
+	for _, entry := range []Entry{
+		{Domain: "slow.example", Upstream: "1.1.1.1:53", Action: ActionForwarded, Duration: 300},
+		{Domain: "slow.example", Upstream: "1.1.1.1:53", Action: ActionForwarded, Duration: 100},
+		{Domain: "fast.example", Upstream: "1.1.1.1:53", Action: ActionForwarded, Duration: 5},
+		{Domain: "cached.example", Action: ActionCached, Duration: 900}, // no upstream: not a resolution
+		{Domain: "broken.example", Action: ActionError},
+		{Domain: "broken.example", Action: ActionError},
+	} {
+		logger.Add(entry)
+	}
+	stats := logger.Dashboard()
+	if len(stats.SlowDomains) != 2 || stats.SlowDomains[0].Name != "slow.example" || stats.SlowDomains[0].AverageDurationMS != 200 || stats.SlowDomains[0].Count != 2 {
+		t.Fatalf("slow domains = %#v", stats.SlowDomains)
+	}
+	if len(stats.FailedDomains) != 1 || stats.FailedDomains[0].Name != "broken.example" || stats.FailedDomains[0].Count != 2 {
+		t.Fatalf("failed domains = %#v", stats.FailedDomains)
+	}
+}

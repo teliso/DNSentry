@@ -43,10 +43,16 @@
   <Card title="上游服务器" description="请求数与平均响应时间">
     <BarList items={(status?.dashboard?.upstreams ?? []).map((item) => ({ name: item.address, count: item.count, note: formatDuration(item.average_duration_ms) }))} />
   </Card>
+  <Card title="解析失败的域名" description="上游无响应或返回错误">
+    <BarList items={status?.dashboard?.failed_domains ?? []} tone="danger" empty="没有解析失败的请求" />
+  </Card>
   </div>
   <div class="col">
   <Card title="请求域名" description="被查询最多的域名">
     <BarList items={status?.dashboard?.domains ?? []} />
+  </Card>
+  <Card title="响应最慢的域名" description="上游解析的平均耗时（最近日志）">
+    <BarList items={(status?.dashboard?.slow_domains ?? []).map((item) => ({ name: item.name, count: item.average_duration_ms, note: `${item.count} 次` }))} unit="ms" empty="暂无上游解析记录" />
   </Card>
   </div>
 </section>
@@ -61,7 +67,7 @@
       <div><dt>条目</dt><dd>{formatNumber(status?.cache?.entries ?? 0)}</dd></div>
       <div><dt>已用空间</dt><dd>{formatBytes(status?.cache?.used_bytes ?? 0)} / {formatBytes(status?.cache?.max_bytes ?? 0)}</dd></div>
       <div><dt>命中 / 未命中</dt><dd>{formatNumber(status?.cache?.hits ?? 0)} / {formatNumber(status?.cache?.misses ?? 0)}</dd></div>
-      <div><dt>过期命中</dt><dd>{formatNumber(status?.cache?.stale_hits ?? 0)}</dd></div>
+      <div><dt>过期命中 / 预取</dt><dd>{formatNumber(status?.cache?.stale_hits ?? 0)} / {formatNumber(status?.cache?.prefetches ?? 0)}</dd></div>
       <div><dt>淘汰 / 绕过</dt><dd>{formatNumber(status?.cache?.evictions ?? 0)} / {formatNumber(status?.cache?.bypasses ?? 0)}</dd></div>
     </dl>
   </Card>

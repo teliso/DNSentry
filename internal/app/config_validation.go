@@ -134,6 +134,9 @@ func validateConfig(config *Config) (*Config, error) {
 		}
 		config.FallbackUpstreams[index] = normalized
 	}
+	if err := validateUpstreamRoutes(config.UpstreamRoutes); err != nil {
+		return nil, err
+	}
 	if len(config.BootstrapDNS) == 0 {
 		config.BootstrapDNS = []string{"1.1.1.1:53", "8.8.8.8:53"}
 	}

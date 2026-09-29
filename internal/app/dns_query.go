@@ -110,21 +110,30 @@ func (s *DNSServer) ServeDNS(writer dns.ResponseWriter, request *dns.Msg) {
 		logQuery(string(rules.ActionBlock), "")
 		return
 	}
-	if response, ok := s.localRecordResponse(request, question); ok {
+	if response, ok := s.localRecordResponse(request, question, config.PrivateReverse); ok {
 		_ = writer.WriteMsg(filterUpstreamResponse(response, request))
 		logQuery(querylog.ActionLocal, "")
 		return
 	}
 
+	if config.BlockAAAA && question.Qtype == dns.TypeAAAA {
+		_ = writer.WriteMsg(noDataResponse(request, question, config.BlockedResponseTTL))
+		logQuery(querylog.ActionIPv6Off, "")
+		return
+	}
+
 	cacheKey, cacheRequest := makeCacheKey(request)
 	if cacheRequest && config.CacheEnabled {
-		if response, stale := s.cache.Get(cacheKey, config.OptimisticCache, config.OptimisticAnswerTTL, config.OptimisticMaxAge); response == nil {
+		if hit := s.cache.Lookup(cacheKey, config.OptimisticCache, config.OptimisticAnswerTTL, config.OptimisticMaxAge); hit.Message == nil {
 			s.markDNSSECCache(cacheKey, false)
 		} else {
+			response, stale := hit.Message, hit.Stale
 			validated := config.DNSSECValidate && s.cachedDNSSECIsSecure(cacheKey)
 			rebindingPolicy := s.accessPolicySnapshot()
 			rebindingBlocked := false
-			response, rebindingBlocked = filterRebindingResponse(response, question, rebindingPolicy)
+			if s.routeFor(request) == nil { // explicitly routed names are trusted
+				response, rebindingBlocked = filterRebindingResponse(response, question, rebindingPolicy)
+			}
 			validated = validated && !rebindingBlocked
 			response = filterCachedResponseWithDNSSEC(response, request, validated)
 			_ = writer.WriteMsg(response)
@@ -135,6 +144,8 @@ func (s *DNSServer) ServeDNS(writer dns.ResponseWriter, request *dns.Msg) {
 			if stale {
 				logAction = querylog.ActionOptimistic
 				s.refreshInBackground(request.Copy(), cacheKey)
+			} else if hit.Expiring && config.CachePrefetch && s.refreshInBackground(request.Copy(), cacheKey) {
+				s.cache.RecordPrefetch()
 			}
 			logQuery(logAction, "")
 			return
@@ -155,9 +166,12 @@ func (s *DNSServer) ServeDNS(writer dns.ResponseWriter, request *dns.Msg) {
 		}
 		rebindingPolicy := s.accessPolicySnapshot()
 		rebindingBlocked := false
-		response, rebindingBlocked = filterRebindingResponse(response, question, rebindingPolicy)
+		routed := s.routeFor(request) != nil // explicitly routed names are trusted
+		if !routed {
+			response, rebindingBlocked = filterRebindingResponse(response, question, rebindingPolicy)
+		}
 		validated := false
-		if config.DNSSECValidate && !rebindingBlocked {
+		if config.DNSSECValidate && !rebindingBlocked && !routed {
 			result := s.validateDNSSEC(response, question)
 			if isDNSSECValidationFailure(result) {
 				return nil, fmt.Errorf("DNSSEC validation returned %s", result.String())
@@ -218,13 +232,15 @@ func (s *DNSServer) releaseBackgroundRefreshSlot() {
 	s.refreshInFlight.Add(-1)
 }
 
-func (s *DNSServer) refreshInBackground(request *dns.Msg, key string) {
+// refreshInBackground refreshes a cache entry asynchronously and reports whether
+// a refresh was started (false when one is already running or none is free).
+func (s *DNSServer) refreshInBackground(request *dns.Msg, key string) bool {
 	if _, loaded := s.refreshing.LoadOrStore(key, true); loaded {
-		return
+		return false
 	}
 	if !s.acquireBackgroundRefreshSlot() {
 		s.refreshing.Delete(key)
-		return
+		return false
 	}
 	generation := s.configGeneration()
 	go func() {
@@ -242,9 +258,12 @@ func (s *DNSServer) refreshInBackground(request *dns.Msg, key string) {
 		}
 		rebindingPolicy := s.accessPolicySnapshot()
 		rebindingBlocked := false
-		response, rebindingBlocked = filterRebindingResponse(response, request.Question[0], rebindingPolicy)
+		routed := s.routeFor(request) != nil
+		if !routed {
+			response, rebindingBlocked = filterRebindingResponse(response, request.Question[0], rebindingPolicy)
+		}
 		validated := false
-		if config.DNSSECValidate && !rebindingBlocked {
+		if config.DNSSECValidate && !rebindingBlocked && !routed {
 			result := s.validateDNSSEC(response, request.Question[0])
 			if isDNSSECValidationFailure(result) {
 				s.markDNSSECCache(key, false)
@@ -261,4 +280,5 @@ func (s *DNSServer) refreshInBackground(request *dns.Msg, key string) {
 		s.markDNSSECCache(key, false)
 		s.cache.RecordRefresh(false)
 	}()
+	return true
 }

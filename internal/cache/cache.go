@@ -25,6 +25,8 @@ type cacheEntry struct {
 	packet  []byte
 	expires time.Time
 	version uint64
+	ttl     uint32 // TTL the entry was stored with, in seconds
+	hits    uint32 // fresh hits since insertion, saturating
 }
 
 type cacheShard struct {
@@ -48,6 +50,7 @@ type Stats struct {
 	Bypasses       uint64  `json:"bypasses"`
 	RefreshSuccess uint64  `json:"refresh_success"`
 	RefreshFailure uint64  `json:"refresh_failure"`
+	Prefetches     uint64  `json:"prefetches"`
 	HitRate        float64 `json:"hit_rate"`
 }
 
@@ -67,6 +70,9 @@ type Cache struct {
 	bypasses       atomic.Uint64
 	refreshSuccess atomic.Uint64
 	refreshFailure atomic.Uint64
+	prefetches     atomic.Uint64
+
+	clock atomic.Pointer[func() time.Time]
 }
 
 func New(maxBytes int, enabled bool) *Cache {
@@ -127,13 +133,33 @@ func cacheHash(key string) uint64 {
 
 // Get keeps expired entries for a short stale window when optimistic caching
 // is enabled. The caller refreshes a stale entry asynchronously.
+// Hit is the result of Lookup.
+type Hit struct {
+	Message *dns.Msg // nil on a miss
+	Stale   bool     // expired but served under the optimistic policy
+	// Expiring is set on a fresh entry that has been used before and is in the
+	// last fifth of its TTL: a good moment to refresh it in the background so
+	// popular names never expire while in use.
+	Expiring bool
+}
+
+// minPrefetchTTL is the smallest stored TTL (seconds) worth prefetching.
+const minPrefetchTTL = 10
+
+// Get is Lookup without the prefetch hint.
 func (c *Cache) Get(key string, optimistic bool, optimisticAnswerTTL, optimisticMaxAge uint32) (*dns.Msg, bool) {
+	hit := c.Lookup(key, optimistic, optimisticAnswerTTL, optimisticMaxAge)
+	return hit.Message, hit.Stale
+}
+
+// Lookup returns the cached response for key.
+func (c *Cache) Lookup(key string, optimistic bool, optimisticAnswerTTL, optimisticMaxAge uint32) Hit {
 	if optimisticMaxAge == 0 {
 		optimisticMaxAge = DefaultOptimisticMaxAgeSeconds
 	}
 	if !c.enabled.Load() {
 		c.misses.Add(1)
-		return nil, false
+		return Hit{}
 	}
 
 	shard := c.shardFor(key)
@@ -142,10 +168,10 @@ func (c *Cache) Get(key string, optimistic bool, optimisticAnswerTTL, optimistic
 	if !ok {
 		shard.mu.Unlock()
 		c.misses.Add(1)
-		return nil, false
+		return Hit{}
 	}
 
-	now := time.Now()
+	now := c.now()
 	stale := !now.Before(entry.expires)
 	// Compute the stale boundary from the current policy rather than the
 	// value stored with the entry, so runtime policy changes take effect.
@@ -154,7 +180,7 @@ func (c *Cache) Get(key string, optimistic bool, optimisticAnswerTTL, optimistic
 		shard.removeLocked(key)
 		shard.mu.Unlock()
 		c.misses.Add(1)
-		return nil, false
+		return Hit{}
 	}
 	shard.mu.Unlock()
 
@@ -169,12 +195,20 @@ func (c *Cache) Get(key string, optimistic bool, optimisticAnswerTTL, optimistic
 		}
 		shard.mu.Unlock()
 		c.misses.Add(1)
-		return nil, false
+		return Hit{}
 	}
 
+	expiring := false
 	shard.mu.Lock()
 	if current, exists := shard.items[key]; exists && current.version == entry.version {
 		shard.touchLocked(key)
+		if !stale {
+			expiring = current.hits > 0 && current.ttl >= minPrefetchTTL && current.expires.Sub(now)*5 < time.Duration(current.ttl)*time.Second
+			if current.hits < ^uint32(0) {
+				current.hits++
+				shard.items[key] = current
+			}
+		}
 	}
 	shard.mu.Unlock()
 
@@ -186,13 +220,13 @@ func (c *Cache) Get(key string, optimistic bool, optimisticAnswerTTL, optimistic
 		}
 		setTTL(message, optimisticAnswerTTL)
 	} else {
-		remaining := uint32(time.Until(entry.expires) / time.Second)
+		remaining := uint32(entry.expires.Sub(now) / time.Second)
 		if remaining == 0 {
 			remaining = 1
 		}
 		setTTL(message, remaining)
 	}
-	return message, stale
+	return Hit{Message: message, Stale: stale, Expiring: expiring}
 }
 
 func (c *Cache) Set(key string, message *dns.Msg, ttl uint32, _ time.Duration) bool {
@@ -234,8 +268,9 @@ func (c *Cache) Set(key string, message *dns.Msg, ttl uint32, _ time.Duration) b
 	shard.nextVersion++
 	shard.items[key] = cacheEntry{
 		packet:  packet,
-		expires: time.Now().Add(time.Duration(ttl) * time.Second),
+		expires: c.now().Add(time.Duration(ttl) * time.Second),
 		version: shard.nextVersion,
+		ttl:     ttl,
 	}
 	shard.usedBytes += len(packet)
 	shard.touchLocked(key)
@@ -349,11 +384,25 @@ func (c *Cache) Stats() Stats {
 	stats.Bypasses = c.bypasses.Load()
 	stats.RefreshSuccess = c.refreshSuccess.Load()
 	stats.RefreshFailure = c.refreshFailure.Load()
+	stats.Prefetches = c.prefetches.Load()
 	if total := stats.Hits + stats.Misses; total > 0 {
 		stats.HitRate = float64(stats.Hits) / float64(total)
 	}
 	return stats
 }
+
+func (c *Cache) now() time.Time {
+	if clock := c.clock.Load(); clock != nil {
+		return (*clock)()
+	}
+	return time.Now()
+}
+
+// SetClock replaces the time source; it exists so tests can move time forward.
+func (c *Cache) SetClock(now func() time.Time) { c.clock.Store(&now) }
+
+// RecordPrefetch counts a background refresh started ahead of expiry.
+func (c *Cache) RecordPrefetch() { c.prefetches.Add(1) }
 
 func (c *Cache) RecordBypass() {
 	c.bypasses.Add(1)

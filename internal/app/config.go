@@ -12,6 +12,9 @@ type Config struct {
 	FallbackUpstreams     []string         `json:"fallback_upstreams"`
 	UpstreamMode          string           `json:"upstream_mode"`
 	LocalRecords          []LocalRecord    `json:"local_records,omitempty"`
+	UpstreamRoutes        []UpstreamRoute  `json:"upstream_routes"`
+	PrivateReverse        bool             `json:"private_reverse"`
+	BlockAAAA             bool             `json:"block_aaaa"`
 	BootstrapDNS          []string         `json:"bootstrap_dns"`
 	UpstreamTimeout       int              `json:"upstream_timeout_seconds"`
 	BlockingMode          string           `json:"blocking_mode"`
@@ -32,6 +35,7 @@ type Config struct {
 	QueryLogRetentionDays int              `json:"query_log_retention_days"`
 	CacheTTLMin           uint32           `json:"cache_ttl_min"`
 	CacheTTLMax           uint32           `json:"cache_ttl_max"`
+	CachePrefetch         bool             `json:"cache_prefetch"`
 	OptimisticCache       bool             `json:"cache_optimistic"`
 	OptimisticAnswerTTL   uint32           `json:"cache_optimistic_answer_ttl"`
 	OptimisticMaxAge      uint32           `json:"cache_optimistic_max_age"`

@@ -85,6 +85,7 @@ export function normalizeConfig(raw: Config): Config {
     bootstrap_dns: cleanList(raw.bootstrap_dns),
     dnssec_trust_anchors: cleanList(raw.dnssec_trust_anchors),
     local_records: raw.local_records ?? [],
+    upstream_routes: (raw.upstream_routes ?? []).map((route) => ({ ...route, domains: [...route.domains], upstreams: [...route.upstreams] })),
     access: {
       ...defaultAccess,
       ...raw.access,
@@ -102,6 +103,9 @@ export function serializeConfig(config: Config): Config {
   copy.upstreams = cleanList(copy.upstreams);
   copy.fallback_upstreams = cleanList(copy.fallback_upstreams);
   copy.bootstrap_dns = cleanList(copy.bootstrap_dns);
+  copy.upstream_routes = (copy.upstream_routes ?? [])
+    .map((route) => ({ ...route, name: route.name?.trim() || undefined, domains: cleanList(route.domains), upstreams: cleanList(route.upstreams) }))
+    .filter((route) => route.domains.length > 0 || route.upstreams.length > 0);
   copy.dnssec_trust_anchors = cleanList(copy.dnssec_trust_anchors);
   copy.access.allowed_clients = cleanList(copy.access.allowed_clients);
   copy.access.denied_clients = cleanList(copy.access.denied_clients);
@@ -113,5 +117,8 @@ export function serializeConfig(config: Config): Config {
 export function validateConfig(config: Config): string | null {
   if (config.dns_listens.length === 0) return '至少配置一个普通 DNS 监听地址';
   if (config.upstreams.length === 0) return '至少配置一个上游 DNS 服务器';
+  for (const [index, route] of config.upstream_routes.entries()) {
+    if (route.domains.length === 0 || route.upstreams.length === 0) return `域名分流第 ${index + 1} 条需要同时填写域名和上游`;
+  }
   return null;
 }

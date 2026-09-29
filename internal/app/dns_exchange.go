@@ -8,6 +8,9 @@ import (
 
 func (s *DNSServer) exchange(request *dns.Msg) (*dns.Msg, string, error) {
 	config := s.configSnapshot()
+	if route := s.routeFor(request); route != nil {
+		return s.exchangeRoute(config, route, request)
+	}
 	var candidates []string
 	if s.pool != nil {
 		candidates = s.pool.Candidates()

@@ -482,6 +482,23 @@ func blockedResponse(request *dns.Msg, question dns.Question, config *Config) *d
 	return response
 }
 
+// noDataResponse is an empty NOERROR answer with an SOA record so clients can
+// cache the absence of data for ttl seconds (10 when zero).
+func noDataResponse(request *dns.Msg, question dns.Question, ttl uint32) *dns.Msg {
+	if ttl == 0 {
+		ttl = 10
+	}
+	response := new(dns.Msg)
+	response.SetReply(request)
+	response.RecursionAvailable = true
+	response.Ns = []dns.RR{&dns.SOA{
+		Hdr: dns.RR_Header{Name: question.Name, Rrtype: dns.TypeSOA, Class: question.Qclass, Ttl: ttl},
+		Ns:  "localhost.", Mbox: "hostmaster.localhost.",
+		Serial: 1, Refresh: 3600, Retry: 600, Expire: 86400, Minttl: ttl,
+	}}
+	return response
+}
+
 func responseTTL(message *dns.Msg) uint32 {
 	if message == nil {
 		return 0

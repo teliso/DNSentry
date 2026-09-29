@@ -10,23 +10,26 @@ import (
 type yamlConfig struct {
 	Version int `yaml:"version"`
 	DNS     struct {
-		Listen                string        `yaml:"listen"`
-		Listens               []string      `yaml:"listens,omitempty"`
-		Upstreams             []string      `yaml:"upstreams"`
-		FallbackUpstreams     []string      `yaml:"fallback_upstreams"`
-		UpstreamMode          string        `yaml:"upstream_mode"`
-		LocalRecords          []LocalRecord `yaml:"local_records,omitempty"`
-		BootstrapDNS          []string      `yaml:"bootstrap_dns"`
-		UpstreamTimeout       int           `yaml:"upstream_timeout_seconds"`
-		BlockingMode          string        `yaml:"blocking_mode"`
-		BlockingIPv4          string        `yaml:"blocking_ipv4"`
-		BlockingIPv6          string        `yaml:"blocking_ipv6"`
-		EnableDNSSEC          bool          `yaml:"enable_dnssec"`
-		DNSSECValidate        bool          `yaml:"dnssec_validate"`
-		DNSSECTrustAnchors    []string      `yaml:"dnssec_trust_anchors"`
-		DNSSECTrustAnchorFile string        `yaml:"dnssec_trust_anchor_file"`
-		DNSSECAutoUpdate      bool          `yaml:"dnssec_auto_update"`
-		BlockedResponseTTL    uint32        `yaml:"blocked_response_ttl"`
+		Listen                string          `yaml:"listen"`
+		Listens               []string        `yaml:"listens,omitempty"`
+		Upstreams             []string        `yaml:"upstreams"`
+		FallbackUpstreams     []string        `yaml:"fallback_upstreams"`
+		UpstreamMode          string          `yaml:"upstream_mode"`
+		LocalRecords          []LocalRecord   `yaml:"local_records,omitempty"`
+		UpstreamRoutes        []UpstreamRoute `yaml:"upstream_routes,omitempty"`
+		PrivateReverse        *bool           `yaml:"private_reverse"`
+		BlockAAAA             bool            `yaml:"block_aaaa"`
+		BootstrapDNS          []string        `yaml:"bootstrap_dns"`
+		UpstreamTimeout       int             `yaml:"upstream_timeout_seconds"`
+		BlockingMode          string          `yaml:"blocking_mode"`
+		BlockingIPv4          string          `yaml:"blocking_ipv4"`
+		BlockingIPv6          string          `yaml:"blocking_ipv6"`
+		EnableDNSSEC          bool            `yaml:"enable_dnssec"`
+		DNSSECValidate        bool            `yaml:"dnssec_validate"`
+		DNSSECTrustAnchors    []string        `yaml:"dnssec_trust_anchors"`
+		DNSSECTrustAnchorFile string          `yaml:"dnssec_trust_anchor_file"`
+		DNSSECAutoUpdate      bool            `yaml:"dnssec_auto_update"`
+		BlockedResponseTTL    uint32          `yaml:"blocked_response_ttl"`
 	} `yaml:"dns"`
 	Web struct {
 		Listen string `yaml:"listen"`
@@ -36,6 +39,7 @@ type yamlConfig struct {
 		Size                int    `yaml:"size"`
 		TTLMin              uint32 `yaml:"ttl_min"`
 		TTLMax              uint32 `yaml:"ttl_max"`
+		Prefetch            bool   `yaml:"prefetch"`
 		Optimistic          bool   `yaml:"optimistic"`
 		OptimisticAnswerTTL uint32 `yaml:"optimistic_answer_ttl"`
 		OptimisticMaxAge    uint32 `yaml:"optimistic_max_age"`
@@ -55,6 +59,10 @@ type yamlConfig struct {
 }
 
 func (f yamlConfig) toConfig() *Config {
+	privateReverse := true
+	if f.DNS.PrivateReverse != nil {
+		privateReverse = *f.DNS.PrivateReverse
+	}
 	enabled := true
 	if f.Cache.Enabled != nil {
 		enabled = *f.Cache.Enabled
@@ -75,6 +83,10 @@ func (f yamlConfig) toConfig() *Config {
 		FallbackUpstreams:     f.DNS.FallbackUpstreams,
 		UpstreamMode:          f.DNS.UpstreamMode,
 		LocalRecords:          append([]LocalRecord(nil), f.DNS.LocalRecords...),
+		UpstreamRoutes:        append([]UpstreamRoute(nil), f.DNS.UpstreamRoutes...),
+		PrivateReverse:        privateReverse,
+		BlockAAAA:             f.DNS.BlockAAAA,
+		CachePrefetch:         f.Cache.Prefetch,
 		BootstrapDNS:          f.DNS.BootstrapDNS,
 		UpstreamTimeout:       f.DNS.UpstreamTimeout,
 		BlockingMode:          f.DNS.BlockingMode,
@@ -112,6 +124,10 @@ func newYAMLConfig(config *Config) yamlConfig {
 	fileConfig.DNS.FallbackUpstreams = config.FallbackUpstreams
 	fileConfig.DNS.UpstreamMode = config.UpstreamMode
 	fileConfig.DNS.LocalRecords = append([]LocalRecord(nil), config.LocalRecords...)
+	fileConfig.DNS.UpstreamRoutes = append([]UpstreamRoute(nil), config.UpstreamRoutes...)
+	fileConfig.DNS.PrivateReverse = boolPtr(config.PrivateReverse)
+	fileConfig.DNS.BlockAAAA = config.BlockAAAA
+	fileConfig.Cache.Prefetch = config.CachePrefetch
 	fileConfig.DNS.BootstrapDNS = config.BootstrapDNS
 	fileConfig.DNS.UpstreamTimeout = config.UpstreamTimeout
 	fileConfig.DNS.BlockingMode = config.BlockingMode

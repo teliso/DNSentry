@@ -19,8 +19,9 @@
   {/snippet}
 
   <div class="stack">
-    <div class="form-grid two">
+    <div class="form-grid three">
       <Switch bind:checked={config.cache_enabled} label="启用缓存" description="关闭后所有请求直接转发到上游。" />
+      <Switch bind:checked={config.cache_prefetch} label="预取热门条目" description="被反复访问的条目在 TTL 最后 20% 时于后台刷新，避免过期。" disabled={!config.cache_enabled} />
       <Switch bind:checked={config.cache_optimistic} label="乐观缓存" description="先返回过期响应，再在后台刷新。" disabled={!config.cache_enabled} />
     </div>
     <div class="form-grid">

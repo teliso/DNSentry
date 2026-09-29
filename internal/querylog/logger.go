@@ -19,6 +19,7 @@ const (
 	ActionRebindingBlocked = "rebinding_blocked"
 	ActionLocal            = "local"
 	ActionForwarded        = "forwarded"
+	ActionIPv6Off          = "aaaa_blocked"
 	ActionCached           = "cached"
 	ActionOptimistic       = "optimistic"
 	ActionError            = "error"
@@ -55,7 +56,17 @@ type DashboardUpstream struct {
 	AverageDurationMS int64  `json:"average_duration_ms"`
 }
 
+// DashboardDuration is a domain with the average time its upstream
+// resolutions took.
+type DashboardDuration struct {
+	Name              string `json:"name"`
+	Count             uint64 `json:"count"`
+	AverageDurationMS int64  `json:"average_duration_ms"`
+}
+
 type DashboardStats struct {
+	SlowDomains         []DashboardDuration `json:"slow_domains"`
+	FailedDomains       []DashboardCount    `json:"failed_domains"`
 	AverageProcessingMS int64               `json:"average_processing_ms"`
 	ClientIPs           []DashboardCount    `json:"client_ips"`
 	Domains             []DashboardCount    `json:"domains"`
@@ -183,6 +194,8 @@ func (l *Logger) Dashboard() DashboardStats {
 		Domains:        make([]DashboardCount, 0),
 		BlockedDomains: make([]DashboardCount, 0),
 		Upstreams:      make([]DashboardUpstream, 0),
+		SlowDomains:    make([]DashboardDuration, 0),
+		FailedDomains:  make([]DashboardCount, 0),
 	}
 	if total > 0 {
 		stats.AverageProcessingMS = int64(l.totalDuration.Load() / total)
@@ -197,7 +210,18 @@ func (l *Logger) Dashboard() DashboardStats {
 		duration int64
 	}
 	upstreams := make(map[string]upstreamAggregate)
+	resolved := make(map[string]upstreamAggregate) // domain -> upstream resolutions
+	failed := make(map[string]uint64)
 	for _, entry := range entries {
+		if entry.Action == ActionError && entry.Domain != "" {
+			failed[entry.Domain]++
+		}
+		if entry.Upstream != "" && entry.Domain != "" {
+			aggregate := resolved[entry.Domain]
+			aggregate.count++
+			aggregate.duration += max(entry.Duration, 0)
+			resolved[entry.Domain] = aggregate
+		}
 		if entry.Client != "" {
 			clients[entry.Client]++
 		}
@@ -215,6 +239,20 @@ func (l *Logger) Dashboard() DashboardStats {
 			}
 			upstreams[entry.Upstream] = aggregate
 		}
+	}
+	stats.FailedDomains = dashboardCounts(failed, 10)
+	for name, aggregate := range resolved {
+		stats.SlowDomains = append(stats.SlowDomains, DashboardDuration{Name: name, Count: aggregate.count, AverageDurationMS: aggregate.duration / int64(aggregate.count)})
+	}
+	sort.Slice(stats.SlowDomains, func(left, right int) bool {
+		a, b := stats.SlowDomains[left], stats.SlowDomains[right]
+		if a.AverageDurationMS != b.AverageDurationMS {
+			return a.AverageDurationMS > b.AverageDurationMS
+		}
+		return a.Name < b.Name
+	})
+	if len(stats.SlowDomains) > 10 {
+		stats.SlowDomains = stats.SlowDomains[:10]
 	}
 	stats.ClientIPs = dashboardCounts(clients, 10)
 	stats.Domains = dashboardCounts(domains, 10)

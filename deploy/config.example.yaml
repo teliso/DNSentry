@@ -36,6 +36,18 @@ dns:
   dnssec_trust_anchors: []        # custom DNSKEY lines; empty = built-in root anchor
   dnssec_trust_anchor_file: ""
   dnssec_auto_update: false
+  # Send domains (and their subdomains) to dedicated upstreams. The most
+  # specific domain wins. Routed names never fall back to the default or
+  # fallback upstreams, so internal names are not leaked.
+  upstream_routes: []
+  #  - name: corp
+  #    domains: [corp.example.com, 10.in-addr.arpa]
+  #    upstreams: ["10.0.0.1:53"]
+  # Answer reverse lookups of private ranges locally (from local records, else
+  # NXDOMAIN) instead of asking public upstreams. Routed zones are excluded.
+  private_reverse: true
+  # Answer AAAA queries with an empty response (for networks without IPv6).
+  block_aaaa: false
   # Answered locally before cache and upstreams (filter rules still apply first).
   local_records: []
   #  - { domain: nas.home.arpa, type: A, value: 192.168.1.10, ttl: 300 }
@@ -50,6 +62,7 @@ cache:
   size: 4194304              # bytes
   ttl_min: 0                 # seconds, 0 = no limit
   ttl_max: 0
+  prefetch: false            # refresh popular entries in the last 20% of their TTL
   optimistic: false          # serve expired answers while refreshing them
   optimistic_answer_ttl: 30
   optimistic_max_age: 43200

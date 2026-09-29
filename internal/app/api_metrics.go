@@ -31,6 +31,7 @@ func (a *API) writeMetrics(writer http.ResponseWriter, _ *http.Request) {
 		{"dnsentry_cache_evictions_total", "counter", stats.Evictions},
 		{"dnsentry_cache_refresh_success_total", "counter", stats.RefreshSuccess},
 		{"dnsentry_cache_refresh_failure_total", "counter", stats.RefreshFailure},
+		{"dnsentry_cache_prefetches_total", "counter", stats.Prefetches},
 		{"dnsentry_cache_hit_rate", "gauge", fmt.Sprintf("%f", stats.HitRate)},
 	}
 	writer.Header().Set("Content-Type", "text/plain; version=0.0.4; charset=utf-8")

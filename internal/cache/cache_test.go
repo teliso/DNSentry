@@ -126,3 +126,37 @@ func TestCacheConcurrentAccess(t *testing.T) {
 		t.Fatalf("atomic counters lost updates: %#v", stats)
 	}
 }
+
+func TestLookupFlagsPopularEntriesNearExpiry(t *testing.T) {
+	cache := New(1<<16, true)
+	var offset time.Duration
+	cache.SetClock(func() time.Time { return time.Now().Add(offset) })
+	set := func(key string, ttl uint32) {
+		message := new(dns.Msg)
+		message.Answer = []dns.RR{&dns.A{Hdr: dns.RR_Header{Name: key + ".test.", Rrtype: dns.TypeA, Class: dns.ClassINET, Ttl: ttl}, A: net.IPv4(192, 0, 2, 1)}}
+		cache.Set(key, message, ttl, 0)
+	}
+	set("hot", 100)
+
+	offset = 90 * time.Second // last tenth, but never hit before
+	if hit := cache.Lookup("hot", false, 0, 0); hit.Message == nil || hit.Expiring {
+		t.Fatalf("first hit must not trigger a prefetch: %#v", hit)
+	}
+	if hit := cache.Lookup("hot", false, 0, 0); !hit.Expiring {
+		t.Fatalf("a used entry in the last fifth of its TTL should be flagged: %#v", hit)
+	}
+	offset = 0
+	if hit := cache.Lookup("hot", false, 0, 0); hit.Expiring {
+		t.Fatal("a fresh entry must not be flagged")
+	}
+
+	set("short", 5)
+	cache.Lookup("short", false, 0, 0)
+	offset = 4 * time.Second
+	if hit := cache.Lookup("short", false, 0, 0); hit.Expiring {
+		t.Fatal("tiny TTLs are not worth prefetching")
+	}
+	if message, stale := cache.Get("hot", false, 0, 0); message == nil || stale {
+		t.Fatal("Get must keep working")
+	}
+}

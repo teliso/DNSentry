@@ -2,7 +2,7 @@
   import { formatNumber } from '../lib/format';
 
   type Item = { name: string; count: number; note?: string };
-  let { items, empty = '暂无数据', tone = 'accent' }: { items: Item[]; empty?: string; tone?: 'accent' | 'danger' } = $props();
+  let { items, empty = '暂无数据', tone = 'accent', unit = '' }: { items: Item[]; empty?: string; tone?: 'accent' | 'danger'; unit?: string } = $props();
 
   const max = $derived(Math.max(1, ...items.map((item) => item.count)));
 </script>
@@ -16,7 +16,7 @@
         <div class="row">
           <span class="name" title={item.name}>{item.name}</span>
           {#if item.note}<span class="note tabular">{item.note}</span>{/if}
-          <span class="count tabular">{formatNumber(item.count)}</span>
+          <span class="count tabular">{formatNumber(item.count)}{unit ? ` ${unit}` : ''}</span>
         </div>
         <div class="bar"><span class={tone} style:width="{Math.max(2, (item.count / max) * 100)}%"></span></div>
       </li>

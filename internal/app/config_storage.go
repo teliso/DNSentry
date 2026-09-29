@@ -35,6 +35,7 @@ func defaultConfig() *Config {
 		Upstreams:             []string{"1.1.1.1:53", "8.8.8.8:53"},
 		BootstrapDNS:          []string{"1.1.1.1:53", "8.8.8.8:53"},
 		UpstreamMode:          "load_balance",
+		PrivateReverse:        true,
 		UpstreamTimeout:       4,
 		BlockingMode:          "nxdomain",
 		BlockingIPv4:          "0.0.0.0",
