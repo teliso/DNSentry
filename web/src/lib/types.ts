@@ -72,6 +72,9 @@ export type DNSCryptStatus = {
 export type Status = {
   /** Saved configuration has startup-only changes that need a service restart. */
   restart_required: boolean;
+  version: string;
+  config_path: string;
+  rules_file: string;
   dns_listen: string;
   dns_listens: string[];
   http_listen: string;
@@ -103,6 +106,9 @@ export type LogEntry = {
   rule?: string;
   rule_source?: string;
 };
+
+export type LogQuery = { search?: string; action?: string; offset?: number; limit?: number };
+export type LogPage = { total: number; items: LogEntry[]; actions: string[] };
 
 export type LocalRecordType = 'A' | 'AAAA' | 'CNAME' | 'TXT';
 export type LocalRecord = { domain: string; type: LocalRecordType; value: string; ttl: number };

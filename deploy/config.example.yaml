@@ -1,0 +1,96 @@
+# DNSentry configuration reference.
+#
+# A configuration with these defaults is created automatically on first start
+# (at the path given by -config, default data/config.yaml). Most settings can
+# be changed in the Web console; the ones marked [restart] only take effect
+# after restarting the service. Relative paths are resolved from the working
+# directory.
+version: 1
+
+dns:
+  # [restart] Plain DNS listeners; each binds UDP and TCP. Use :53 in production.
+  listens:
+    - ":15353"
+  # Primary upstreams: host:port, tls://host:853, https://host/dns-query,
+  # h3://host/dns-query, quic://host:853 or DNSCrypt sdns:// stamps.
+  upstreams:
+    - "1.1.1.1:53"
+    - "8.8.8.8:53"
+  # Used only when every primary upstream fails, times out or answers
+  # SERVFAIL/REFUSED.
+  fallback_upstreams: []
+  # load_balance | parallel | fastest_addr
+  upstream_mode: "load_balance"
+  # Plain-DNS servers used to resolve the host names of encrypted upstreams.
+  bootstrap_dns:
+    - "1.1.1.1:53"
+    - "8.8.8.8:53"
+  upstream_timeout_seconds: 4
+  # Answer for blocked names: default (0.0.0.0/::) | nxdomain | null_ip | custom_ip | refused
+  blocking_mode: "nxdomain"
+  blocking_ipv4: "0.0.0.0" # custom_ip only
+  blocking_ipv6: "::"      # custom_ip only
+  blocked_response_ttl: 10
+  enable_dnssec: false            # request DNSSEC records upstream
+  dnssec_validate: false          # validate signatures locally
+  dnssec_trust_anchors: []        # custom DNSKEY lines; empty = built-in root anchor
+  dnssec_trust_anchor_file: ""
+  dnssec_auto_update: false
+  # Answered locally before cache and upstreams (filter rules still apply first).
+  local_records: []
+  #  - { domain: nas.home.arpa, type: A, value: 192.168.1.10, ttl: 300 }
+
+web:
+  # [restart] Console and API. A non-loopback address additionally requires
+  # DNSENTRY_ALLOW_PUBLIC_WEB=1 and DNSENTRY_API_TOKEN in the environment.
+  listen: "127.0.0.1:18080"
+
+cache:
+  enabled: true
+  size: 4194304              # bytes
+  ttl_min: 0                 # seconds, 0 = no limit
+  ttl_max: 0
+  optimistic: false          # serve expired answers while refreshing them
+  optimistic_answer_ttl: 30
+  optimistic_max_age: 43200
+
+rules:
+  # [restart] Local rules file. Downloaded lists are cached in remote/ next to it.
+  local_file: "data/rules.txt"
+  sources: []
+  #  - url: https://adguardteam.github.io/HostlistsRegistry/assets/filter_1.txt
+  #    name: AdGuard DNS filter
+  #    enabled: true
+  #    interval_minutes: 1440
+
+access:
+  allowed_clients: []        # IPs/CIDRs; empty = everyone
+  denied_clients: []
+  client_rate_limit_qps: 0   # 0 = unlimited
+  max_concurrent_queries: 2048
+  rebinding_protection: false
+  rebinding_allow_domains: []
+
+logging:
+  query_log_size: 1000       # [restart] entries kept in memory
+  enabled: false             # [restart] also write daily JSONL files
+  file: "data/querylog"      # [restart] prefix: data/querylog-YYYY-MM-DD.jsonl
+  retention_days: 7          # [restart]
+
+# [restart] Inbound encrypted DNS. Certificate and key can be given as paths or
+# pasted PEM (certificate_pem / private_key_pem).
+encryption:
+  enabled: false
+  certificate: ""
+  private_key: ""
+  dot_listens: []            # e.g. [":853"]
+  doh_listens: []            # e.g. [":443"], path /dns-query
+  doh3_listens: []
+  doq_listens: []
+  dnscrypt:
+    enabled: false
+    listens: []
+    provider_name: "dnsentry"
+    private_key: ""          # generated when empty
+    resolver_secret: ""      # generated when empty
+    certificate_ttl_hours: 24

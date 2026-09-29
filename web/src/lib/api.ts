@@ -1,4 +1,4 @@
-import type { Config, LocalSummary, LogEntry, Rule, RuleAction, RuleCheck, RulePage, RuleQuery, RuleSource, Status, UpstreamTest } from './types';
+import type { Config, LocalSummary, LogPage, LogQuery, Rule, RuleAction, RuleCheck, RulePage, RuleQuery, RuleSource, Status, UpstreamTest } from './types';
 
 const TOKEN_KEY = 'dnsentry_api_token';
 
@@ -69,19 +69,21 @@ async function request<T>(path: string, method = 'GET', body?: unknown): Promise
   return data as T;
 }
 
+function toParams(query: Record<string, string | number | undefined>): URLSearchParams {
+  const params = new URLSearchParams();
+  for (const [key, value] of Object.entries(query)) if (value !== undefined && value !== '') params.set(key, String(value));
+  return params;
+}
+
 export const api = {
   status: () => request<Status>('/status'),
-  logs: () => request<LogEntry[] | null>('/logs').then((list) => list ?? []),
+  logs: (query: LogQuery) => request<LogPage>(`/logs?${toParams(query)}`),
   config: () => request<Config>('/config'),
   saveConfig: (config: Config) => request<Config>('/config', 'PUT', config),
   restoreConfig: () => request<Config>('/config/restore', 'POST'),
   clearCache: () => request<{ status: string }>('/cache/clear', 'POST'),
   testUpstreams: (upstreams: string[]) => request<UpstreamTest[]>('/upstreams/test', 'POST', { upstreams }),
-  rules: (query: RuleQuery) => {
-    const params = new URLSearchParams();
-    for (const [key, value] of Object.entries(query)) if (value !== undefined && value !== '') params.set(key, String(value));
-    return request<RulePage>(`/rules?${params}`);
-  },
+  rules: (query: RuleQuery) => request<RulePage>(`/rules?${toParams(query)}`),
   checkRule: (domain: string) => request<RuleCheck>(`/rules/check?domain=${encodeURIComponent(domain)}`),
   localRules: () => request<{ text: string }>('/rules/local').then((result) => result.text),
   saveLocalRules: (text: string) => request<LocalSummary>('/rules/local', 'PUT', { text }),

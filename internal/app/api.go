@@ -3,9 +3,11 @@ package app
 import (
 	"context"
 	"net/http"
+	"strconv"
 	"strings"
 	"sync"
 
+	"github.com/teliso/DNSentry/internal/buildinfo"
 	"github.com/teliso/DNSentry/internal/cache"
 	"github.com/teliso/DNSentry/internal/querylog"
 	"github.com/teliso/DNSentry/internal/rules"
@@ -124,6 +126,9 @@ func (a *API) getStatus(writer http.ResponseWriter, _ *http.Request) {
 	pendingRestart := restartRequired(a.savedConfig(), config)
 	a.configMu.Unlock()
 	writeJSON(writer, http.StatusOK, map[string]any{
+		"version":                  buildinfo.String(),
+		"config_path":              configPath(),
+		"rules_file":               config.RulesFile,
 		"restart_required":         pendingRestart,
 		"dns_listen":               config.DNSListen,
 		"dns_listens":              config.DNSListens,
@@ -151,6 +156,15 @@ func (a *API) clearCache(writer http.ResponseWriter, _ *http.Request) {
 	writeJSON(writer, http.StatusOK, map[string]string{"status": "cleared"})
 }
 
-func (a *API) listLogs(writer http.ResponseWriter, _ *http.Request) {
-	writeJSON(writer, http.StatusOK, a.logs.List())
+// listLogs serves GET /logs?search=&action=&offset=&limit=.
+func (a *API) listLogs(writer http.ResponseWriter, request *http.Request) {
+	query := request.URL.Query()
+	offset, _ := strconv.Atoi(query.Get("offset"))
+	limit, _ := strconv.Atoi(query.Get("limit"))
+	writeJSON(writer, http.StatusOK, a.logs.Query(querylog.Filter{
+		Search: query.Get("search"),
+		Action: query.Get("action"),
+		Offset: offset,
+		Limit:  limit,
+	}))
 }

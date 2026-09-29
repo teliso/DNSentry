@@ -5,7 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
-	"log"
+	"log/slog"
 	"net"
 	"net/http"
 	"os"
@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/miekg/dns"
+	"github.com/teliso/DNSentry/internal/buildinfo"
 	"github.com/teliso/DNSentry/internal/cache"
 	"github.com/teliso/DNSentry/internal/querylog"
 	"github.com/teliso/DNSentry/internal/rules"
@@ -33,18 +34,31 @@ type listenerService interface {
 	Close() error
 }
 
-// Run starts DNSentry and blocks until it receives SIGINT/SIGTERM or the Web UI
-// stops. static is the built Web console, rooted at its index.html; path is the
-// YAML configuration file (empty for the default data/config.yaml).
-func Run(static fs.FS, path string) {
+// SetConfigPath selects the YAML configuration file. Call it before Run or
+// CheckConfig.
+func SetConfigPath(path string) {
 	if path != "" {
 		configFile = path
 	}
+}
+
+// CheckConfig validates the configuration file and the environment it needs
+// without starting any listener.
+func CheckConfig() error {
+	config, err := readConfig()
+	if err != nil {
+		return err
+	}
+	return checkWebExposure(config, os.Getenv("DNSENTRY_API_TOKEN"))
+}
+
+// Run starts DNSentry and blocks until it receives SIGINT/SIGTERM or the Web
+// console stops. static is the built console, rooted at its index.html.
+func Run(static fs.FS) error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
-	if err := run(ctx, stop, static); err != nil {
-		log.Fatal(err)
-	}
+	slog.Info("starting DNSentry", "version", buildinfo.String(), "config", configPath())
+	return run(ctx, stop, static)
 }
 
 func checkWebExposure(config *Config, apiToken string) error {
@@ -66,12 +80,20 @@ func ruleCacheDir(rulesFile string) string {
 	return filepath.Join(filepath.Dir(rulesFile), "remote")
 }
 
+const defaultRulesFile = `# DNSentry local filter rules. One rule per line:
+#   example.com              block example.com and its subdomains
+#   ||ads.example.com^       same, AdGuard syntax
+#   @@||good.example.com^    allow (overrides blocks)
+#   0.0.0.0 a.example b.example
+# Lines starting with # or ! are comments.
+`
+
 func ensureRulesFile(path string) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
 		return err
 	}
 	if _, err := os.Stat(path); os.IsNotExist(err) {
-		return os.WriteFile(path, nil, 0644)
+		return os.WriteFile(path, []byte(defaultRulesFile), 0644)
 	}
 	return nil
 }
@@ -103,7 +125,7 @@ func run(ctx context.Context, stop context.CancelFunc, static fs.FS) error {
 	}
 	defer func() {
 		if err := logs.Close(); err != nil {
-			log.Printf("close query logger: %v", err)
+			slog.Error("close query logger", "error", err)
 		}
 	}()
 
@@ -144,9 +166,9 @@ func run(ctx context.Context, stop context.CancelFunc, static fs.FS) error {
 		return fmt.Errorf("web UI cannot listen on %s: %w", config.HTTPListen, err)
 	}
 	for _, address := range dnsService.Addresses() {
-		log.Printf("DNS UDP and TCP listening on %s", address)
+		slog.Info("DNS listening", "address", address, "protocols", "udp,tcp")
 	}
-	log.Printf("Web UI listening on http://%s", httpListener.Addr().String())
+	slog.Info("web console listening", "url", "http://"+httpListener.Addr().String())
 
 	if err := services.start(ctx); err != nil {
 		_ = httpListener.Close()
@@ -166,17 +188,17 @@ func run(ctx context.Context, stop context.CancelFunc, static fs.FS) error {
 	select {
 	case err := <-httpServeDone:
 		if err != nil && !errors.Is(err, http.ErrServerClosed) {
-			log.Printf("Web UI stopped: %v", err)
+			slog.Error("web console stopped", "error", err)
 		}
 	case <-ctx.Done():
-		log.Printf("shutdown signal received")
+		slog.Info("shutdown signal received")
 	}
 	stop()
 
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
 	defer cancel()
 	if !shutdownAll(shutdownCtx, httpServer, services, server) {
-		log.Printf("graceful shutdown timed out; forcing listeners closed")
+		slog.Warn("graceful shutdown timed out; forcing listeners closed")
 		_ = httpServer.Close()
 		services.closeAll()
 	}
@@ -280,7 +302,7 @@ func shutdownAll(ctx context.Context, httpServer *http.Server, services listener
 		go func() {
 			defer wg.Done()
 			if err := j.run(); err != nil {
-				log.Printf("%s graceful shutdown: %v", j.name, err)
+				slog.Warn("graceful shutdown failed", "component", j.name, "error", err)
 			}
 		}()
 	}
@@ -298,6 +320,6 @@ func waitFor(ctx context.Context, done <-chan struct{}, name string) {
 	select {
 	case <-done:
 	case <-ctx.Done():
-		log.Printf("%s did not stop before shutdown deadline", name)
+		slog.Warn("component did not stop before shutdown deadline", "component", name)
 	}
 }

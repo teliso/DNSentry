@@ -31,7 +31,7 @@
   }
 </script>
 
-<Card title="加密 DNS 服务" description="对外提供 DoT、DoH、DoH3 与 DoQ。证书、私钥或监听变更后需要重启服务。">
+<Card id="sec-encryption" title="加密 DNS 服务" description="对外提供 DoT、DoH、DoH3 与 DoQ。证书、私钥或监听变更后需要重启服务。">
   {#snippet actions()}
     <span class="badge" class:ok={encryption.enabled}>{encryption.enabled ? '已启用' : '未启用'}</span>
   {/snippet}
@@ -69,7 +69,7 @@
   </div>
 </Card>
 
-<Card title="DNSCrypt v2" description="Provider 密钥首次启用时自动生成；服务运行后可在此复制客户端 stamp。">
+<Card id="sec-dnscrypt" title="DNSCrypt v2" description="Provider 密钥首次启用时自动生成；服务运行后可在此复制客户端 stamp。">
   {#snippet actions()}
     <span class="badge" class:ok={runtime?.running}>{runtime?.running ? '运行中' : dnscrypt.enabled ? '重启后生效' : '未启用'}</span>
   {/snippet}

@@ -6,7 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -140,7 +140,7 @@ func (s *DNSServer) watchDNSSECTrustAnchorFile(ctx context.Context, done chan<- 
 		now := time.Now()
 		if config.DNSSECValidate && config.DNSSECAutoUpdate && !now.Before(nextAutoUpdate) {
 			if err := s.refreshDNSSECTrustAnchors(config); err != nil {
-				log.Printf("DNSSEC trust anchor update skipped: %v", err)
+				slog.Warn("DNSSEC trust anchor update skipped", "error", err)
 				nextAutoUpdate = now.Add(5 * time.Minute)
 			} else {
 				nextAutoUpdate = now.Add(24 * time.Hour)
@@ -162,7 +162,7 @@ func (s *DNSServer) watchDNSSECTrustAnchorFile(ctx context.Context, done chan<- 
 			continue
 		}
 		if err := s.rebuildDNSSECValidator(config); err != nil {
-			log.Printf("DNSSEC trust anchor reload skipped: %v", err)
+			slog.Warn("DNSSEC trust anchor reload skipped", "error", err)
 			continue
 		}
 		activePath = path

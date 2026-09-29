@@ -2,15 +2,16 @@
   import type { Snippet } from 'svelte';
 
   let {
+    id,
     title,
     description,
     flush = false,
     actions,
     children
-  }: { title?: string; description?: string; flush?: boolean; actions?: Snippet; children: Snippet } = $props();
+  }: { id?: string; title?: string; description?: string; flush?: boolean; actions?: Snippet; children: Snippet } = $props();
 </script>
 
-<section class="card">
+<section class="card" {id}>
   {#if title || actions}
     <header>
       <div class="heading">

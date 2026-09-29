@@ -14,7 +14,7 @@
   };
 </script>
 
-<Card title="拦截响应" description="命中过滤规则时返回给客户端的内容。">
+<Card id="sec-blocking" title="拦截响应" description="命中过滤规则时返回给客户端的内容。">
   <div class="form-grid">
     <Field label="拦截模式" hint={HINTS[config.blocking_mode]}>
       <select bind:value={config.blocking_mode}>

@@ -22,7 +22,7 @@
   }
 </script>
 
-<Card title="上游服务器" description="主上游负责常规请求；备用上游只在主上游无可用响应、超时或返回 SERVFAIL/REFUSED 时接管。">
+<Card id="sec-upstreams" title="上游服务器" description="主上游负责常规请求；备用上游只在主上游无可用响应、超时或返回 SERVFAIL/REFUSED 时接管。">
   {#snippet actions()}
     <button class="btn" type="button" disabled={store.busy || cleanList(config.upstreams).length === 0} onclick={test}>测试上游</button>
   {/snippet}

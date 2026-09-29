@@ -2,6 +2,7 @@ package querylog
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -123,5 +124,24 @@ func TestQueryLoggerDashboardAggregatesBoundedEntries(t *testing.T) {
 	}
 	if len(dashboard.Upstreams) != 2 || dashboard.Upstreams[0].Address != "tls://two.example:853" || dashboard.Upstreams[0].Count != 2 || dashboard.Upstreams[0].AverageDurationMS != 60 {
 		t.Fatalf("unexpected upstream aggregation: %#v", dashboard.Upstreams)
+	}
+}
+
+func TestQueryFiltersAndPages(t *testing.T) {
+	logger := New(10)
+	for index, action := range []string{"forwarded", "block", "cached", "block"} {
+		logger.Add(Entry{Domain: fmt.Sprintf("d%d.example", index), Client: "192.0.2.1", Action: action})
+	}
+	if page := logger.Query(Filter{Action: "block"}); page.Total != 2 || page.Items[0].Domain != "d3.example" {
+		t.Fatalf("action filter = %#v", page)
+	}
+	if page := logger.Query(Filter{Search: "D1", Limit: 5}); page.Total != 1 {
+		t.Fatalf("search = %#v", page)
+	}
+	if page := logger.Query(Filter{Search: "192.0.2", Offset: 3, Limit: 2}); page.Total != 4 || len(page.Items) != 1 {
+		t.Fatalf("paging = %#v", page)
+	}
+	if page := logger.Query(Filter{}); len(page.Actions) != 3 || page.Actions[0] != "block" {
+		t.Fatalf("actions = %v", page.Actions)
 	}
 }

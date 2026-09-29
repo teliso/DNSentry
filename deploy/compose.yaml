@@ -1,0 +1,20 @@
+# docker compose -f deploy/compose.yaml up -d
+# Set DNSENTRY_API_TOKEN (e.g. in a .env file next to this file); the console
+# refuses to listen on a public address without it.
+services:
+  dnsentry:
+    image: dnsentry:latest
+    build:
+      context: ..
+    restart: unless-stopped
+    environment:
+      DNSENTRY_API_TOKEN: ${DNSENTRY_API_TOKEN:?set DNSENTRY_API_TOKEN}
+    ports:
+      - "53:53/udp"
+      - "53:53/tcp"
+      - "127.0.0.1:18080:18080/tcp"
+    volumes:
+      - dnsentry-data:/var/lib/dnsentry
+
+volumes:
+  dnsentry-data:

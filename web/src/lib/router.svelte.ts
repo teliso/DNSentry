@@ -1,10 +1,11 @@
-export const ROUTES = ['overview', 'filters', 'sources', 'logs', 'upstreams', 'settings'] as const;
+export const ROUTES = ['overview', 'logs', 'filters', 'sources', 'records', 'dns', 'settings'] as const;
 export type Route = (typeof ROUTES)[number];
 
-const LEGACY: Record<string, Route> = { rules: 'filters' };
+/** Old hash names keep working for bookmarks. */
+const LEGACY: Record<string, Route> = { rules: 'filters', upstreams: 'dns' };
 
 function parse(hash: string): Route {
-  const name = hash.replace(/^#\/?/, '');
+  const name = hash.replace(/^#\/?/, '').split('/')[0];
   const route = LEGACY[name] ?? name;
   return (ROUTES as readonly string[]).includes(route) ? (route as Route) : 'overview';
 }
@@ -14,7 +15,11 @@ class Router {
 
   constructor() {
     window.addEventListener('hashchange', () => {
-      this.current = parse(window.location.hash);
+      const next = parse(window.location.hash);
+      if (next !== this.current) {
+        this.current = next;
+        window.scrollTo({ top: 0 });
+      }
     });
   }
 

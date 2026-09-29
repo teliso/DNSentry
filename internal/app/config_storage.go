@@ -1,10 +1,12 @@
 package app
 
 import (
-	"encoding/json"
+	"errors"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 
 	"gopkg.in/yaml.v3"
@@ -21,50 +23,73 @@ func configPath() string { return configFile }
 
 func configBackupPath() string { return configPath() + ".bak" }
 
-func legacyConfigPath() string { return filepath.Join(filepath.Dir(configPath()), "config.json") }
+// defaultConfig is written on first start when no configuration exists. Data
+// files are placed next to the configuration file. DNSENTRY_DNS_LISTEN and
+// DNSENTRY_WEB_LISTEN override the listen addresses of this initial
+// configuration only, which suits container images.
+func defaultConfig() *Config {
+	dir := filepath.Dir(configPath())
+	return &Config{
+		DNSListens:            []string{envOr("DNSENTRY_DNS_LISTEN", ":15353")},
+		HTTPListen:            envOr("DNSENTRY_WEB_LISTEN", "127.0.0.1:18080"),
+		Upstreams:             []string{"1.1.1.1:53", "8.8.8.8:53"},
+		BootstrapDNS:          []string{"1.1.1.1:53", "8.8.8.8:53"},
+		UpstreamMode:          "load_balance",
+		UpstreamTimeout:       4,
+		BlockingMode:          "nxdomain",
+		BlockingIPv4:          "0.0.0.0",
+		BlockingIPv6:          "::",
+		BlockedResponseTTL:    10,
+		RulesFile:             filepath.Join(dir, "rules.txt"),
+		CacheEnabled:          true,
+		CacheSize:             4 << 20,
+		QueryLogSize:          1000,
+		QueryLogFile:          filepath.Join(dir, "querylog"),
+		QueryLogRetentionDays: 7,
+		Access:                DNSAccessConfig{MaxConcurrentQueries: 2048},
+		Encryption:            EncryptionConfig{DNSCrypt: DNSCryptConfig{ProviderName: "dnsentry", CertificateTTLHours: 24}},
+	}
+}
 
-func loadConfig() (*Config, error) {
+func envOr(key, fallback string) string {
+	if value := strings.TrimSpace(os.Getenv(key)); value != "" {
+		return value
+	}
+	return fallback
+}
+
+// readConfig parses and validates the configuration file without side effects.
+func readConfig() (*Config, error) {
 	data, err := os.ReadFile(configPath())
-	if err == nil {
-		fileConfig := new(yamlConfig)
-		if err := yaml.Unmarshal(data, fileConfig); err != nil {
-			return nil, fmt.Errorf("invalid YAML config: %w", err)
-		}
-		validated, err := validateConfig(fileConfig.toConfig())
-		if err != nil {
-			return nil, err
-		}
-		return validated, nil
-	}
-	if !os.IsNotExist(err) {
-		return nil, err
-	}
-
-	legacyData, legacyErr := os.ReadFile(legacyConfigPath())
-	if legacyErr != nil {
-		if os.IsNotExist(legacyErr) {
-			return nil, fmt.Errorf("neither %s nor legacy %s exists", configPath(), legacyConfigPath())
-		}
-		return nil, legacyErr
-	}
-	legacyConfig := new(Config)
-	if err := json.Unmarshal(legacyData, legacyConfig); err != nil {
-		return nil, fmt.Errorf("invalid legacy JSON config: %w", err)
-	}
-	// The original MVP measured cache_size as entry count. Migrate it to bytes.
-	legacyConfig.CacheEnabled = true
-	if legacyConfig.CacheSize < 65536 {
-		legacyConfig.CacheSize = 4 << 20
-	}
-	legacyConfig, err = validateConfig(legacyConfig)
 	if err != nil {
 		return nil, err
 	}
-	if err := saveConfig(legacyConfig); err != nil {
-		return nil, fmt.Errorf("could not migrate JSON config to YAML: %w", err)
+	fileConfig := new(yamlConfig)
+	if err := yaml.Unmarshal(data, fileConfig); err != nil {
+		return nil, fmt.Errorf("invalid YAML in %s: %w", configPath(), err)
 	}
-	fmt.Printf("Migrated %s to %s\n", legacyConfigPath(), configPath())
-	return legacyConfig, nil
+	validated, err := validateConfig(fileConfig.toConfig())
+	if err != nil {
+		return nil, fmt.Errorf("invalid configuration in %s: %w", configPath(), err)
+	}
+	return validated, nil
+}
+
+// loadConfig reads the configuration, creating a default one on first start.
+func loadConfig() (*Config, error) {
+	config, err := readConfig()
+	if !errors.Is(err, os.ErrNotExist) {
+		return config, err
+	}
+	config, err = validateConfig(defaultConfig())
+	if err != nil {
+		return nil, err
+	}
+	if err := saveConfig(config); err != nil {
+		return nil, fmt.Errorf("create default configuration: %w", err)
+	}
+	slog.Info("created default configuration", "path", configPath())
+	return config, nil
 }
 
 var configSaveMu sync.Mutex

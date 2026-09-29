@@ -293,3 +293,24 @@ func TestValidateConfigAppliesExistingDefaults(t *testing.T) {
 		t.Fatalf("default or normalized upstream values changed: %#v", validated)
 	}
 }
+
+func TestLoadConfigCreatesDefaultNextToConfigFile(t *testing.T) {
+	dir := t.TempDir()
+	previous := configFile
+	configFile = filepath.Join(dir, "etc", "config.yaml")
+	t.Cleanup(func() { configFile = previous })
+
+	config, err := loadConfig()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if config.RulesFile != filepath.Join(dir, "etc", "rules.txt") || config.HTTPListen != "127.0.0.1:18080" {
+		t.Fatalf("unexpected defaults: %#v", config)
+	}
+	if _, err := readConfig(); err != nil {
+		t.Fatalf("default config is not valid on reload: %v", err)
+	}
+	if err := CheckConfig(); err != nil {
+		t.Fatalf("CheckConfig: %v", err)
+	}
+}

@@ -7,7 +7,7 @@
   let { config }: { config: Config } = $props();
 </script>
 
-<Card title="查询日志" description="内存日志与仪表盘始终可用。持久化日志会包含客户端 IP 与查询域名，请确认符合隐私与合规要求。">
+<Card id="sec-logging" title="查询日志" description="内存日志与仪表盘始终可用。持久化日志会包含客户端 IP 与查询域名，请确认符合隐私与合规要求。">
   {#snippet actions()}<span class="badge warn">重启后生效</span>{/snippet}
   <div class="stack">
     <Switch bind:checked={config.query_log_enabled} label="启用 JSONL 持久化" description="按日期异步写入日志文件，并自动清理过期文件。" />

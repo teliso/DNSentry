@@ -1,7 +1,7 @@
 import { api, APIError, initToken, setToken, setUnauthorizedHandler } from './api';
 import { normalizeConfig, serializeConfig, validateConfig } from './config';
 import { toasts } from './toast.svelte';
-import type { Config, LocalSummary, LogEntry, Rule, RuleAction, RuleSource, Status, UpstreamTest } from './types';
+import type { Config, LocalRecord, LocalSummary, Rule, RuleAction, RuleSource, Status, UpstreamTest } from './types';
 
 const POLL_INTERVAL_MS = 10_000;
 
@@ -14,7 +14,6 @@ function messageOf(cause: unknown, fallback: string): string {
 /** Client-side state of the console: live data, the saved config and the editable draft. */
 class ConsoleStore {
   status = $state.raw<Status | null>(null);
-  logs = $state.raw<LogEntry[]>([]);
   sources = $state.raw<RuleSource[]>([]);
   /** Bumped after every rule change so rule views know to reload. */
   rulesVersion = $state(0);
@@ -64,10 +63,9 @@ class ConsoleStore {
 
   async refreshLive() {
     try {
-      const [status, logs] = await Promise.all([api.status(), api.logs()]);
+      const status = await api.status();
       this.status = status;
       this.setSources(status.rule_sources ?? []);
-      this.logs = logs;
       this.online = true;
       this.tokenRequired = false;
     } catch (cause) {
@@ -122,6 +120,21 @@ class ConsoleStore {
 
   async restoreConfig() {
     await this.commitConfig(() => api.restoreConfig(), '已恢复上次配置', '恢复配置失败');
+  }
+
+  /**
+   * Saves local records immediately, based on the saved configuration so that
+   * unrelated unsaved edits in the settings pages are neither sent nor lost.
+   */
+  async saveLocalRecords(records: LocalRecord[], done: string): Promise<boolean> {
+    if (!this.saved) return false;
+    const payload = serializeConfig({ ...this.saved, local_records: records });
+    return this.act(async () => {
+      const result = normalizeConfig(await api.saveConfig(payload));
+      this.saved = result;
+      if (this.draft) this.draft.local_records = JSON.parse(JSON.stringify(result.local_records));
+      toasts.success(done);
+    }, '保存本地记录失败');
   }
 
   async clearCache() {

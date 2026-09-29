@@ -8,7 +8,7 @@
   let { config }: { config: Config } = $props();
 </script>
 
-<Card title="访问控制与安全" description="限制客户端来源、控制资源使用，并阻止公网域名返回私网地址。">
+<Card id="sec-access" title="访问控制与安全" description="限制客户端来源、控制资源使用，并阻止公网域名返回私网地址。">
   <div class="stack">
     <div class="form-grid two">
       <ListEditor label="允许的客户端" hint="IP 或 CIDR；留空允许所有" placeholder="192.0.2.0/24" code rows={3} bind:values={config.access.allowed_clients} />

@@ -10,7 +10,7 @@
   const cache = $derived(store.status?.cache);
 </script>
 
-<Card title="DNS 缓存" description="按字节容量运行的分片 LRU 缓存，支持负缓存与过期后台刷新。">
+<Card id="sec-cache" title="DNS 缓存" description="按字节容量运行的分片 LRU 缓存，支持负缓存与过期后台刷新。">
   {#snippet actions()}
     <span class="muted tabular stat">
       {formatNumber(cache?.entries ?? 0)} 条 · {formatBytes(cache?.used_bytes ?? 0)} · 命中率 {formatPercent(cache?.hit_rate ?? 0)}

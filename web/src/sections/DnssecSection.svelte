@@ -11,7 +11,7 @@
   const stats = $derived(store.status?.dnssec);
 </script>
 
-<Card title="DNSSEC" description="控制是否向上游请求 DNSSEC 数据，以及是否在本地验证签名链。">
+<Card id="sec-dnssec" title="DNSSEC" description="控制是否向上游请求 DNSSEC 数据，以及是否在本地验证签名链。">
   {#snippet actions()}
     <span class="badge" class:ok={config.dnssec_validate}>{config.dnssec_validate ? '本地验证开启' : '本地验证关闭'}</span>
   {/snippet}

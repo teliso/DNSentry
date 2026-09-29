@@ -1,22 +1,29 @@
 <script lang="ts">
   import PageHeader from '../components/PageHeader.svelte';
   import SaveBar from '../components/SaveBar.svelte';
+  import SectionNav from '../components/SectionNav.svelte';
   import { store } from '../lib/store.svelte';
   import BlockingSection from '../sections/BlockingSection.svelte';
   import CacheSection from '../sections/CacheSection.svelte';
   import DnssecSection from '../sections/DnssecSection.svelte';
-  import LocalRecordsSection from '../sections/LocalRecordsSection.svelte';
   import UpstreamsSection from '../sections/UpstreamsSection.svelte';
+
+  const SECTIONS = [
+    { id: 'sec-upstreams', label: '上游服务器' },
+    { id: 'sec-cache', label: '缓存' },
+    { id: 'sec-blocking', label: '拦截响应' },
+    { id: 'sec-dnssec', label: 'DNSSEC' }
+  ];
 </script>
 
-<PageHeader title="上游与解析" description="管理上游服务器、缓存、拦截响应、DNSSEC 与本地记录。修改在保存后才会生效。" />
+<PageHeader title="DNS 设置" description="上游服务器、缓存、被拦截请求的响应方式与 DNSSEC。修改在保存后立即生效。" />
 
 {#if store.draft}
+  <SectionNav sections={SECTIONS} />
   <UpstreamsSection config={store.draft} />
   <CacheSection config={store.draft} />
   <BlockingSection config={store.draft} />
   <DnssecSection config={store.draft} />
-  <LocalRecordsSection config={store.draft} />
   <SaveBar />
 {:else}
   <p class="muted">正在读取配置…</p>

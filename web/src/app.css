@@ -25,6 +25,8 @@
   --series-total: #3358d4;
   --series-blocked: #e8590c;
 
+  --page-width: 1280px;
+  --topbar-height: 56px;
   --radius: 10px;
   --radius-sm: 7px;
   --shadow: 0 1px 2px rgb(20 26 40 / 0.05), 0 4px 14px rgb(20 26 40 / 0.04);
@@ -160,6 +162,8 @@ table.data .cell-domain { font-family: var(--font-mono); font-size: 13px; word-b
 .form-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 16px; }
 .form-grid.two { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .divider { border: 0; border-top: 1px solid var(--line); margin: 4px 0; }
+/* Cards that are targets of in-page section links stop below the sticky bars. */
+[id] { scroll-margin-top: calc(var(--topbar-height) + 64px); }
 .unit { position: relative; }
 .unit input { padding-right: 44px; }
 .unit > span { position: absolute; right: 11px; top: 7px; color: var(--muted); pointer-events: none; }

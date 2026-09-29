@@ -2,6 +2,7 @@ package querylog
 
 import (
 	"sort"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -255,4 +256,54 @@ func dashboardCounts(values map[string]uint64, limit int) []DashboardCount {
 		return result[:limit]
 	}
 	return result
+}
+
+// Filter selects entries for Query.
+type Filter struct {
+	Search string // substring of the domain or client address
+	Action string // exact action, empty for any
+	Offset int
+	Limit  int
+}
+
+// Page is one page of entries, newest first, plus the actions present in the
+// whole log so clients can offer them as filters.
+type Page struct {
+	Total   int      `json:"total"`
+	Items   []Entry  `json:"items"`
+	Actions []string `json:"actions"`
+}
+
+const maxPageSize = 500
+
+// Query returns the entries matching filter, newest first.
+func (l *Logger) Query(filter Filter) Page {
+	search := strings.ToLower(strings.TrimSpace(filter.Search))
+	limit := filter.Limit
+	if limit <= 0 || limit > maxPageSize {
+		limit = 100
+	}
+	offset := max(filter.Offset, 0)
+	page := Page{Items: []Entry{}, Actions: []string{}}
+	seen := map[string]bool{}
+	l.mu.RLock()
+	defer l.mu.RUnlock()
+	for _, entry := range l.entries {
+		if !seen[entry.Action] {
+			seen[entry.Action] = true
+			page.Actions = append(page.Actions, entry.Action)
+		}
+		if filter.Action != "" && entry.Action != filter.Action {
+			continue
+		}
+		if search != "" && !strings.Contains(entry.Domain, search) && !strings.Contains(entry.Client, search) {
+			continue
+		}
+		if page.Total >= offset && len(page.Items) < limit {
+			page.Items = append(page.Items, entry)
+		}
+		page.Total++
+	}
+	sort.Strings(page.Actions)
+	return page
 }
