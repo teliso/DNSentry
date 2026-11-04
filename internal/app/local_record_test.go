@@ -3,7 +3,9 @@ package app
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/teliso/DNSentry/internal/upstream"
 
@@ -75,6 +77,85 @@ func TestLocalRecordValidationRejectsInvalidValues(t *testing.T) {
 	} {
 		if err := validateLocalRecords([]LocalRecord{record}); err == nil {
 			t.Fatalf("invalid local record was accepted: %#v", record)
+		}
+	}
+}
+
+func wildcardServer(t *testing.T, records []LocalRecord) *DNSServer {
+	t.Helper()
+	if err := validateLocalRecords(records); err != nil {
+		t.Fatal(err)
+	}
+	server := &DNSServer{config: &Config{Upstreams: []string{"127.0.0.1:1"}}, cache: cache.New(1<<20, false), logs: querylog.New(10), client: &dns.Client{Net: "udp", Timeout: time.Second}, pool: upstream.NewPool([]string{"127.0.0.1:1"}), rules: rules.NewStore(filepath.Join(t.TempDir(), "r.txt"))}
+	server.setLocalRecords(records)
+	return server
+}
+
+func TestWildcardLocalRecords(t *testing.T) {
+	server := wildcardServer(t, []LocalRecord{
+		{Domain: "*.nas.home", Type: "A", Value: "192.168.1.10"},
+		{Domain: "special.nas.home", Type: "A", Value: "192.168.1.11"},
+		{Domain: "*.deep.nas.home", Type: "A", Value: "192.168.1.12"},
+		{Domain: "alias.home", Type: "CNAME", Value: "host.home"},
+		{Domain: "host.home", Type: "A", Value: "192.168.1.20"},
+		{Domain: "*.apps.home", Type: "CNAME", Value: "host.home"},
+	})
+	address := func(name string, qtype uint16) (rcode int, answers []dns.RR) {
+		response := ask(server, name, qtype)
+		if response == nil {
+			t.Fatalf("no response for %s", name)
+		}
+		return response.Rcode, response.Answer
+	}
+	for name, want := range map[string]string{
+		"a.nas.home.":       "192.168.1.10", // wildcard
+		"x.y.nas.home.":     "192.168.1.10", // several labels below the wildcard
+		"SPECIAL.nas.home.": "192.168.1.11", // an exact record wins
+		"a.deep.nas.home.":  "192.168.1.12", // the closest wildcard wins
+		"alias.home.":       "192.168.1.20", // A query for a local CNAME is followed
+		"photos.apps.home.": "192.168.1.20", // wildcard CNAME, followed
+	} {
+		_, answers := address(name, dns.TypeA)
+		var got string
+		for _, answer := range answers {
+			if a, ok := answer.(*dns.A); ok {
+				got = a.A.String()
+				if !strings.EqualFold(a.Hdr.Name, "host.home.") && !strings.EqualFold(a.Hdr.Name, dns.Fqdn(name)) {
+					t.Errorf("%s: answer owner %q", name, a.Hdr.Name)
+				}
+			}
+		}
+		if got != want {
+			t.Errorf("%s = %q (%v), want %s", name, got, answers, want)
+		}
+	}
+	if _, answers := address("photos.apps.home.", dns.TypeA); len(answers) < 1 || answers[0].Header().Name != "photos.apps.home." || answers[0].Header().Rrtype != dns.TypeCNAME {
+		t.Fatalf("the wildcard CNAME must be owned by the asked name: %v", answers)
+	}
+	// The wildcard name itself is not covered (nas.home is not below *.nas.home), and an existing name
+	// does not fall back to the wildcard for a type it lacks (checked against the snapshot, no upstream).
+	snapshot := server.localRecords.Load()
+	if len(snapshot.lookup("nas.home", "A")) != 0 {
+		t.Error("*.nas.home must not match nas.home")
+	}
+	if len(snapshot.lookup("special.nas.home", "TXT")) != 0 {
+		t.Error("an existing name must not be answered from a wildcard")
+	}
+	// No reverse record is derived from a wildcard.
+	if len(snapshot.ptr) != 2 {
+		t.Errorf("PTR records = %d, want 2 (special and host; wildcards derive none)", len(snapshot.ptr))
+	}
+}
+
+func TestWildcardNameValidation(t *testing.T) {
+	for _, domain := range []string{"*.home", "*.a.b.home"} {
+		if err := validateLocalRecords([]LocalRecord{{Domain: domain, Type: "A", Value: "192.0.2.1"}}); err != nil {
+			t.Errorf("%s rejected: %v", domain, err)
+		}
+	}
+	for _, domain := range []string{"*", "*.", "a.*.home", "**.home", "*home", "*.*.home"} {
+		if err := validateLocalRecords([]LocalRecord{{Domain: domain, Type: "A", Value: "192.0.2.1"}}); err == nil {
+			t.Errorf("%q was accepted", domain)
 		}
 	}
 }

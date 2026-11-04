@@ -72,9 +72,9 @@
   }
 </script>
 
-<Card title="添加记录" description="为内网设备或自定义域名直接应答，优先于缓存和上游。保存后立即生效。">
+<Card title="添加记录" description="为内网设备或自定义域名直接应答，优先于缓存和上游。域名可以写成 *.home.arpa 来匹配它下面的所有名称。保存后立即生效。">
   <form class="add" onsubmit={add}>
-    <Field label="域名"><input class="mono" placeholder="nas.home.arpa" bind:value={draft.domain} autocapitalize="off" spellcheck="false" /></Field>
+    <Field label="域名"><input class="mono" placeholder="nas.home.arpa 或 *.nas.home.arpa" bind:value={draft.domain} autocapitalize="off" spellcheck="false" /></Field>
     <Field label="类型">
       <select bind:value={draft.type}>{#each TYPES as type (type)}<option>{type}</option>{/each}</select>
     </Field>
