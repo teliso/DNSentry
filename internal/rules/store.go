@@ -2,7 +2,9 @@ package rules
 
 import (
 	"runtime/debug"
+	"slices"
 	"sort"
+	"strings"
 	"sync"
 	"sync/atomic"
 
@@ -28,16 +30,16 @@ type Store struct {
 }
 
 // snapshot is the immutable lookup structure: the lists in precedence order
-// and, per domain, a reference to the rule that applies.
+// and a sorted index with one reference per domain, pointing at its rule.
 type snapshot struct {
 	lists []*ruleList
-	rules map[string]ref
+	index []ref
 	total int
 }
 
 func NewStore(file string) *Store {
 	store := &Store{file: file, remote: make(map[string]*ruleList)}
-	store.snapshot.Store(&snapshot{rules: map[string]ref{}})
+	store.snapshot.Store(&snapshot{})
 	return store
 }
 
@@ -47,7 +49,11 @@ func (s *Store) Match(domain string) (Entry, bool) {
 	domain = dnsname.Normalize(domain)
 	snap := s.snapshot.Load()
 	for candidate := domain; candidate != ""; candidate = dnsname.Parent(candidate) {
-		if r, ok := snap.rules[candidate]; ok {
+		position, found := slices.BinarySearchFunc(snap.index, candidate, func(r ref, name string) int {
+			return strings.Compare(snap.lists[r.list].domain(int(r.index)), name)
+		})
+		if found {
+			r := snap.index[position]
 			return snap.lists[r.list].entry(int(r.index)), true
 		}
 	}
@@ -62,8 +68,11 @@ func (s *Store) Len() int {
 // SetRemote replaces the rules loaded from source. The store takes ownership
 // of entries.
 func (s *Store) SetRemote(source string, entries []Entry) {
-	list := newRuleList(source, entries)
-	s.update(func() { s.remote[source] = list })
+	s.setRemoteList(newRuleList(source, entries))
+}
+
+func (s *Store) setRemoteList(list *ruleList) {
+	s.update(func() { s.remote[list.source] = list })
 }
 
 // RemoveRemote unloads the rules of source.
@@ -79,8 +88,7 @@ func (s *Store) HasRemote(source string) bool {
 	return ok
 }
 
-func (s *Store) setLocal(entries []Entry) {
-	list := newRuleList("", entries)
+func (s *Store) setLocal(list *ruleList) {
 	s.update(func() { s.local = list })
 }
 
@@ -128,28 +136,9 @@ func (s *Store) listsLocked() []*ruleList {
 }
 
 func buildSnapshot(lists []*ruleList) *snapshot {
-	size := 0
+	total := 0
 	for _, list := range lists {
-		size += list.len()
+		total += list.len()
 	}
-	rules := make(map[string]ref, size)
-	for li, list := range lists {
-		for i, domain := range list.domains {
-			next := ref{list: uint16(li), index: uint32(i)}
-			if current, exists := rules[domain]; !exists || wins(lists, next, current) {
-				rules[domain] = next
-			}
-		}
-	}
-	return &snapshot{lists: lists, rules: rules, total: size}
-}
-
-// wins reports whether next overrides current for the same domain. Local rules
-// override remote ones; within the same kind an allow rule overrides a block.
-func wins(lists []*ruleList, next, current ref) bool {
-	nextList, currentList := lists[next.list], lists[current.list]
-	if nextList.isLocal() != currentList.isLocal() {
-		return nextList.isLocal()
-	}
-	return nextList.allow[next.index] && !currentList.allow[current.index]
+	return &snapshot{lists: lists, index: buildIndex(lists), total: total}
 }

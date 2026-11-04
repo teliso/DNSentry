@@ -3,6 +3,7 @@ package fsutil
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -11,6 +12,15 @@ import (
 // WriteFileAtomic writes data to a temporary file in the same directory and
 // renames it over path, so readers never observe a partially written file.
 func WriteFileAtomic(path string, data []byte, perm os.FileMode) error {
+	return WriteFileStreamAtomic(path, perm, func(w io.Writer) error {
+		_, err := w.Write(data)
+		return err
+	})
+}
+
+// WriteFileStreamAtomic is WriteFileAtomic for content produced by write,
+// which saves holding a large file in memory.
+func WriteFileStreamAtomic(path string, perm os.FileMode, write func(io.Writer) error) error {
 	directory := filepath.Dir(path)
 	if err := os.MkdirAll(directory, 0755); err != nil {
 		return err
@@ -30,7 +40,7 @@ func WriteFileAtomic(path string, data []byte, perm os.FileMode) error {
 		_ = temporary.Close()
 		return err
 	}
-	if _, err := temporary.Write(data); err != nil {
+	if err := write(temporary); err != nil {
 		_ = temporary.Close()
 		return err
 	}

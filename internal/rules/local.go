@@ -29,10 +29,17 @@ type LocalSummary struct {
 
 const maxIgnoredReported = 50
 
-func parseLocal(text string) ([]Entry, LocalSummary) {
-	var entries []Entry
+func parseLocal(text string) (*ruleList, LocalSummary) {
+	builder := newListBuilder("")
 	summary := LocalSummary{IgnoredLines: []int{}}
-	for index, line := range strings.Split(text, "\n") {
+	count := 0
+	for index := 0; len(text) > 0; index++ {
+		line := text
+		if end := strings.IndexByte(text, '\n'); end >= 0 {
+			line, text = text[:end], text[end+1:]
+		} else {
+			text = ""
+		}
 		parsed := ParseLine(line)
 		if parsed == nil {
 			trimmed := strings.TrimSpace(line)
@@ -44,10 +51,13 @@ func parseLocal(text string) ([]Entry, LocalSummary) {
 			}
 			continue
 		}
-		entries = append(entries, parsed...)
+		for _, entry := range parsed {
+			builder.Add(entry)
+		}
+		count += len(parsed)
 	}
-	summary.Rules = len(entries)
-	return entries, summary
+	summary.Rules = count
+	return builder.Build(), summary
 }
 
 // Reload re-reads the local rules file. A missing file means no local rules.
@@ -63,9 +73,10 @@ func (s *Store) reloadLocked() (string, error) {
 	if err != nil && !os.IsNotExist(err) {
 		return "", err
 	}
-	entries, _ := parseLocal(string(data))
-	s.setLocal(entries)
-	return string(data), nil
+	text := string(data)
+	list, _ := parseLocal(text)
+	s.setLocal(list)
+	return text, nil
 }
 
 // LocalText returns the raw content of the local rules file.
@@ -89,13 +100,13 @@ func (s *Store) SetLocalText(text string) (LocalSummary, error) {
 	if text != "" && !strings.HasSuffix(text, "\n") {
 		text += "\n"
 	}
-	entries, summary := parseLocal(text)
+	list, summary := parseLocal(text)
 	s.fileMu.Lock()
 	defer s.fileMu.Unlock()
 	if err := fsutil.WriteFileAtomic(s.file, []byte(text), 0644); err != nil {
 		return LocalSummary{}, err
 	}
-	s.setLocal(entries)
+	s.setLocal(list)
 	return summary, nil
 }
 
@@ -133,8 +144,8 @@ func (s *Store) Add(domain string, action Action) (Entry, error) {
 	}
 	s.stateMu.RLock()
 	if s.local != nil {
-		for i, domain := range s.local.domains {
-			if domain == entry.Domain && s.local.allow[i] == (entry.Action == ActionAllow) {
+		for i := 0; i < s.local.len(); i++ {
+			if s.local.domain(i) == entry.Domain && s.local.allow[i] == (entry.Action == ActionAllow) {
 				s.stateMu.RUnlock()
 				return Entry{}, ErrRuleExists
 			}

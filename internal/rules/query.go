@@ -45,7 +45,8 @@ func (s *Store) Query(filter Filter) Page {
 		case filter.Source != "" && filter.Source != SourceLocal && source != filter.Source:
 			continue
 		}
-		for i, domain := range list.domains {
+		for i := 0; i < list.len(); i++ {
+			domain := list.domain(i)
 			if filter.Action != "" && (ActionBlock == filter.Action) == list.allow[i] {
 				continue
 			}
@@ -88,8 +89,8 @@ func (s *Store) Check(domain string) (Check, error) {
 		names[name] = true
 	}
 	for _, list := range s.lists() {
-		for i, domain := range list.domains {
-			if names[domain] && len(result.Candidates) < maxCheckCandidates {
+		for i := 0; i < list.len(); i++ {
+			if names[list.domain(i)] && len(result.Candidates) < maxCheckCandidates {
 				result.Candidates = append(result.Candidates, list.entry(i))
 			}
 		}
