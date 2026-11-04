@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -241,5 +242,21 @@ func TestWebTLSSettingsRoundTripAndNeedARestart(t *testing.T) {
 	}
 	if err := checkAPIPaths(Config{WebTLS: WebTLSConfig{Certificate: "/etc/ssl/x.crt"}}, Config{}); err == nil {
 		t.Fatal("an absolute certificate path was accepted through the API")
+	}
+}
+
+func TestUnusedWebTLSIsNotWrittenToTheConfigFile(t *testing.T) {
+	config := testConfig()
+	data, err := yaml.Marshal(newYAMLConfig(config))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(data), "tls:") {
+		t.Fatalf("a configuration without HTTPS must not carry a tls section:\n%s", data)
+	}
+	config.WebTLS = WebTLSConfig{Enabled: true, Source: "auto"}
+	data, _ = yaml.Marshal(newYAMLConfig(config))
+	if !strings.Contains(string(data), "tls:") {
+		t.Fatal("enabled HTTPS must be written")
 	}
 }

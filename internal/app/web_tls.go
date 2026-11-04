@@ -45,6 +45,12 @@ type WebTLSConfig struct {
 	ServerName string `json:"server_name" yaml:"server_name,omitempty"`
 }
 
+// IsZero lets the YAML encoder leave the section out while it holds nothing
+// but defaults, so configurations that do not use HTTPS stay uncluttered.
+func (c WebTLSConfig) IsZero() bool {
+	return !c.Enabled && (c.Source == "" || c.Source == webTLSAuto) && c.Certificate == "" && c.PrivateKey == "" && c.ServerName == ""
+}
+
 // normalizeWebTLS fills in Source and tidies ServerName.
 func normalizeWebTLS(config *WebTLSConfig) {
 	config.Source = strings.ToLower(strings.TrimSpace(config.Source))

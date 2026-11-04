@@ -71,7 +71,7 @@ func TestConfigExportAndImportRoundTrip(t *testing.T) {
 	if response := post("version: 1\ndns:\n  listens: [':1']\n"); response.Code != http.StatusBadRequest {
 		t.Fatalf("incomplete import = %d", response.Code)
 	}
-	if response := post(strings.Replace(exported.Body.String(), "listen: 127.0.0.1:18080", "listen: 127.0.0.1:18080\nrules_dummy: 1", 1)); response.Code != http.StatusOK {
+	if response := post(exported.Body.String()+"\nrules_dummy: 1\n"); response.Code != http.StatusOK {
 		t.Fatalf("unknown keys must be ignored: %d", response.Code)
 	}
 }
