@@ -96,12 +96,9 @@ var apiRoutes = []apiRoute{
 // proceed; on failure it has already written the response.
 func (a *API) authorize(writer http.ResponseWriter, request *http.Request) bool {
 	client := requestClientIP(request)
-	if wait := a.authFailures.blocked(client); wait > 0 {
-		writer.Header().Set("Retry-After", strconv.Itoa(int(wait.Seconds())+1))
-		writeError(writer, http.StatusTooManyRequests, "too many failed authentication attempts")
-		return false
-	}
-	loginSet := a.loginStore().Configured()
+	// A live session is not a guess (256 random bits), so it is accepted even
+	// while this address is throttled: behind a shared proxy address, somebody
+	// else's failed attempts must not lock the administrator out.
 	if a.sessionValid(request) {
 		// The session cookie is SameSite=Strict; checking the origin as well
 		// costs nothing and covers browsers that ignore the attribute.
@@ -111,6 +108,12 @@ func (a *API) authorize(writer http.ResponseWriter, request *http.Request) bool 
 		}
 		return true
 	}
+	if wait := a.authFailures.blocked(client); wait > 0 {
+		writer.Header().Set("Retry-After", strconv.Itoa(int(wait.Seconds())+1))
+		writeError(writer, http.StatusTooManyRequests, "too many failed authentication attempts")
+		return false
+	}
+	loginSet := a.loginStore().Configured()
 	if a.apiToken != "" {
 		provided, ok := bearerToken(request)
 		if ok && tokensEqual(provided, a.apiToken) {

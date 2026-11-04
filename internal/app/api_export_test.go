@@ -24,7 +24,7 @@ func TestExportLogsCSVFiltersAndNeutralisesFormulas(t *testing.T) {
 	if err != nil || len(rows) != 2 || rows[1][2] != "a.test" {
 		t.Fatalf("rows = %v, %v", rows, err)
 	}
-	if rows[1][7] != "'@@||evil^" {
+	if rows[1][7] != "'@@||evil^" || rows[1][2] != "a.test" {
 		t.Fatalf("a cell starting with @ was not neutralised: %q", rows[1][7])
 	}
 	if response := callAPI(t, api, http.MethodGet, "/api/logs/export?format=json", nil); response.Code != http.StatusOK || !strings.Contains(response.Body.String(), "b.test") {
@@ -71,7 +71,7 @@ func TestConfigExportAndImportRoundTrip(t *testing.T) {
 	if response := post("version: 1\ndns:\n  listens: [':1']\n"); response.Code != http.StatusBadRequest {
 		t.Fatalf("incomplete import = %d", response.Code)
 	}
-	if response := post(exported.Body.String()+"\nrules_dummy: 1\n"); response.Code != http.StatusOK {
+	if response := post(exported.Body.String() + "\nrules_dummy: 1\n"); response.Code != http.StatusOK {
 		t.Fatalf("unknown keys must be ignored: %d", response.Code)
 	}
 }

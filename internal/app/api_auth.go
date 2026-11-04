@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/teliso/DNSentry/internal/auth"
@@ -40,13 +41,23 @@ func (a *API) startSession(writer http.ResponseWriter, request *http.Request) er
 	}
 	http.SetCookie(writer, &http.Cookie{
 		Name: sessionCookie, Value: token, Path: "/", MaxAge: int(sessionTTL.Seconds()),
-		HttpOnly: true, SameSite: http.SameSiteStrictMode, Secure: request.TLS != nil,
+		HttpOnly: true, SameSite: http.SameSiteStrictMode, Secure: requestIsHTTPS(request),
 	})
 	return nil
 }
 
 func clearSessionCookie(writer http.ResponseWriter, request *http.Request) {
-	http.SetCookie(writer, &http.Cookie{Name: sessionCookie, Value: "", Path: "/", MaxAge: -1, HttpOnly: true, SameSite: http.SameSiteStrictMode, Secure: request.TLS != nil})
+	http.SetCookie(writer, &http.Cookie{Name: sessionCookie, Value: "", Path: "/", MaxAge: -1, HttpOnly: true, SameSite: http.SameSiteStrictMode, Secure: requestIsHTTPS(request)})
+}
+
+// requestIsHTTPS is true for a TLS connection, and for a plain one that comes
+// from a reverse proxy on this machine saying the client used HTTPS. The header
+// is trusted only from loopback: anybody else could simply claim it.
+func requestIsHTTPS(request *http.Request) bool {
+	if request.TLS != nil {
+		return true
+	}
+	return isLoopbackRequest(request) && strings.EqualFold(strings.TrimSpace(request.Header.Get("X-Forwarded-Proto")), "https")
 }
 
 // authenticated reports whether the request would pass authorize, without any

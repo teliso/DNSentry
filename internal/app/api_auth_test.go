@@ -195,3 +195,34 @@ func TestPublicWebAccessAcceptsAConsolePassword(t *testing.T) {
 		t.Fatalf("a console password must allow public access: %v", err)
 	}
 }
+
+func TestSessionsAreNotThrottledAndCookiesFollowTheProxyScheme(t *testing.T) {
+	api := newConfigTestAPI(t)
+	set := authCall(t, api, http.MethodPut, "/api/auth", map[string]string{"username": "admin", "password": "correct horse"}, nil)
+	session := sessionOf(t, set)
+	if session.Secure {
+		t.Fatal("a plain HTTP login must not set a Secure cookie")
+	}
+	for i := 0; i < authFailureLimit+2; i++ { // somebody behind the same address guesses
+		authCall(t, api, http.MethodPost, "/api/login", map[string]string{"username": "admin", "password": "guess"}, nil)
+	}
+	if code := authCall(t, api, http.MethodGet, "/api/status", nil, nil).Code; code != http.StatusTooManyRequests {
+		t.Fatalf("the address should be throttled, got %d", code)
+	}
+	if code := authCall(t, api, http.MethodGet, "/api/status", nil, session).Code; code != http.StatusOK {
+		t.Fatalf("a valid session must work while the address is throttled: %d", code)
+	}
+
+	// A proxy on this machine that terminated TLS makes the cookie Secure; a remote client cannot claim it.
+	api2 := newConfigTestAPI(t)
+	proxied := authCall(t, api2, http.MethodPut, "/api/auth", map[string]string{"username": "admin", "password": "correct horse"}, nil, "X-Forwarded-Proto", "https")
+	if !sessionOf(t, proxied).Secure {
+		t.Fatal("a loopback proxy reporting HTTPS must yield a Secure cookie")
+	}
+	remote := httptest.NewRequest(http.MethodGet, "http://example.test/", nil)
+	remote.RemoteAddr = "192.0.2.9:5555"
+	remote.Header.Set("X-Forwarded-Proto", "https")
+	if requestIsHTTPS(remote) {
+		t.Fatal("X-Forwarded-Proto must be ignored from non-loopback clients")
+	}
+}

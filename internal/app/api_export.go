@@ -43,7 +43,7 @@ func (a *API) exportLogs(writer http.ResponseWriter, request *http.Request) {
 		out := csv.NewWriter(writer)
 		_ = out.Write([]string{"time", "client", "domain", "type", "action", "upstream", "duration_ms", "rule", "rule_source"})
 		for _, entry := range entries {
-			_ = out.Write([]string{entry.Time, entry.Client, csvSafe(entry.Domain), entry.Type, entry.Action, entry.Upstream, strconv.FormatInt(entry.Duration, 10), csvSafe(entry.Rule), entry.RuleSource})
+			_ = out.Write([]string{csvSafe(entry.Time), csvSafe(entry.Client), csvSafe(entry.Domain), csvSafe(entry.Type), csvSafe(entry.Action), csvSafe(entry.Upstream), strconv.FormatInt(entry.Duration, 10), csvSafe(entry.Rule), csvSafe(entry.RuleSource)})
 		}
 		out.Flush()
 	case "json":
