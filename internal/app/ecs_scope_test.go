@@ -17,7 +17,7 @@ func TestPrepareCacheResponseForIPv4ECSScopes(t *testing.T) {
 		Address:       net.ParseIP("192.0.2.0"),
 	})
 
-	cached, _, ok := prepareCacheResponseForRequest(request, response)
+	cached, _, ok := prepareCacheResponseForRequest(request, response, &Config{})
 	if !ok {
 		t.Fatal("expected IPv4 ECS response to be cacheable")
 	}
@@ -37,7 +37,7 @@ func TestPrepareCacheResponseForIPv6ECSScopes(t *testing.T) {
 		Address:       net.ParseIP("2001:db8:1234::"),
 	})
 
-	cached, _, ok := prepareCacheResponseForRequest(request, response)
+	cached, _, ok := prepareCacheResponseForRequest(request, response, &Config{})
 	if !ok {
 		t.Fatal("expected IPv6 ECS response to be cacheable")
 	}
@@ -104,7 +104,7 @@ func TestPrepareCacheResponseRejectsInvalidECSScopes(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			cached, ttl, ok := prepareCacheResponseForRequest(test.request, test.response)
+			cached, ttl, ok := prepareCacheResponseForRequest(test.request, test.response, &Config{})
 			if ok || ttl != 0 || cached != test.response {
 				t.Fatalf("expected ECS response not to be cached, got ok=%v ttl=%d same=%v", ok, ttl, cached == test.response)
 			}
@@ -121,7 +121,7 @@ func TestCachedECSResponseUsesCurrentRequestSource(t *testing.T) {
 		SourceScope:   16,
 		Address:       net.ParseIP("192.0.2.0"),
 	})
-	cached, _, ok := prepareCacheResponseForRequest(request, response)
+	cached, _, ok := prepareCacheResponseForRequest(request, response, &Config{})
 	if !ok {
 		t.Fatal("expected response to be cached")
 	}

@@ -21,6 +21,7 @@ type DNSAccessConfig struct {
 	AllowedClients        []string `json:"allowed_clients,omitempty" yaml:"allowed_clients,omitempty"`
 	DeniedClients         []string `json:"denied_clients,omitempty" yaml:"denied_clients,omitempty"`
 	ClientRateLimitQPS    int      `json:"client_rate_limit_qps" yaml:"client_rate_limit_qps"`
+	MaxConcurrentQueries  int      `json:"max_concurrent_queries" yaml:"max_concurrent_queries"`
 	RebindingProtection   bool     `json:"rebinding_protection" yaml:"rebinding_protection"`
 	RebindingAllowDomains []string `json:"rebinding_allow_domains,omitempty" yaml:"rebinding_allow_domains,omitempty"`
 }
@@ -35,6 +36,9 @@ type clientAccessPolicy struct {
 func validateDNSAccessConfig(config DNSAccessConfig) error {
 	if config.ClientRateLimitQPS < 0 || config.ClientRateLimitQPS > maxClientRateLimitQPS {
 		return fmt.Errorf("client_rate_limit_qps must be between 0 and %d", maxClientRateLimitQPS)
+	}
+	if config.MaxConcurrentQueries < 0 {
+		return errors.New("max_concurrent_queries must not be negative")
 	}
 	for _, value := range append(append([]string(nil), config.AllowedClients...), config.DeniedClients...) {
 		if _, err := parseClientPrefix(value); err != nil {
@@ -73,6 +77,7 @@ func dnsAccessConfigEqual(left, right DNSAccessConfig) bool {
 	return slices.Equal(left.AllowedClients, right.AllowedClients) &&
 		slices.Equal(left.DeniedClients, right.DeniedClients) &&
 		left.ClientRateLimitQPS == right.ClientRateLimitQPS &&
+		left.MaxConcurrentQueries == right.MaxConcurrentQueries &&
 		left.RebindingProtection == right.RebindingProtection &&
 		slices.Equal(left.RebindingAllowDomains, right.RebindingAllowDomains)
 }
@@ -218,7 +223,7 @@ func (s *DNSServer) configureAccess(config DNSAccessConfig) {
 		s.clientLimiter.SetQPS(config.ClientRateLimitQPS)
 	}
 	s.accessMu.Unlock()
-	s.maxConcurrentQueries.Store(maxConcurrentQueries)
+	s.maxConcurrentQueries.Store(int64(config.MaxConcurrentQueries))
 }
 
 func (s *DNSServer) accessPolicySnapshot() *clientAccessPolicy {

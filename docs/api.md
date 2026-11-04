@@ -59,7 +59,7 @@ POST /api/protection
 - 私钥类字段（`private_key_pem`、DNSCrypt 的 `private_key` 和 `resolver_secret`）**不会返回**；`PUT` 时留空表示保持现有值。
 - `rule_sources` 不由 `PUT /config` 修改（用 `PUT /sources`），请求里的值会被忽略。
 - 成功返回 200 和保存后的配置。监听地址、控制台地址、规则文件、日志存储、加密 DNS 这类启动时设置会被保存，但要重启才生效——重启后才生效的情况可以从 `GET /status` 的 `restart_required` 得知。
-- 规则文件、日志、证书、私钥这些路径，改动时只能是工作目录内的相对路径（否则 400）。
+- 规则文件、日志、信任锚文件、证书、私钥这些路径，改动时只能是工作目录内的相对路径（否则 400）。
 
 ### `GET /logs`
 

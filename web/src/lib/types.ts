@@ -145,6 +145,7 @@ export type AccessConfig = {
   allowed_clients: string[];
   denied_clients: string[];
   client_rate_limit_qps: number;
+  max_concurrent_queries: number;
   rebinding_protection: boolean;
   rebinding_allow_domains: string[];
 };
@@ -153,7 +154,7 @@ export type UpstreamRoute = { name?: string; domains: string[]; upstreams: strin
 export type RouteStatus = { name?: string; domains: string[]; upstreams: UpstreamHealth[] };
 
 export type UpstreamMode = 'load_balance' | 'parallel' | 'fastest_addr';
-export type BlockingMode = 'nxdomain' | 'null_ip' | 'refused';
+export type BlockingMode = 'nxdomain' | 'null_ip' | 'custom_ip' | 'refused';
 
 export type Config = {
   dns_listens: string[];
@@ -167,12 +168,26 @@ export type Config = {
   block_aaaa: boolean;
   access: AccessConfig;
   bootstrap_dns: string[];
+  upstream_timeout_seconds: number;
   blocking_mode: BlockingMode;
+  blocking_ipv4: string;
+  blocking_ipv6: string;
+  blocked_response_ttl: number;
+  enable_dnssec: boolean;
   dnssec_validate: boolean;
+  dnssec_trust_anchors: string[];
+  dnssec_trust_anchor_file: string;
+  dnssec_auto_update: boolean;
   rules_file: string;
   cache_enabled: boolean;
   cache_size: number;
+  cache_ttl_min: number;
+  cache_ttl_max: number;
+  cache_prefetch: boolean;
   cache_optimistic: boolean;
+  cache_optimistic_answer_ttl: number;
+  cache_optimistic_max_age: number;
+  query_log_size: number;
   query_log_enabled: boolean;
   query_log_file: string;
   query_log_retention_days: number;

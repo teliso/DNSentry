@@ -36,7 +36,7 @@ func newConfigTestAPI(t *testing.T) *API {
 		rules:         rules.NewStore(validated.RulesFile),
 		cache:         cache.New(validated.CacheSize, validated.CacheEnabled),
 		logs:          querylog.New(10),
-		client:        &dns.Client{Net: "udp", Timeout: upstreamTimeout},
+		client:        &dns.Client{Net: "udp", Timeout: upstreamTimeout(validated.UpstreamTimeout)},
 		pool:          NewUpstreamPool(validated.Upstreams),
 		fallbackPool:  NewUpstreamPool(validated.FallbackUpstreams),
 		dnssecCacheOK: make(map[string]struct{}),
@@ -111,7 +111,7 @@ func TestSourceUpdateKeepsPendingConfigAndConfigUpdateKeepsSources(t *testing.T)
 	}
 
 	stale.DNSListens = []string{":25353"}
-	stale.BlockAAAA = true
+	stale.CacheTTLMin = 60
 	if response := callAPI(t, api, http.MethodPut, "/api/config", stale); response.Code != http.StatusOK {
 		t.Fatalf("PUT /config = %d %s", response.Code, response.Body)
 	}

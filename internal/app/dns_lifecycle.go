@@ -97,6 +97,12 @@ func (s *DNSServer) upstreamTimeout() time.Duration {
 	return s.client.Timeout
 }
 
+func (s *DNSServer) setUpstreamTimeout(timeout time.Duration) {
+	s.clientMu.Lock()
+	s.client.Timeout = timeout
+	s.clientMu.Unlock()
+}
+
 func (s *DNSServer) clientSnapshot() dns.Client {
 	s.clientMu.RLock()
 	defer s.clientMu.RUnlock()
@@ -105,7 +111,7 @@ func (s *DNSServer) clientSnapshot() dns.Client {
 
 func (s *DNSServer) applyConfig(config Config) error {
 	previous := s.configSnapshot()
-	dnssecChanged := previous.DNSSECValidate != config.DNSSECValidate
+	dnssecChanged := previous.DNSSECValidate != config.DNSSECValidate || previous.DNSSECAutoUpdate != config.DNSSECAutoUpdate || previous.DNSSECTrustAnchorFile != config.DNSSECTrustAnchorFile || !slices.Equal(previous.DNSSECTrustAnchors, config.DNSSECTrustAnchors)
 	localRecordsChanged := !localRecordsEqual(previous.LocalRecords, config.LocalRecords)
 	accessChanged := !dnsAccessConfigEqual(previous.Access, config.Access)
 	if dnssecChanged {
@@ -120,12 +126,13 @@ func (s *DNSServer) applyConfig(config Config) error {
 	s.configureAccess(config.Access)
 	s.setLocalRecords(config.LocalRecords)
 	s.setUpstreamRoutes(config.UpstreamRoutes)
-	if previous.CacheEnabled != config.CacheEnabled || previous.CacheSize != config.CacheSize || previous.OptimisticCache != config.OptimisticCache || dnssecChanged || previous.UpstreamMode != config.UpstreamMode || localRecordsChanged || !upstreamRoutesEqual(previous.UpstreamRoutes, config.UpstreamRoutes) || previous.PrivateReverse != config.PrivateReverse || previous.BlockAAAA != config.BlockAAAA || accessChanged || !slices.Equal(previous.Upstreams, config.Upstreams) || !slices.Equal(previous.FallbackUpstreams, config.FallbackUpstreams) || !slices.Equal(previous.BootstrapDNS, config.BootstrapDNS) {
+	if previous.CacheEnabled != config.CacheEnabled || previous.CacheSize != config.CacheSize || previous.CacheTTLMin != config.CacheTTLMin || previous.CacheTTLMax != config.CacheTTLMax || previous.OptimisticCache != config.OptimisticCache || previous.OptimisticAnswerTTL != config.OptimisticAnswerTTL || previous.OptimisticMaxAge != config.OptimisticMaxAge || previous.EnableDNSSEC != config.EnableDNSSEC || dnssecChanged || previous.UpstreamMode != config.UpstreamMode || localRecordsChanged || !upstreamRoutesEqual(previous.UpstreamRoutes, config.UpstreamRoutes) || previous.PrivateReverse != config.PrivateReverse || previous.BlockAAAA != config.BlockAAAA || accessChanged || !slices.Equal(previous.Upstreams, config.Upstreams) || !slices.Equal(previous.FallbackUpstreams, config.FallbackUpstreams) || !slices.Equal(previous.BootstrapDNS, config.BootstrapDNS) {
 		s.cache.Clear()
 		s.clearDNSSECCacheMarks()
 	}
 	s.cache.SetEnabled(config.CacheEnabled)
 	s.cache.SetMaxBytes(config.CacheSize)
+	s.setUpstreamTimeout(upstreamTimeout(config.UpstreamTimeout))
 	s.pool.Set(config.Upstreams)
 	if s.fallbackPool == nil {
 		s.fallbackPool = NewUpstreamPool(config.FallbackUpstreams)

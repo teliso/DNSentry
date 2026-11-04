@@ -12,7 +12,7 @@ import (
 
 func TestBlockingModes(t *testing.T) {
 	request := newTestRequest("blocked.test.", dns.TypeA)
-	config := &Config{BlockingMode: "nxdomain"}
+	config := &Config{BlockingMode: "nxdomain", BlockingIPv4: "0.0.0.0", BlockingIPv6: "::", BlockedResponseTTL: 10}
 	if response := blockedResponse(request, request.Question[0], config); response.Rcode != dns.RcodeNameError {
 		t.Fatalf("expected NXDOMAIN response, got %d", response.Rcode)
 	}
@@ -21,6 +21,17 @@ func TestBlockingModes(t *testing.T) {
 	if len(response.Answer) != 1 || response.Answer[0].(*dns.A).A.String() != "0.0.0.0" {
 		t.Fatalf("expected null IPv4 response, got %v", response)
 	}
+	config.BlockingMode = "custom_ip"
+	config.BlockingIPv4 = "192.0.2.15"
+	response = blockedResponse(request, request.Question[0], config)
+	if len(response.Answer) != 1 || response.Answer[0].(*dns.A).A.String() != "192.0.2.15" {
+		t.Fatalf("expected custom IPv4 response, got %v", response)
+	}
+	config.BlockingMode = "default"
+	response = blockedResponse(request, request.Question[0], config)
+	if len(response.Answer) != 1 || response.Answer[0].(*dns.A).A.String() != "0.0.0.0" {
+		t.Fatalf("expected default IPv4 response, got %v", response)
+	}
 	config.BlockingMode = "refused"
 	response = blockedResponse(request, request.Question[0], config)
 	if response.Rcode != dns.RcodeRefused || len(response.Answer) != 0 {
@@ -28,17 +39,25 @@ func TestBlockingModes(t *testing.T) {
 	}
 }
 
-func TestCacheResponseKeepsServerTTL(t *testing.T) {
+func TestCacheResponsePolicies(t *testing.T) {
 	message := newTestRequest("ttl.test.", dns.TypeA)
-	message.Answer = []dns.RR{&dns.A{Hdr: dns.RR_Header{Name: "ttl.test.", Rrtype: dns.TypeA, Class: dns.ClassINET, Ttl: 200000}, A: net.IPv4(192, 0, 2, 2)}}
-	cached, ttl, ok := prepareCacheResponse(message)
-	if !ok || ttl != 200000 || cached.Answer[0].Header().Ttl != 200000 {
-		t.Fatalf("response TTL must be kept, got ok=%v ttl=%d answer=%d", ok, ttl, cached.Answer[0].Header().Ttl)
+	message.Answer = []dns.RR{&dns.A{Hdr: dns.RR_Header{Name: "ttl.test.", Rrtype: dns.TypeA, Class: dns.ClassINET, Ttl: 5}, A: net.IPv4(192, 0, 2, 2)}}
+	config := &Config{CacheTTLMin: 30}
+	cached, ttl, ok := prepareCacheResponse(message, config)
+	if !ok || ttl != 30 || cached.Answer[0].Header().Ttl != 30 {
+		t.Fatalf("expected minimum TTL to apply to response, got ok=%v ttl=%d answer=%d", ok, ttl, cached.Answer[0].Header().Ttl)
 	}
 
 	message.Answer[0].Header().Ttl = 0
-	if _, _, ok := prepareCacheResponse(message); ok {
-		t.Fatal("a zero-TTL response must not be cached")
+	cached, ttl, ok = prepareCacheResponse(message, &Config{CacheTTLMin: 30})
+	if !ok || ttl != 30 || cached.Answer[0].Header().Ttl != 30 {
+		t.Fatalf("expected minimum TTL to make zero-TTL response cacheable, got ok=%v ttl=%d answer=%d", ok, ttl, cached.Answer[0].Header().Ttl)
+	}
+
+	message.Answer[0].Header().Ttl = 200000
+	cached, ttl, ok = prepareCacheResponse(message, &Config{})
+	if !ok || ttl != 200000 || cached.Answer[0].Header().Ttl != 200000 {
+		t.Fatalf("expected zero maximum TTL to mean unlimited, got ok=%v ttl=%d answer=%d", ok, ttl, cached.Answer[0].Header().Ttl)
 	}
 }
 
@@ -101,7 +120,7 @@ func TestUncacheableResponses(t *testing.T) {
 func TestSERVFAILUsesShortCacheTTL(t *testing.T) {
 	message := newTestRequest("failure.test.", dns.TypeA)
 	message.Rcode = dns.RcodeServerFailure
-	cached, ttl, ok := prepareCacheResponse(message)
+	cached, ttl, ok := prepareCacheResponse(message, &Config{})
 	if !ok || ttl != cache.ServfailTTL || cached.Rcode != dns.RcodeServerFailure {
 		t.Fatalf("expected SERVFAIL cache TTL %d, got ok=%v ttl=%d", cache.ServfailTTL, ok, ttl)
 	}

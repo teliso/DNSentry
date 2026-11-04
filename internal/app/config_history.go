@@ -134,8 +134,11 @@ func emptyConfigValue(value any) bool {
 // that is not a change the user made.
 func configChanges(newer, older []byte) []string {
 	after, before := flattenYAML(newer), flattenYAML(older)
-	defaultData, _ := yaml.Marshal(newYAMLConfig(defaultConfig()))
-	defaults := flattenYAML(defaultData)
+	defaults := map[string]any{}
+	if config, err := validateConfig(defaultConfig()); err == nil {
+		defaultData, _ := yaml.Marshal(newYAMLConfig(config))
+		defaults = flattenYAML(defaultData)
+	}
 	value := func(flat map[string]any, key string) any {
 		if v, ok := flat[key]; ok {
 			return v

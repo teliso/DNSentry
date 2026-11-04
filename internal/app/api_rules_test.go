@@ -66,7 +66,7 @@ func TestLegacySourceStatusInConfigIsIgnored(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	legacy := strings.Replace(string(data), "rules: {}\n", "rules:\n    sources:\n        - url: https://lists.example/ads.txt\n          enabled: true\n          interval_minutes: 60\n          last_updated: \"2026-01-01T00:00:00Z\"\n          rule_count: 42\n", 1)
+	legacy := strings.Replace(string(data), "rules:\n", "rules:\n    sources:\n        - url: https://lists.example/ads.txt\n          enabled: true\n          interval_minutes: 60\n          last_updated: \"2026-01-01T00:00:00Z\"\n          rule_count: 42\n", 1)
 	if legacy == string(data) {
 		t.Fatal("test setup: rules section not found")
 	}

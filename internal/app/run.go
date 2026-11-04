@@ -80,7 +80,7 @@ func ruleCacheDir(rulesFile string) string {
 	return filepath.Join(filepath.Dir(rulesFile), "remote")
 }
 
-const rulesFileTemplate = `# DNSentry local filter rules. One rule per line:
+const defaultRulesFile = `# DNSentry local filter rules. One rule per line:
 #   example.com              block example.com and its subdomains
 #   ||ads.example.com^       same, AdGuard syntax
 #   @@||good.example.com^    allow (overrides blocks)
@@ -93,7 +93,7 @@ func ensureRulesFile(path string) error {
 		return err
 	}
 	if _, err := os.Stat(path); os.IsNotExist(err) {
-		return os.WriteFile(path, []byte(rulesFileTemplate), 0644)
+		return os.WriteFile(path, []byte(defaultRulesFile), 0644)
 	}
 	return nil
 }
@@ -115,7 +115,7 @@ func run(ctx context.Context, stop context.CancelFunc, static fs.FS) error {
 	if err := ruleStore.Reload(); err != nil {
 		return err
 	}
-	logs, err := querylog.NewWithPersistence(queryLogMemoryEntries, querylog.PersistenceConfig{
+	logs, err := querylog.NewWithPersistence(config.QueryLogSize, querylog.PersistenceConfig{
 		Enabled:       config.QueryLogEnabled,
 		File:          config.QueryLogFile,
 		RetentionDays: config.QueryLogRetentionDays,
@@ -134,7 +134,7 @@ func run(ctx context.Context, stop context.CancelFunc, static fs.FS) error {
 		rules:         ruleStore,
 		cache:         cache.New(config.CacheSize, config.CacheEnabled),
 		logs:          logs,
-		client:        &dns.Client{Net: "udp", Timeout: upstreamTimeout},
+		client:        &dns.Client{Net: "udp", Timeout: upstreamTimeout(config.UpstreamTimeout)},
 		pool:          NewUpstreamPool(config.Upstreams),
 		fallbackPool:  NewUpstreamPool(config.FallbackUpstreams),
 		dnssecCacheOK: make(map[string]struct{}),
@@ -181,6 +181,8 @@ func run(ctx context.Context, stop context.CancelFunc, static fs.FS) error {
 		defer close(updaterDone)
 		updater.Run(ctx)
 	}()
+	dnssecAnchorDone := make(chan struct{})
+	go server.watchDNSSECTrustAnchorFile(ctx, dnssecAnchorDone)
 	httpServeDone := make(chan error, 1)
 	go func() { httpServeDone <- httpServer.Serve(httpListener) }()
 
@@ -202,6 +204,7 @@ func run(ctx context.Context, stop context.CancelFunc, static fs.FS) error {
 		services.closeAll()
 	}
 	waitFor(shutdownCtx, updaterDone, "rule updater")
+	waitFor(shutdownCtx, dnssecAnchorDone, "DNSSEC trust anchor watcher")
 	return nil
 }
 

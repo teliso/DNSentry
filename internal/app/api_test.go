@@ -11,8 +11,9 @@ import (
 )
 
 func TestQueryLogSettingsChangedRequiresRestart(t *testing.T) {
-	current := Config{QueryLogEnabled: false, QueryLogFile: "data/querylog", QueryLogRetentionDays: 7}
+	current := Config{QueryLogSize: 200, QueryLogEnabled: false, QueryLogFile: "data/querylog", QueryLogRetentionDays: 7}
 	for _, update := range []func(*Config){
+		func(config *Config) { config.QueryLogSize++ },
 		func(config *Config) { config.QueryLogEnabled = true },
 		func(config *Config) { config.QueryLogFile = "data/audit" },
 		func(config *Config) { config.QueryLogRetentionDays++ },

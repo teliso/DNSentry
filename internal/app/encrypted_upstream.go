@@ -18,6 +18,13 @@ import (
 	"github.com/quic-go/quic-go"
 )
 
+func upstreamTimeout(seconds int) time.Duration {
+	if seconds <= 0 {
+		seconds = 4
+	}
+	return time.Duration(seconds) * time.Second
+}
+
 func (s *DNSServer) exchangeUpstream(request *dns.Msg, upstream string) (*dns.Msg, error) {
 	lower := strings.ToLower(upstream)
 	validationRequest := request

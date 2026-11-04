@@ -7,7 +7,6 @@ import (
 
 	blockydnssec "github.com/0xERR0R/blocky/resolver/dnssec"
 	"github.com/miekg/dns"
-	"github.com/teliso/DNSentry/internal/cache"
 	"github.com/teliso/DNSentry/internal/dnsname"
 	"github.com/teliso/DNSentry/internal/querylog"
 	"github.com/teliso/DNSentry/internal/rules"
@@ -120,14 +119,14 @@ func (s *DNSServer) ServeDNS(writer dns.ResponseWriter, request *dns.Msg) {
 	}
 
 	if config.BlockAAAA && question.Qtype == dns.TypeAAAA {
-		_ = writer.WriteMsg(noDataResponse(request, question, blockedResponseTTL))
+		_ = writer.WriteMsg(noDataResponse(request, question, config.BlockedResponseTTL))
 		logQuery(querylog.ActionIPv6Off, "")
 		return
 	}
 
 	cacheKey, cacheRequest := makeCacheKey(request)
 	if cacheRequest && config.CacheEnabled {
-		if hit := s.cache.Lookup(cacheKey, config.OptimisticCache, cache.DefaultOptimisticAnswerTTL, cache.DefaultOptimisticMaxAgeSeconds); hit.Message == nil {
+		if hit := s.cache.Lookup(cacheKey, config.OptimisticCache, config.OptimisticAnswerTTL, config.OptimisticMaxAge); hit.Message == nil {
 			s.markDNSSECCache(cacheKey, false)
 		} else {
 			response, stale := hit.Message, hit.Stale
@@ -147,7 +146,7 @@ func (s *DNSServer) ServeDNS(writer dns.ResponseWriter, request *dns.Msg) {
 			if stale {
 				logAction = querylog.ActionOptimistic
 				s.refreshInBackground(request.Copy(), cacheKey)
-			} else if hit.Expiring && s.refreshInBackground(request.Copy(), cacheKey) {
+			} else if hit.Expiring && config.CachePrefetch && s.refreshInBackground(request.Copy(), cacheKey) {
 				s.cache.RecordPrefetch()
 			}
 			logQuery(logAction, "")
@@ -182,7 +181,7 @@ func (s *DNSServer) ServeDNS(writer dns.ResponseWriter, request *dns.Msg) {
 			validated = result == blockydnssec.ValidationResultSecure
 		}
 		if cacheRequest && config.CacheEnabled && s.configGeneration() == generation {
-			if cachedResponse, ttl, ok := prepareCacheResponseForRequest(request, response); ok && s.cache.Set(cacheKey, cachedResponse, ttl, optimisticMaxAge) {
+			if cachedResponse, ttl, ok := prepareCacheResponseForRequest(request, response, &config); ok && s.cache.Set(cacheKey, cachedResponse, ttl, optimisticMaxAge(config.OptimisticMaxAge)) {
 				response = cachedResponse
 				s.markDNSSECCache(cacheKey, validated)
 			} else {
@@ -275,7 +274,7 @@ func (s *DNSServer) refreshInBackground(request *dns.Msg, key string) bool {
 			}
 			validated = result == blockydnssec.ValidationResultSecure
 		}
-		if cachedResponse, ttl, ok := prepareCacheResponseForRequest(request, response); ok && s.cache.Set(key, cachedResponse, ttl, optimisticMaxAge) {
+		if cachedResponse, ttl, ok := prepareCacheResponseForRequest(request, response, &config); ok && s.cache.Set(key, cachedResponse, ttl, optimisticMaxAge(config.OptimisticMaxAge)) {
 			s.markDNSSECCache(key, validated)
 			s.cache.RecordRefresh(true)
 			return

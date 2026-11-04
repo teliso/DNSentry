@@ -66,6 +66,7 @@ func TestServeDNSCacheLifecycle(t *testing.T) {
 	config := &Config{
 		DNSListens: []string{":15353"}, HTTPListen: "127.0.0.1:18080", RulesFile: rulesFile,
 		Upstreams: []string{upstreamConn.LocalAddr().String()}, CacheEnabled: true, CacheSize: 1 << 20,
+		OptimisticAnswerTTL: cache.DefaultOptimisticAnswerTTL, OptimisticMaxAge: cache.DefaultOptimisticMaxAgeSeconds,
 	}
 	server := &DNSServer{
 		config: config,
@@ -128,7 +129,7 @@ func TestConcurrentIdenticalQueriesAreCoalesced(t *testing.T) {
 	if err := rules.Reload(); err != nil {
 		t.Fatal(err)
 	}
-	config := &Config{DNSListens: []string{":15353"}, HTTPListen: "127.0.0.1:18080", RulesFile: rulesFile, Upstreams: []string{upstreamConn.LocalAddr().String()}, CacheEnabled: true, CacheSize: 1 << 20}
+	config := &Config{DNSListens: []string{":15353"}, HTTPListen: "127.0.0.1:18080", RulesFile: rulesFile, Upstreams: []string{upstreamConn.LocalAddr().String()}, CacheEnabled: true, CacheSize: 1 << 20, OptimisticAnswerTTL: cache.DefaultOptimisticAnswerTTL, OptimisticMaxAge: cache.DefaultOptimisticMaxAgeSeconds}
 	server := &DNSServer{config: config, rules: rules, cache: cache.New(config.CacheSize, true), logs: querylog.New(100), client: &dns.Client{Net: "udp", Timeout: time.Second}, pool: NewUpstreamPool(config.Upstreams)}
 	request := newTestRequest("coalesced.integration.test.", dns.TypeA)
 	var wait sync.WaitGroup
@@ -153,7 +154,7 @@ func TestConcurrentIdenticalQueriesAreCoalesced(t *testing.T) {
 
 func TestPrefetchRefreshesPopularEntriesBeforeExpiry(t *testing.T) {
 	address, upstreamCount := startAnswerServer(t, net.IPv4(203, 0, 113, 7))
-	config := &Config{Upstreams: []string{address}}
+	config := &Config{Upstreams: []string{address}, CachePrefetch: true, OptimisticAnswerTTL: cache.DefaultOptimisticAnswerTTL, OptimisticMaxAge: cache.DefaultOptimisticMaxAgeSeconds}
 	server := newRoutingServer(t, config)
 
 	query(server, "popular.test.", dns.TypeA) // miss: one upstream query, TTL 60

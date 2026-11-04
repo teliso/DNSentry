@@ -22,15 +22,12 @@ var configFile = filepath.Join("data", "config.yaml")
 
 func configPath() string { return configFile }
 
-// defaultRulesFile and defaultQueryLogFile live next to the configuration file.
-func defaultRulesFile() string    { return filepath.Join(filepath.Dir(configPath()), "rules.txt") }
-func defaultQueryLogFile() string { return filepath.Join(filepath.Dir(configPath()), "querylog") }
-
 // defaultConfig is written on first start when no configuration exists. Data
 // files are placed next to the configuration file. DNSENTRY_DNS_LISTEN and
 // DNSENTRY_WEB_LISTEN override the listen addresses of this initial
 // configuration only, which suits container images.
 func defaultConfig() *Config {
+	dir := filepath.Dir(configPath())
 	return &Config{
 		DNSListens:            []string{envOr("DNSENTRY_DNS_LISTEN", ":15353")},
 		HTTPListen:            envOr("DNSENTRY_WEB_LISTEN", "127.0.0.1:18080"),
@@ -38,12 +35,18 @@ func defaultConfig() *Config {
 		BootstrapDNS:          []string{"1.1.1.1:53", "8.8.8.8:53"},
 		UpstreamMode:          "load_balance",
 		PrivateReverse:        true,
+		UpstreamTimeout:       4,
 		BlockingMode:          "nxdomain",
-		RulesFile:             defaultRulesFile(),
+		BlockingIPv4:          "0.0.0.0",
+		BlockingIPv6:          "::",
+		BlockedResponseTTL:    10,
+		RulesFile:             filepath.Join(dir, "rules.txt"),
 		CacheEnabled:          true,
 		CacheSize:             4 << 20,
-		QueryLogFile:          defaultQueryLogFile(),
+		QueryLogSize:          1000,
+		QueryLogFile:          filepath.Join(dir, "querylog"),
 		QueryLogRetentionDays: 7,
+		Access:                DNSAccessConfig{MaxConcurrentQueries: 2048},
 		Encryption:            EncryptionConfig{DNSCrypt: DNSCryptConfig{ProviderName: "dnsentry", CertificateTTLHours: 24}},
 	}
 }

@@ -17,7 +17,7 @@ func TestConfigHistoryRecordsVersionsAndChanges(t *testing.T) {
 
 	next := api.configResponse()
 	next.Upstreams = []string{"9.9.9.9:53"}
-	next.BlockAAAA = true
+	next.CacheTTLMin = 120
 	if response := callAPI(t, api, http.MethodPut, "/api/config", next); response.Code != http.StatusOK {
 		t.Fatalf("PUT = %d %s", response.Code, response.Body)
 	}
@@ -26,7 +26,7 @@ func TestConfigHistoryRecordsVersionsAndChanges(t *testing.T) {
 		t.Fatalf("versions = %#v", versions)
 	}
 	changes := versions[0].Changes
-	if len(changes) != 2 || changes[0] != "dns.block_aaaa" || changes[1] != "dns.upstreams" {
+	if len(changes) != 2 || changes[0] != "cache.ttl_min" || changes[1] != "dns.upstreams" {
 		t.Fatalf("changes = %v", changes)
 	}
 	if len(versions[1].Changes) != 0 {
@@ -113,32 +113,19 @@ func TestConfigHistoryIsPrunedAndBaselinedForOldInstallations(t *testing.T) {
 func TestConfigChangesIgnoreMaterializedDefaults(t *testing.T) {
 	t.Chdir(t.TempDir())
 	// An older file that lacks keys newer versions write out explicitly.
-	older := []byte("version: 1\ndns:\n  listens: [\":15353\"]\n  upstreams: [\"1.1.1.1:53\"]\nweb:\n  listen: 127.0.0.1:18080\n")
-	validated, err := validateConfig(testConfig())
+	older := []byte("version: 1\ndns:\n  listens: [\":15353\"]\n  upstreams: [\"1.1.1.1:53\", \"8.8.8.8:53\"]\nweb:\n  listen: 127.0.0.1:18080\n")
+	config, err := validateConfig(defaultConfig())
 	if err != nil {
 		t.Fatal(err)
 	}
-	validated.Upstreams = []string{"1.1.1.1:53"}
-	validated.DNSListens = []string{":15353"}
-	validated.HTTPListen = "127.0.0.1:18080"
-	validated.CacheEnabled = true
-	validated.OptimisticCache = false
-	validated.BlockingMode = "nxdomain"
-	validated.CacheSize = 4 << 20
-	validated.QueryLogRetentionDays = 7
-	validated.UpstreamMode = "load_balance"
-	validated.BootstrapDNS = []string{"1.1.1.1:53", "8.8.8.8:53"}
-	validated.PrivateReverse = true
-	validated.Encryption.DNSCrypt = DNSCryptConfig{ProviderName: "dnsentry", CertificateTTLHours: 24}
-	newer, err := yaml.Marshal(newYAMLConfig(validated))
-	if err != nil {
-		t.Fatal(err)
-	}
+	config.DNSListens = []string{":15353"}
+	config.HTTPListen = "127.0.0.1:18080"
+	newer, _ := yaml.Marshal(newYAMLConfig(config))
 	if changes := configChanges(newer, older); len(changes) != 0 {
 		t.Fatalf("defaults written by a newer version were reported as changes: %v", changes)
 	}
-	validated.BlockAAAA = true
-	changed, _ := yaml.Marshal(newYAMLConfig(validated))
+	config.BlockAAAA = true
+	changed, _ := yaml.Marshal(newYAMLConfig(config))
 	if changes := configChanges(changed, older); len(changes) != 1 || changes[0] != "dns.block_aaaa" {
 		t.Fatalf("changes = %v", changes)
 	}

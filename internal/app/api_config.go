@@ -27,7 +27,8 @@ func restartRequired(saved, running Config) bool {
 }
 
 func queryLogSettingsChanged(next, current Config) bool {
-	return next.QueryLogEnabled != current.QueryLogEnabled ||
+	return next.QueryLogSize != current.QueryLogSize ||
+		next.QueryLogEnabled != current.QueryLogEnabled ||
 		next.QueryLogFile != current.QueryLogFile ||
 		next.QueryLogRetentionDays != current.QueryLogRetentionDays
 }
@@ -38,7 +39,7 @@ func withRunningStartupSettings(config, running Config) Config {
 	config.DNSListens = running.DNSListens
 	config.HTTPListen = running.HTTPListen
 	config.RulesFile = running.RulesFile
-	config.QueryLogEnabled = running.QueryLogEnabled
+	config.QueryLogSize, config.QueryLogEnabled = running.QueryLogSize, running.QueryLogEnabled
 	config.QueryLogFile, config.QueryLogRetentionDays = running.QueryLogFile, running.QueryLogRetentionDays
 	config.Encryption = running.Encryption
 	return config
@@ -162,6 +163,7 @@ func checkAPIPaths(next, saved Config) error {
 	}{
 		{"rules_file", next.RulesFile, saved.RulesFile},
 		{"query_log_file", next.QueryLogFile, saved.QueryLogFile},
+		{"dnssec_trust_anchor_file", next.DNSSECTrustAnchorFile, saved.DNSSECTrustAnchorFile},
 		{"encryption.certificate", next.Encryption.Certificate, saved.Encryption.Certificate},
 		{"encryption.private_key", next.Encryption.PrivateKey, saved.Encryption.PrivateKey},
 	} {
