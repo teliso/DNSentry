@@ -88,10 +88,9 @@ func TestAuthThrottleExpiresAndSuccessResets(t *testing.T) {
 func TestAPIConfigPathsAreConfined(t *testing.T) {
 	saved := Config{RulesFile: "data/rules.txt", QueryLogFile: "/var/log/dnsentry/query", Encryption: EncryptionConfig{Certificate: "/etc/ssl/dns.crt"}}
 	for name, mutate := range map[string]func(*Config){
-		"absolute rules file":   func(c *Config) { c.RulesFile = "/etc/cron.d/x" },
-		"parent traversal":      func(c *Config) { c.QueryLogFile = "../../etc/passwd" },
-		"absolute private key":  func(c *Config) { c.Encryption.PrivateKey = "/root/.ssh/id_rsa" },
-		"trust anchor traverse": func(c *Config) { c.DNSSECTrustAnchorFile = "data/../../x" },
+		"absolute rules file":  func(c *Config) { c.RulesFile = "/etc/cron.d/x" },
+		"parent traversal":     func(c *Config) { c.QueryLogFile = "../../etc/passwd" },
+		"absolute private key": func(c *Config) { c.Encryption.PrivateKey = "/root/.ssh/id_rsa" },
 	} {
 		next := saved
 		mutate(&next)

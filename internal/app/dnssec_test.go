@@ -130,17 +130,15 @@ func TestDNSSECValidatorReportsRealSecureInsecureAndBogusResults(t *testing.T) {
 	}
 }
 
-func TestDNSSECConfigInitializesTrustAnchorsAndRoundTrips(t *testing.T) {
-	_, _, anchor := newTestSignedKey(t, "example.")
+func TestDNSSECConfigRoundTripsAndDefaultAnchorsLoad(t *testing.T) {
 	config := testConfig()
 	config.DNSSECValidate = true
-	config.DNSSECTrustAnchors = []string{anchor}
 	validated, err := validateConfig(config)
 	if err != nil {
 		t.Fatal(err)
 	}
 	fileConfig := newYAMLConfig(validated)
-	if !fileConfig.DNS.DNSSECValidate || len(fileConfig.DNS.DNSSECTrustAnchors) != 1 {
+	if !fileConfig.DNS.DNSSECValidate {
 		t.Fatalf("DNSSEC YAML fields were not initialized: %#v", fileConfig.DNS)
 	}
 	defaultValidator, err := NewDNSSECValidator(context.Background(), nil, dnssecTestResolver{resolve: func(*model.Request) (*model.Response, error) {

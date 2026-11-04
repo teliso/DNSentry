@@ -207,7 +207,7 @@ func TestIsPrivateReverseName(t *testing.T) {
 func TestBlockAAAAAnswersLocallyButKeepsLocalRecords(t *testing.T) {
 	publicAddress, publicCount := startAnswerServer(t, net.IPv4(203, 0, 113, 1))
 	config := &Config{
-		Upstreams: []string{publicAddress}, BlockAAAA: true, BlockedResponseTTL: 30,
+		Upstreams: []string{publicAddress}, BlockAAAA: true,
 		LocalRecords: []LocalRecord{{Domain: "v6.home.arpa", Type: "AAAA", Value: "fd00::1", TTL: 60}},
 	}
 	server := newRoutingServer(t, config)

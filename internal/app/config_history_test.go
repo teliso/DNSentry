@@ -16,7 +16,7 @@ func TestConfigHistoryRecordsVersionsAndChanges(t *testing.T) {
 
 	next := api.configResponse()
 	next.Upstreams = []string{"9.9.9.9:53"}
-	next.CacheTTLMin = 120
+	next.BlockAAAA = true
 	if response := callAPI(t, api, http.MethodPut, "/api/config", next); response.Code != http.StatusOK {
 		t.Fatalf("PUT = %d %s", response.Code, response.Body)
 	}
@@ -25,7 +25,7 @@ func TestConfigHistoryRecordsVersionsAndChanges(t *testing.T) {
 		t.Fatalf("versions = %#v", versions)
 	}
 	changes := versions[0].Changes
-	if len(changes) != 2 || changes[0] != "cache.ttl_min" || changes[1] != "dns.upstreams" {
+	if len(changes) != 2 || changes[0] != "dns.block_aaaa" || changes[1] != "dns.upstreams" {
 		t.Fatalf("changes = %v", changes)
 	}
 	if len(versions[1].Changes) != 0 {

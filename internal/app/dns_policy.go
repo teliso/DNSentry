@@ -11,14 +11,9 @@ import (
 	"github.com/teliso/DNSentry/internal/dnsname"
 )
 
-func optimisticMaxAge(seconds uint32) time.Duration {
-	if seconds == 0 {
-		return time.Duration(cache.DefaultOptimisticMaxAgeSeconds) * time.Second
-	}
-	return time.Duration(seconds) * time.Second
-}
+const optimisticMaxAge = time.Duration(cache.DefaultOptimisticMaxAgeSeconds) * time.Second
 
-func prepareCacheResponse(message *dns.Msg, config *Config) (*dns.Msg, uint32, bool) {
+func prepareCacheResponse(message *dns.Msg) (*dns.Msg, uint32, bool) {
 	if !isCacheableResponse(message) {
 		return message, 0, false
 	}
@@ -26,7 +21,6 @@ func prepareCacheResponse(message *dns.Msg, config *Config) (*dns.Msg, uint32, b
 	if cached.Rcode == dns.RcodeServerFailure {
 		return cached, cache.ServfailTTL, true
 	}
-	cache.ClampTTL(cached, config.CacheTTLMin, config.CacheTTLMax)
 	ttl := cacheResponseTTL(cached)
 	if ttl == 0 {
 		return message, 0, false
@@ -34,9 +28,9 @@ func prepareCacheResponse(message *dns.Msg, config *Config) (*dns.Msg, uint32, b
 	return cached, ttl, true
 }
 
-func prepareCacheResponseForRequest(request, response *dns.Msg, config *Config) (*dns.Msg, uint32, bool) {
+func prepareCacheResponseForRequest(request, response *dns.Msg) (*dns.Msg, uint32, bool) {
 	if !hasECSOption(request) {
-		return prepareCacheResponse(response, config)
+		return prepareCacheResponse(response)
 	}
 	if _, ok := validateECSRequest(request); !ok {
 		return response, 0, false
@@ -45,7 +39,7 @@ func prepareCacheResponseForRequest(request, response *dns.Msg, config *Config) 
 	if !ok {
 		return response, 0, false
 	}
-	cached, ttl, ok := prepareCacheResponse(response, config)
+	cached, ttl, ok := prepareCacheResponse(response)
 	if !ok {
 		return cached, ttl, false
 	}
@@ -425,20 +419,13 @@ func blockedResponse(request *dns.Msg, question dns.Question, config *Config) *d
 	response := new(dns.Msg)
 	response.SetReply(request)
 	response.RecursionAvailable = true
-	mode := config.BlockingMode
-	if mode == "" {
-		mode = "default"
-	}
-	if mode == "refused" {
+	if config.BlockingMode == "refused" {
 		response.Rcode = dns.RcodeRefused
 		return response
 	}
-	if mode == "nxdomain" {
+	if config.BlockingMode == "nxdomain" {
 		response.Rcode = dns.RcodeNameError
-		ttl := config.BlockedResponseTTL
-		if ttl == 0 {
-			ttl = 10
-		}
+		ttl := blockedResponseTTL
 		response.Ns = []dns.RR{&dns.SOA{
 			Hdr:     dns.RR_Header{Name: question.Name, Rrtype: dns.TypeSOA, Class: question.Qclass, Ttl: ttl},
 			Ns:      "localhost.",
@@ -451,33 +438,14 @@ func blockedResponse(request *dns.Msg, question dns.Question, config *Config) *d
 		}}
 		return response
 	}
-	if mode == "default" {
-		mode = "null_ip"
-	}
-
-	ipv4 := net.ParseIP(config.BlockingIPv4)
-	ipv6 := net.ParseIP(config.BlockingIPv6)
-	if mode != "custom_ip" || ipv4 == nil || ipv4.To4() == nil {
-		ipv4 = net.IPv4zero
-	} else {
-		ipv4 = ipv4.To4()
-	}
-	if mode != "custom_ip" || ipv6 == nil || ipv6.To4() != nil || ipv6.To16() == nil {
-		ipv6 = net.IPv6unspecified
-	} else {
-		ipv6 = ipv6.To16()
-	}
-	ttl := config.BlockedResponseTTL
-	if ttl == 0 {
-		ttl = 10
-	}
+	ttl := blockedResponseTTL
 	header := dns.RR_Header{Name: question.Name, Rrtype: question.Qtype, Class: question.Qclass, Ttl: ttl}
 	switch question.Qtype {
 	case dns.TypeA:
-		response.Answer = append(response.Answer, &dns.A{Hdr: header, A: ipv4.To4()})
+		response.Answer = append(response.Answer, &dns.A{Hdr: header, A: net.IPv4zero.To4()})
 	case dns.TypeAAAA:
 		header.Rrtype = dns.TypeAAAA
-		response.Answer = append(response.Answer, &dns.AAAA{Hdr: header, AAAA: ipv6.To16()})
+		response.Answer = append(response.Answer, &dns.AAAA{Hdr: header, AAAA: net.IPv6unspecified})
 	}
 	return response
 }

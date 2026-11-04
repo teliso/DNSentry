@@ -5,11 +5,9 @@ import (
 	"fmt"
 	"net"
 	"net/url"
-	"path/filepath"
 	"strconv"
 	"strings"
 
-	"github.com/teliso/DNSentry/internal/cache"
 	"github.com/teliso/DNSentry/internal/rules"
 )
 
@@ -18,8 +16,11 @@ func validateConfig(config *Config) (*Config, error) {
 		return nil, errors.New("config is nil")
 	}
 	config.HTTPListen = strings.TrimSpace(config.HTTPListen)
-	if config.HTTPListen == "" || strings.TrimSpace(config.RulesFile) == "" {
-		return nil, errors.New("config is missing required fields")
+	if config.HTTPListen == "" {
+		return nil, errors.New("web listen address is required")
+	}
+	if strings.TrimSpace(config.RulesFile) == "" {
+		config.RulesFile = defaultRulesFile()
 	}
 	dnsListens, err := normalizeListenAddresses("dns listen", "", config.DNSListens)
 	if err != nil {
@@ -31,9 +32,6 @@ func validateConfig(config *Config) (*Config, error) {
 	config.DNSListens = dnsListens
 	if err := validateListenAddress("web listen", config.HTTPListen); err != nil {
 		return nil, err
-	}
-	if config.UpstreamTimeout <= 0 {
-		config.UpstreamTimeout = 4
 	}
 	config.UpstreamMode = strings.ToLower(strings.TrimSpace(config.UpstreamMode))
 	if config.UpstreamMode == "" {
@@ -50,7 +48,7 @@ func validateConfig(config *Config) (*Config, error) {
 	}
 	config.QueryLogFile = strings.TrimSpace(config.QueryLogFile)
 	if config.QueryLogFile == "" {
-		config.QueryLogFile = filepath.Join("data", "querylog")
+		config.QueryLogFile = defaultQueryLogFile()
 	}
 	if config.QueryLogRetentionDays == 0 {
 		config.QueryLogRetentionDays = 7
@@ -58,56 +56,12 @@ func validateConfig(config *Config) (*Config, error) {
 	if config.QueryLogRetentionDays < 1 || config.QueryLogRetentionDays > 365 {
 		return nil, errors.New("query_log_retention_days must be between 1 and 365")
 	}
-	if config.BlockingMode == "" {
-		config.BlockingMode = "default"
-	}
-	if config.BlockingMode != "default" && config.BlockingMode != "nxdomain" && config.BlockingMode != "null_ip" && config.BlockingMode != "custom_ip" && config.BlockingMode != "refused" {
-		return nil, errors.New("invalid blocking_mode: use default, nxdomain, null_ip, custom_ip, or refused")
-	}
-	if config.BlockingIPv4 == "" {
-		config.BlockingIPv4 = "0.0.0.0"
-	}
-	if config.BlockingIPv6 == "" {
-		config.BlockingIPv6 = "::"
-	}
-	if err := validateAddressFamily("blocking_ipv4", config.BlockingIPv4, false); err != nil {
-		return nil, err
-	}
-	if err := validateAddressFamily("blocking_ipv6", config.BlockingIPv6, true); err != nil {
-		return nil, err
-	}
-	if config.OptimisticAnswerTTL == 0 {
-		config.OptimisticAnswerTTL = cache.DefaultOptimisticAnswerTTL
-	}
-	if config.OptimisticMaxAge == 0 {
-		config.OptimisticMaxAge = cache.DefaultOptimisticMaxAgeSeconds
-	}
-	if config.OptimisticAnswerTTL > config.OptimisticMaxAge {
-		return nil, errors.New("cache_optimistic_answer_ttl must be less than or equal to cache_optimistic_max_age")
-	}
-	if config.BlockedResponseTTL == 0 {
-		config.BlockedResponseTTL = 10
-	}
-	if config.CacheTTLMax > 0 && config.CacheTTLMin > config.CacheTTLMax {
-		return nil, errors.New("cache_ttl_min must be less than or equal to cache_ttl_max")
-	}
-	config.DNSSECTrustAnchorFile = strings.TrimSpace(config.DNSSECTrustAnchorFile)
-	if config.DNSSECAutoUpdate {
-		if len(config.DNSSECTrustAnchors) > 0 {
-			return nil, errors.New("dnssec_auto_update cannot be used with dnssec_trust_anchors")
-		}
-		if config.DNSSECTrustAnchorFile == "" {
-			config.DNSSECTrustAnchorFile = defaultDNSSECTrustAnchorFile
-		}
-	}
-	if config.DNSSECTrustAnchorFile != "" && len(config.DNSSECTrustAnchors) > 0 {
-		return nil, errors.New("dnssec_trust_anchor_file and dnssec_trust_anchors cannot be used together")
-	}
-	if config.DNSSECAutoUpdate && !config.DNSSECValidate {
-		return nil, errors.New("dnssec_auto_update requires dnssec_validate")
-	}
-	if err := validateDNSSECTrustAnchors(config.DNSSECTrustAnchors); err != nil {
-		return nil, err
+	switch config.BlockingMode {
+	case "", "default", "custom_ip": // earlier names for the null_ip behavior
+		config.BlockingMode = "null_ip"
+	case "null_ip", "nxdomain", "refused":
+	default:
+		return nil, errors.New("invalid blocking_mode: use nxdomain, null_ip, or refused")
 	}
 	if len(config.Upstreams) == 0 {
 		return nil, errors.New("upstreams must contain at least one server")
@@ -169,9 +123,6 @@ func validateConfig(config *Config) (*Config, error) {
 	if err := validateDNSAccessConfig(config.Access); err != nil {
 		return nil, err
 	}
-	if config.Access.MaxConcurrentQueries == 0 {
-		config.Access.MaxConcurrentQueries = 2048
-	}
 	if err := validateEncryptionConfig(config.Encryption); err != nil {
 		return nil, err
 	}
@@ -224,19 +175,6 @@ func validateListenAddress(name, value string) error {
 	}
 	if !validHost(host) {
 		return fmt.Errorf("invalid %s address %q: invalid host", name, value)
-	}
-	return nil
-}
-
-func validateAddressFamily(name, value string, wantIPv6 bool) error {
-	ip := net.ParseIP(value)
-	valid := ip != nil && ((wantIPv6 && ip.To4() == nil && ip.To16() != nil) || (!wantIPv6 && ip.To4() != nil && !strings.Contains(value, ":")))
-	if !valid {
-		family := "IPv4"
-		if wantIPv6 {
-			family = "IPv6"
-		}
-		return fmt.Errorf("%s must be a valid %s address", name, family)
 	}
 	return nil
 }

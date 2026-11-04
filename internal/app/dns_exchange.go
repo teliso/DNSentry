@@ -20,7 +20,7 @@ func (s *DNSServer) exchange(request *dns.Msg) (*dns.Msg, string, error) {
 		primaryErr = errors.New("no healthy primary upstream")
 	}
 	upstreamRequest := request
-	if (config.EnableDNSSEC || config.DNSSECValidate) && !request.CheckingDisabled && (request.IsEdns0() == nil || !request.IsEdns0().Do()) {
+	if config.DNSSECValidate && !request.CheckingDisabled && (request.IsEdns0() == nil || !request.IsEdns0().Do()) {
 		upstreamRequest = request.Copy()
 		ensureDNSSECRequest(upstreamRequest)
 	}

@@ -8,7 +8,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/teliso/DNSentry/internal/cache"
 	"github.com/teliso/DNSentry/internal/rules"
 	"gopkg.in/yaml.v3"
 )
@@ -21,18 +20,13 @@ func TestYAMLConfigRoundTrip(t *testing.T) {
 		FallbackUpstreams:     []string{"https://backup.example/dns-query"},
 		UpstreamMode:          upstreamModeParallel,
 		BlockingMode:          "nxdomain",
-		EnableDNSSEC:          true,
+		DNSSECValidate:        true,
 		RulesFile:             "data/rules.txt",
 		CacheSize:             2048,
-		QueryLogSize:          200,
 		QueryLogEnabled:       true,
 		QueryLogFile:          "data/querylog",
 		QueryLogRetentionDays: 30,
-		CacheTTLMin:           30,
-		CacheTTLMax:           86400,
 		OptimisticCache:       true,
-		OptimisticAnswerTTL:   10,
-		OptimisticMaxAge:      300,
 		RuleSources:           []rules.Source{{URL: "https://example.com/rules.txt", Enabled: true, IntervalMinutes: 360}},
 	}
 	data, err := yaml.Marshal(newYAMLConfig(original))
@@ -44,7 +38,7 @@ func TestYAMLConfigRoundTrip(t *testing.T) {
 		t.Fatal(err)
 	}
 	actual := decoded.toConfig()
-	if !slices.Equal(actual.DNSListens, original.DNSListens) || actual.HTTPListen != original.HTTPListen || actual.UpstreamMode != original.UpstreamMode || !slices.Equal(actual.FallbackUpstreams, original.FallbackUpstreams) || actual.CacheTTLMin != original.CacheTTLMin || !actual.EnableDNSSEC || !actual.OptimisticCache || actual.OptimisticAnswerTTL != original.OptimisticAnswerTTL || actual.OptimisticMaxAge != original.OptimisticMaxAge || actual.QueryLogEnabled != original.QueryLogEnabled || actual.QueryLogFile != original.QueryLogFile || actual.QueryLogRetentionDays != original.QueryLogRetentionDays || len(actual.RuleSources) != 1 {
+	if !slices.Equal(actual.DNSListens, original.DNSListens) || actual.HTTPListen != original.HTTPListen || actual.UpstreamMode != original.UpstreamMode || !slices.Equal(actual.FallbackUpstreams, original.FallbackUpstreams) || !actual.DNSSECValidate || !actual.OptimisticCache || actual.QueryLogEnabled != original.QueryLogEnabled || actual.QueryLogFile != original.QueryLogFile || actual.QueryLogRetentionDays != original.QueryLogRetentionDays || len(actual.RuleSources) != 1 {
 		t.Fatalf("config did not round-trip: %#v", actual)
 	}
 }
@@ -99,20 +93,14 @@ func TestYAMLCacheDefaultsToEnabled(t *testing.T) {
 
 func testConfig() *Config {
 	return &Config{
-		DNSListens:          []string{":15353"},
-		HTTPListen:          "127.0.0.1:18080",
-		Upstreams:           []string{"1.1.1.1:53"},
-		RulesFile:           "data/rules.txt",
-		CacheEnabled:        true,
-		CacheSize:           1 << 20,
-		CacheTTLMin:         30,
-		CacheTTLMax:         86400,
-		BlockingMode:        "custom_ip",
-		BlockingIPv4:        "192.0.2.1",
-		BlockingIPv6:        "2001:db8::1",
-		OptimisticCache:     true,
-		OptimisticAnswerTTL: 30,
-		OptimisticMaxAge:    300,
+		DNSListens:      []string{":15353"},
+		HTTPListen:      "127.0.0.1:18080",
+		Upstreams:       []string{"1.1.1.1:53"},
+		RulesFile:       "data/rules.txt",
+		CacheEnabled:    true,
+		CacheSize:       1 << 20,
+		BlockingMode:    "null_ip",
+		OptimisticCache: true,
 	}
 }
 
@@ -139,7 +127,7 @@ func TestSaveConfigAtomicRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !slices.Equal(loaded.DNSListens, original.DNSListens) || loaded.HTTPListen != original.HTTPListen || loaded.CacheSize != original.CacheSize || loaded.CacheTTLMin != original.CacheTTLMin || loaded.CacheTTLMax != original.CacheTTLMax || loaded.BlockingIPv4 != original.BlockingIPv4 || loaded.BlockingIPv6 != original.BlockingIPv6 || len(loaded.Upstreams) != 1 || loaded.Upstreams[0] != original.Upstreams[0] {
+	if !slices.Equal(loaded.DNSListens, original.DNSListens) || loaded.HTTPListen != original.HTTPListen || loaded.CacheSize != original.CacheSize || loaded.BlockingMode != original.BlockingMode || len(loaded.Upstreams) != 1 || loaded.Upstreams[0] != original.Upstreams[0] {
 		t.Fatalf("config did not round-trip: %#v", loaded)
 	}
 
@@ -224,18 +212,14 @@ func TestValidateConfigRejectsInvalidValues(t *testing.T) {
 		modify func(*Config)
 	}{
 		{"negative cache size", func(config *Config) { config.CacheSize = -1 }},
-		{"inverted cache TTL", func(config *Config) { config.CacheTTLMin = 60; config.CacheTTLMax = 30 }},
 		{"missing upstream", func(config *Config) { config.Upstreams = nil }},
 		{"empty upstream", func(config *Config) { config.Upstreams = []string{""} }},
 		{"invalid listen address", func(config *Config) { config.DNSListens = []string{"not-an-address"} }},
 		{"invalid upstream address", func(config *Config) { config.Upstreams = []string{"https://"} }},
 		{"invalid fallback upstream address", func(config *Config) { config.FallbackUpstreams = []string{"h3://"} }},
-		{"IPv6 used as custom IPv4", func(config *Config) { config.BlockingIPv4 = "2001:db8::1" }},
-		{"IPv4 used as custom IPv6", func(config *Config) { config.BlockingIPv6 = "192.0.2.1" }},
 		{"invalid upstream mode", func(config *Config) { config.UpstreamMode = "race_everything" }},
 		{"negative client rate limit", func(config *Config) { config.Access.ClientRateLimitQPS = -1 }},
 		{"invalid allowed client", func(config *Config) { config.Access.AllowedClients = []string{"not-a-client"} }},
-		{"optimistic TTL exceeds age", func(config *Config) { config.OptimisticAnswerTTL = 301; config.OptimisticMaxAge = 300 }},
 		{"query log retention too short", func(config *Config) { config.QueryLogRetentionDays = -1 }},
 		{"query log retention too long", func(config *Config) { config.QueryLogRetentionDays = 366 }},
 	}
@@ -276,20 +260,14 @@ func TestValidateConfigAppliesExistingDefaults(t *testing.T) {
 	config := testConfig()
 	config.Upstreams = []string{"1.1.1.1"}
 	config.BootstrapDNS = nil
-	config.UpstreamTimeout = 0
 	config.CacheSize = 0
 	config.BlockingMode = ""
-	config.BlockingIPv4 = ""
-	config.BlockingIPv6 = ""
-	config.OptimisticAnswerTTL = 0
-	config.OptimisticMaxAge = 0
-	config.BlockedResponseTTL = 0
 
 	validated, err := validateConfig(config)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if validated.UpstreamTimeout != 4 || validated.UpstreamMode != upstreamModeLoadBalance || validated.Access.MaxConcurrentQueries != 2048 || validated.CacheSize != 4<<20 || validated.QueryLogFile != filepath.Join("data", "querylog") || validated.QueryLogRetentionDays != 7 || validated.BlockingMode != "default" || validated.BlockingIPv4 != "0.0.0.0" || validated.BlockingIPv6 != "::" || validated.OptimisticAnswerTTL != cache.DefaultOptimisticAnswerTTL || validated.OptimisticMaxAge != cache.DefaultOptimisticMaxAgeSeconds || validated.BlockedResponseTTL != 10 {
+	if validated.UpstreamMode != upstreamModeLoadBalance || validated.CacheSize != 4<<20 || validated.QueryLogFile != defaultQueryLogFile() || validated.QueryLogRetentionDays != 7 || validated.BlockingMode != "null_ip" {
 		t.Fatalf("existing defaults changed: %#v", validated)
 	}
 	if len(validated.BootstrapDNS) != 2 || validated.Upstreams[0] != "1.1.1.1:53" {

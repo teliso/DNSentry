@@ -45,10 +45,7 @@ func newSecureTestServer(t *testing.T) *DNSServer {
 	}
 	return &DNSServer{
 		config: &Config{
-			BlockingMode:       "refused",
-			BlockingIPv4:       "0.0.0.0",
-			BlockingIPv6:       "::",
-			BlockedResponseTTL: 10,
+			BlockingMode: "refused",
 		},
 		rules:  rules,
 		cache:  cache.New(1<<20, false),
