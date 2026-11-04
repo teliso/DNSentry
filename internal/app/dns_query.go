@@ -118,8 +118,9 @@ func (s *DNSServer) ServeDNS(writer dns.ResponseWriter, request *dns.Msg) {
 		// A blocked service applies unless the user's own allow rule says otherwise.
 		if rule.Action != rules.ActionAllow {
 			if service, ok := s.blockedServices.Load().Match(domain); ok {
-				response := blockedResponse(request, question, &config)
-				_ = writer.WriteMsg(filterUpstreamResponse(response, request))
+				response := filterUpstreamResponse(blockedResponse(request, question, &config), request)
+				addExtendedError(response, request, dns.ExtendedErrorCodeFiltered, "DNSentry: "+service.Name+" is blocked")
+				_ = writer.WriteMsg(response)
 				ruleText = "服务：" + service.Name
 				logQuery(string(rules.ActionBlock), "")
 				return
@@ -127,8 +128,9 @@ func (s *DNSServer) ServeDNS(writer dns.ResponseWriter, request *dns.Msg) {
 		}
 	}
 	if rule.Action == rules.ActionBlock {
-		response := blockedResponse(request, question, &config)
-		_ = writer.WriteMsg(filterUpstreamResponse(response, request))
+		response := filterUpstreamResponse(blockedResponse(request, question, &config), request)
+		addExtendedError(response, request, dns.ExtendedErrorCodeBlocked, "DNSentry: blocked by a filter rule")
+		_ = writer.WriteMsg(response)
 		logQuery(string(rules.ActionBlock), "")
 		return
 	}

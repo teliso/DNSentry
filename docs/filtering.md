@@ -76,3 +76,6 @@ example.com                  # 拦截 example.com 及其所有子域名
 | REFUSED | 拒绝，客户端通常不缓存 |
 
 被拦截的域名，任何类型的查询（A、AAAA、HTTPS 等）都在本机直接应答，不会发往上游。“拦截响应 TTL”决定客户端缓存这个结果的时间。
+
+- **其他类型的查询**（HTTPS、MX、TXT 等）：在“空 IP / 自定义 IP”模式下返回空的 NOERROR 应答并附带 SOA（TTL 与上面相同），客户端会缓存这个“没有数据”的结果而不是反复重试。
+- **扩展 DNS 错误（EDE，RFC 8914）**：客户端的查询带 EDNS 时，应答里会附上原因——命中过滤规则是 **15 Blocked**，被屏蔽的服务是 **17 Filtered**（文字里带服务名）。支持 EDE 的软件（如较新的 `dig`、部分浏览器和系统解析器）可以显示“被 DNSentry 拦截”而不是笼统的失败。`dig` 示例：`dig ads.example.com +ednsopt=15:` 会在应答的 OPT 中显示 `EDE: 15 (Blocked)`。不带 EDNS 的客户端什么额外内容都收不到。

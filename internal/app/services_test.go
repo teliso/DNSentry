@@ -3,6 +3,7 @@ package app
 import (
 	"net"
 	"os"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -107,5 +108,47 @@ func TestBlockedServicesAreValidated(t *testing.T) {
 	config.BlockedServices = []string{"no-such-service"}
 	if _, err := validateConfig(config); err == nil {
 		t.Fatal("an unknown service was accepted")
+	}
+}
+
+func TestBlockedResponsesCarryExtendedErrorsAndNegativeCaching(t *testing.T) {
+	server, _ := newFilterTestServer(t, "||ads.test^\n", func(c *Config) { c.BlockedServices = []string{"tiktok"}; c.BlockingMode = "null_ip" })
+	ede := func(response *dns.Msg) *dns.EDNS0_EDE {
+		if opt := response.IsEdns0(); opt != nil {
+			for _, option := range opt.Option {
+				if e, ok := option.(*dns.EDNS0_EDE); ok {
+					return e
+				}
+			}
+		}
+		return nil
+	}
+	query := func(name string, qtype uint16, edns bool) *dns.Msg {
+		request := newTestRequest(name, qtype)
+		if edns {
+			request.SetEdns0(1232, false)
+		}
+		writer := new(captureResponseWriter)
+		server.ServeDNS(writer, request)
+		return writer.response
+	}
+
+	if e := ede(query("ads.test.", dns.TypeA, true)); e == nil || e.InfoCode != dns.ExtendedErrorCodeBlocked {
+		t.Fatalf("a filter rule must report EDE Blocked, got %v", e)
+	}
+	if e := ede(query("www.tiktok.com.", dns.TypeA, true)); e == nil || e.InfoCode != dns.ExtendedErrorCodeFiltered || !strings.Contains(e.ExtraText, "TikTok") {
+		t.Fatalf("a blocked service must report EDE Filtered naming it, got %v", e)
+	}
+	plain := query("ads.test.", dns.TypeA, false)
+	if plain.IsEdns0() != nil || len(plain.Answer) != 1 {
+		t.Fatalf("a client without EDNS must not receive OPT: %v", plain)
+	}
+	// Other types get an empty NOERROR answer with an SOA, so it can be cached.
+	https := query("ads.test.", dns.TypeHTTPS, true)
+	if https.Rcode != dns.RcodeSuccess || len(https.Answer) != 0 || len(https.Ns) != 1 || https.Ns[0].Header().Rrtype != dns.TypeSOA {
+		t.Fatalf("HTTPS for a blocked name = %v", https)
+	}
+	if soa := https.Ns[0].(*dns.SOA); soa.Minttl != 10 || soa.Hdr.Ttl != 10 {
+		t.Fatalf("negative cache time = %d/%d", soa.Hdr.Ttl, soa.Minttl)
 	}
 }
