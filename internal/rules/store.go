@@ -1,10 +1,10 @@
 package rules
 
 import (
+	"bytes"
 	"runtime/debug"
 	"slices"
 	"sort"
-	"strings"
 	"sync"
 	"sync/atomic"
 
@@ -49,8 +49,9 @@ func (s *Store) Match(domain string) (Entry, bool) {
 	domain = dnsname.Normalize(domain)
 	snap := s.snapshot.Load()
 	for candidate := domain; candidate != ""; candidate = dnsname.Parent(candidate) {
-		position, found := slices.BinarySearchFunc(snap.index, candidate, func(r ref, name string) int {
-			return strings.Compare(snap.lists[r.list].domain(int(r.index)), name)
+		name := []byte(candidate)
+		position, found := slices.BinarySearchFunc(snap.index, name, func(r ref, name []byte) int {
+			return bytes.Compare(snap.lists[r.list].domain(int(r.index)), name)
 		})
 		if found {
 			r := snap.index[position]

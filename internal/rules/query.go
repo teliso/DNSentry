@@ -1,6 +1,7 @@
 package rules
 
 import (
+	"bytes"
 	"strings"
 
 	"github.com/teliso/DNSentry/internal/dnsname"
@@ -29,6 +30,7 @@ const maxPageSize = 500
 // Query returns the rules that pass filter, local rules first.
 func (s *Store) Query(filter Filter) Page {
 	search := strings.ToLower(strings.TrimSpace(filter.Search))
+	needle := []byte(search)
 	limit := filter.Limit
 	if limit <= 0 || limit > maxPageSize {
 		limit = 100
@@ -46,11 +48,10 @@ func (s *Store) Query(filter Filter) Page {
 			continue
 		}
 		for i := 0; i < list.len(); i++ {
-			domain := list.domain(i)
 			if filter.Action != "" && (ActionBlock == filter.Action) == list.allow[i] {
 				continue
 			}
-			if search != "" && !strings.Contains(domain, search) {
+			if search != "" && !bytes.Contains(list.domain(i), needle) {
 				continue
 			}
 			if page.Total >= offset && len(page.Items) < limit {
@@ -90,7 +91,7 @@ func (s *Store) Check(domain string) (Check, error) {
 	}
 	for _, list := range s.lists() {
 		for i := 0; i < list.len(); i++ {
-			if names[list.domain(i)] && len(result.Candidates) < maxCheckCandidates {
+			if names[string(list.domain(i))] && len(result.Candidates) < maxCheckCandidates {
 				result.Candidates = append(result.Candidates, list.entry(i))
 			}
 		}

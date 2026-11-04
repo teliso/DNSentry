@@ -3,8 +3,6 @@ package rules
 import (
 	"bytes"
 	"slices"
-	"strings"
-	"unsafe"
 )
 
 // ruleList is one list of rules (the local file or one remote source) stored
@@ -89,18 +87,14 @@ func (l *ruleList) len() int {
 
 func (l *ruleList) isLocal() bool { return l.source == "" }
 
-// domain returns rule i's domain without copying. The list is immutable, so
-// the string stays valid for as long as it is referenced.
-func (l *ruleList) domain(i int) string {
-	start, end := l.offsets[i], l.offsets[i+1]
-	if start == end {
-		return ""
-	}
-	return unsafe.String(&l.blob[start], int(end-start))
+// domain returns rule i's domain as a view into the list's storage (it must
+// not be modified; lists are never changed after they are built).
+func (l *ruleList) domain(i int) []byte {
+	return l.blob[l.offsets[i]:l.offsets[i+1]:l.offsets[i+1]]
 }
 
 func (l *ruleList) entry(i int) Entry {
-	entry := Entry{Domain: strings.Clone(l.domain(i)), Action: ActionBlock, Source: l.source}
+	entry := Entry{Domain: string(l.domain(i)), Action: ActionBlock, Source: l.source}
 	if l.allow[i] {
 		entry.Action = ActionAllow
 	}
@@ -131,7 +125,7 @@ func buildIndex(lists []*ruleList) []ref {
 		}
 	}
 	slices.SortFunc(refs, func(a, b ref) int {
-		if c := strings.Compare(lists[a.list].domain(int(a.index)), lists[b.list].domain(int(b.index))); c != 0 {
+		if c := bytes.Compare(lists[a.list].domain(int(a.index)), lists[b.list].domain(int(b.index))); c != 0 {
 			return c
 		}
 		return precedence(lists, a, b)
@@ -139,7 +133,7 @@ func buildIndex(lists []*ruleList) []ref {
 	// The first of each run of equal domains has the highest precedence.
 	kept := refs[:0]
 	for i, r := range refs {
-		if i > 0 && lists[r.list].domain(int(r.index)) == lists[kept[len(kept)-1].list].domain(int(kept[len(kept)-1].index)) {
+		if i > 0 && bytes.Equal(lists[r.list].domain(int(r.index)), lists[kept[len(kept)-1].list].domain(int(kept[len(kept)-1].index))) {
 			continue
 		}
 		kept = append(kept, r)

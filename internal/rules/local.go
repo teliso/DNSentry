@@ -145,7 +145,7 @@ func (s *Store) Add(domain string, action Action) (Entry, error) {
 	s.stateMu.RLock()
 	if s.local != nil {
 		for i := 0; i < s.local.len(); i++ {
-			if s.local.domain(i) == entry.Domain && s.local.allow[i] == (entry.Action == ActionAllow) {
+			if string(s.local.domain(i)) == entry.Domain && s.local.allow[i] == (entry.Action == ActionAllow) {
 				s.stateMu.RUnlock()
 				return Entry{}, ErrRuleExists
 			}
