@@ -121,6 +121,10 @@ class ConsoleStore {
     await this.commitConfig(() => api.saveConfig(payload), '配置已保存', '保存配置失败');
   }
 
+  async importConfig(yaml: string) {
+    await this.commitConfig(() => api.importConfig(yaml), '配置已导入', '导入配置失败');
+  }
+
   async restoreConfig(id?: string) {
     await this.commitConfig(() => api.restoreConfig(id), '配置已恢复', '恢复配置失败');
   }

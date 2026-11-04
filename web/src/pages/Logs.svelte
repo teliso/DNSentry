@@ -63,6 +63,14 @@
     return () => window.clearInterval(timer);
   });
 
+  async function exportLogs() {
+    try {
+      await api.exportLogs('csv', { search: debounced, action });
+    } catch (cause) {
+      toasts.error(cause instanceof Error ? cause.message : '导出失败');
+    }
+  }
+
   function quickRule(domain: string, allow: boolean) {
     if (confirm(`为 ${domain} 及其子域名添加${allow ? '放行' : '拦截'}规则？`)) void store.addRule(domain, allow ? 'allow' : 'block');
   }
@@ -72,6 +80,7 @@
   {#snippet actions()}
     <Switch bind:checked={live} label="实时刷新" />
     <button class="btn" type="button" onclick={load}><Icon name="refresh" />刷新</button>
+    <button class="btn" type="button" onclick={exportLogs} title="导出当前筛选条件下的全部内存日志（CSV，可用 Excel 打开）"><Icon name="download" />导出</button>
   {/snippet}
 </PageHeader>
 

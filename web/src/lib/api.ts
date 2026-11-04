@@ -48,12 +48,13 @@ export function setUnauthorizedHandler(handler: () => void) {
 
 async function request<T>(path: string, method = 'GET', body?: unknown): Promise<T> {
   const headers = new Headers();
-  if (body !== undefined) headers.set('Content-Type', 'application/json');
+  const raw = typeof body === 'string'; // a configuration file is sent as it is
+  if (body !== undefined) headers.set('Content-Type', raw ? 'application/yaml' : 'application/json');
   if (token) headers.set('Authorization', `Bearer ${token}`);
   const response = await fetch(`/api${path}`, {
     method,
     headers,
-    body: body === undefined ? undefined : JSON.stringify(body)
+    body: body === undefined ? undefined : raw ? body : JSON.stringify(body)
   });
   const text = await response.text();
   let data: unknown = null;
@@ -67,6 +68,32 @@ async function request<T>(path: string, method = 'GET', body?: unknown): Promise
     throw new APIError(response.status, data as APIError['data']);
   }
   return data as T;
+}
+
+/** Fetches `path` with the API credentials and hands the response to the browser as a file download. */
+async function download(path: string, fallbackName: string): Promise<void> {
+  const headers = new Headers();
+  if (token) headers.set('Authorization', `Bearer ${token}`);
+  const response = await fetch(`/api${path}`, { headers });
+  if (!response.ok) {
+    if (response.status === 401) onUnauthorized();
+    let data: APIError['data'] = null;
+    try {
+      data = JSON.parse(await response.text());
+    } catch {
+      /* non-JSON error body */
+    }
+    throw new APIError(response.status, data);
+  }
+  const name = /filename="([^"]+)"/.exec(response.headers.get('Content-Disposition') ?? '')?.[1] ?? fallbackName;
+  const url = URL.createObjectURL(await response.blob());
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = name;
+  document.body.append(link);
+  link.click();
+  link.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 10_000);
 }
 
 function toParams(query: Record<string, string | number | undefined>): URLSearchParams {
@@ -83,6 +110,9 @@ export const api = {
   configHistory: () => request<ConfigVersion[]>('/config/history'),
   restoreConfig: (id?: string) => request<Config>('/config/restore', 'POST', id ? { id } : undefined),
   stats: (range: string) => request<MetricPoint[]>(`/stats?range=${range}`),
+  exportLogs: (format: 'csv' | 'json', query: { search?: string; action?: string }) => download(`/logs/export?${toParams({ ...query, format })}`, `dnsentry-logs.${format}`),
+  exportConfig: () => download('/config/export', 'dnsentry-config.yaml'),
+  importConfig: (yaml: string) => request<Config>('/config/import', 'POST', yaml),
   setProtection: (enabled: boolean, durationMinutes = 0) => request<Protection>('/protection', 'POST', { enabled, duration_minutes: durationMinutes }),
   clearCache: () => request<{ status: string }>('/cache/clear', 'POST'),
   testUpstreams: (upstreams: string[]) => request<UpstreamTest[]>('/upstreams/test', 'POST', { upstreams }),

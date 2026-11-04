@@ -23,11 +23,17 @@ curl -H "Authorization: Bearer $TOKEN" http://192.168.1.2:18080/api/status
 | `GET /config` | 当前保存的配置 |
 | `PUT /config` | 保存配置，立即应用可热更新的部分 |
 | `GET /config/history` | 配置版本列表（新的在前） |
+| `GET /config/export` | 下载当前保存的配置文件（含私钥等敏感信息） |
+| `POST /config/import` | 请求体为配置文件（YAML），校验后保存并应用，同 `PUT /config`（路径限制同样适用），记入配置历史 |
+| `GET /config/export` | 下载当前保存的配置文件（含私钥等敏感信息） |
+| `POST /config/import` | 请求体为配置文件（YAML），校验后保存并应用，同 `PUT /config`（路径限制同样适用），记入配置历史 |
 | `POST /config/restore` | 恢复配置，可选 `{"id": "…"}`，默认恢复上一个版本 |
 | `POST /cache/clear` | 清空 DNS 缓存 |
 | `POST /protection` | 暂停 / 恢复过滤，见下 |
 | `POST /upstreams/test` | 测试上游 `{"upstreams": [...], "domain": "example.com"}` |
 | `GET /stats?range=` | 长周期统计，`range` 为 `24h`（按小时）、`7d`、`30d`、`90d`（按天），默认 `24h`；返回 `[{"time","queries","blocked"}]`，重启后保留 |
+| `GET /logs/export` | 导出内存日志（`format=csv`（默认）或 `json`，可带 `search`、`action` 过滤），作为下载文件返回 |
+| `GET /logs/export` | 导出内存日志（`format=csv`（默认）或 `json`，可带 `search`、`action` 过滤），作为下载文件返回 |
 | `GET /logs` | 查询日志（分页） |
 | `GET /rules` | 规则（分页） |
 | `POST /rules` | 添加本地规则 `{"domain": "…", "action": "block"|"allow"}` |

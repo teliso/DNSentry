@@ -322,6 +322,26 @@ type Filter struct {
 	Limit  int
 }
 
+// Export returns every in-memory entry matching filter (Offset and Limit are
+// ignored), newest first.
+func (l *Logger) Export(filter Filter) []Entry {
+	search := strings.ToLower(strings.TrimSpace(filter.Search))
+	l.mu.RLock()
+	defer l.mu.RUnlock()
+	entries := make([]Entry, 0, l.count)
+	for i := 0; i < l.count; i++ {
+		entry := l.atLocked(i)
+		if filter.Action != "" && entry.Action != filter.Action {
+			continue
+		}
+		if search != "" && !strings.Contains(entry.Domain, search) && !strings.Contains(entry.Client, search) {
+			continue
+		}
+		entries = append(entries, entry)
+	}
+	return entries
+}
+
 // Page is one page of entries, newest first, plus the actions present in the
 // whole log so clients can offer them as filters.
 type Page struct {

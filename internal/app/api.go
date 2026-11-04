@@ -62,6 +62,8 @@ var apiRoutes = []apiRoute{
 	{http.MethodPut, "/config", (*API).updateConfig},
 	{http.MethodGet, "/config/history", (*API).configHistory},
 	{http.MethodPost, "/config/restore", (*API).restoreConfig},
+	{http.MethodGet, "/config/export", (*API).exportConfig},
+	{http.MethodPost, "/config/import", (*API).importConfig},
 	{http.MethodGet, "/metrics", (*API).writeMetrics},
 	{http.MethodPost, "/cache/clear", (*API).clearCache},
 	{http.MethodGet, "/stats", (*API).getStats},
@@ -77,6 +79,7 @@ var apiRoutes = []apiRoute{
 	{http.MethodGet, "/sources", (*API).listSources},
 	{http.MethodPut, "/sources", (*API).updateSources},
 	{http.MethodPost, "/sources/refresh", (*API).refreshSources},
+	{http.MethodGet, "/logs/export", (*API).exportLogs},
 	{http.MethodGet, "/logs", (*API).listLogs},
 }
 
