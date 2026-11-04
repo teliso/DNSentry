@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { ask } from '../lib/i18n/index.svelte';
   import { onMount } from 'svelte';
   import Card from '../components/Card.svelte';
   import EmptyState from '../components/EmptyState.svelte';
@@ -87,7 +88,7 @@
   }
 
   function quickRule(domain: string, allow: boolean) {
-    if (confirm(`为 ${domain} 及其子域名添加${allow ? '放行' : '拦截'}规则？`)) void store.addRule(domain, allow ? 'allow' : 'block');
+    if (ask(`为 ${domain} 及其子域名添加${allow ? '放行' : '拦截'}规则？`)) void store.addRule(domain, allow ? 'allow' : 'block');
   }
 </script>
 

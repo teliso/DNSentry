@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { ask } from '../lib/i18n/index.svelte';
   import Card from '../components/Card.svelte';
   import { api } from '../lib/api';
   import { formatRelative } from '../lib/format';
@@ -37,19 +38,19 @@
       toasts.error('配置文件太大（超过 1 MB）');
       return;
     }
-    if (confirm(`用“${file.name}”替换当前配置？当前配置会保留在历史中，可以再恢复回来。`)) await store.importConfig(await file.text());
+    if (ask(`用“${file.name}”替换当前配置？当前配置会保留在历史中，可以再恢复回来。`)) await store.importConfig(await file.text());
   }
 
   function clearCache() {
-    if (confirm('清空 DNS 缓存？之后的查询会重新向上游请求，短时间内可能变慢。')) void store.clearCache();
+    if (ask('清空 DNS 缓存？之后的查询会重新向上游请求，短时间内可能变慢。')) void store.clearCache();
   }
 
   function clearLogs() {
-    if (confirm('清空内存中的查询日志？这不能撤销（已保存到磁盘的日志不受影响）。')) void store.clearLogs();
+    if (ask('清空内存中的查询日志？这不能撤销（已保存到磁盘的日志不受影响）。')) void store.clearLogs();
   }
 
   function restore(version: ConfigVersion) {
-    if (confirm(`恢复到 ${new Date(version.time).toLocaleString('zh-CN', { hour12: false })} 保存的配置？当前配置会保留在历史中，可以再恢复回来。`)) {
+    if (ask(`恢复到 ${new Date(version.time).toLocaleString('zh-CN', { hour12: false })} 保存的配置？当前配置会保留在历史中，可以再恢复回来。`)) {
       void store.restoreConfig(version.id);
     }
   }

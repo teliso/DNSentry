@@ -1,9 +1,16 @@
+import { i18n } from './i18n/index.svelte';
 const numberFormat = new Intl.NumberFormat('zh-CN');
 
 export const formatNumber = (value: number) => numberFormat.format(value);
 
 /** 12345 -> "1.2 万" style compaction keeps tiles readable. */
 export function formatCompact(value: number): string {
+  if (i18n.language === 'en') {
+    if (value >= 1_000_000_000) return `${(value / 1_000_000_000).toFixed(1)}B`;
+    if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(1)}M`;
+    if (value >= 1_000) return `${(value / 1_000).toFixed(1)}K`;
+    return String(value);
+  }
   if (value >= 100_000_000) return `${(value / 100_000_000).toFixed(1)} 亿`;
   if (value >= 10_000) return `${(value / 10_000).toFixed(1)} 万`;
   return formatNumber(value);

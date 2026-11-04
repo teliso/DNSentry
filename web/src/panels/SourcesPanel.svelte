@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { ask } from '../lib/i18n/index.svelte';
   import Card from '../components/Card.svelte';
   import EmptyState from '../components/EmptyState.svelte';
   import Field from '../components/Field.svelte';
@@ -51,7 +52,7 @@
     store.saveSources(store.sources.map((source) => (source.url === target ? { ...source, ...change } : source)), done);
 
   function remove(source: RuleSource) {
-    if (confirm(`删除规则源“${source.name || hostOf(source.url)}”？它的 ${source.rule_count ?? 0} 条规则和本地缓存会一并移除。`)) {
+    if (ask(`删除规则源“${source.name || hostOf(source.url)}”？它的 ${source.rule_count ?? 0} 条规则和本地缓存会一并移除。`)) {
       void store.saveSources(store.sources.filter((item) => item.url !== source.url), '规则源已删除');
     }
   }

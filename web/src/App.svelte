@@ -14,6 +14,7 @@
   import { router, type Page } from './lib/router.svelte';
   import { store } from './lib/store.svelte';
   import { theme } from './lib/theme.svelte';
+  import { i18n } from './lib/i18n/index.svelte';
 
   // Monitoring, then filtering, then configuration — left to right.
   const NAV: { page: Page; label: string; icon: IconName }[] = [
@@ -56,6 +57,7 @@
       {#if store.auth?.configured && store.auth.authenticated}
         <button class="btn ghost sm" type="button" onclick={() => store.signOut()} title="退出登录（{store.auth.username}）">退出</button>
       {/if}
+      <button class="btn ghost sm lang" type="button" onclick={() => i18n.set(i18n.language === 'zh' ? 'en' : 'zh')} aria-label={i18n.language === 'zh' ? 'Switch to English' : '切换到中文'} title={i18n.language === 'zh' ? 'Switch to English' : '切换到中文'}>{i18n.language === 'zh' ? 'EN' : '中文'}</button>
       <button class="btn ghost sm icon" type="button" onclick={theme.toggle} aria-label={theme.current === 'dark' ? '切换到浅色主题' : '切换到深色主题'}>
         <Icon name={theme.current === 'dark' ? 'sun' : 'moon'} />
       </button>
