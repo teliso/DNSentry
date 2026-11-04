@@ -64,6 +64,7 @@ var apiRoutes = []apiRoute{
 	{http.MethodPost, "/config/restore", (*API).restoreConfig},
 	{http.MethodGet, "/metrics", (*API).writeMetrics},
 	{http.MethodPost, "/cache/clear", (*API).clearCache},
+	{http.MethodGet, "/stats", (*API).getStats},
 	{http.MethodPost, "/protection", (*API).setProtection},
 	{http.MethodPost, "/upstreams/test", (*API).testUpstreams},
 	{http.MethodGet, "/rules", (*API).listRules},
@@ -178,6 +179,20 @@ func (a *API) getStatus(writer http.ResponseWriter, _ *http.Request) {
 func (a *API) clearCache(writer http.ResponseWriter, _ *http.Request) {
 	a.resolver.clearCache()
 	writeJSON(writer, http.StatusOK, map[string]string{"status": "cleared"})
+}
+
+// getStats serves GET /stats?range=24h|7d|30d|90d: queries and blocked counts
+// per hour (24h) or per day, kept across restarts.
+func (a *API) getStats(writer http.ResponseWriter, request *http.Request) {
+	window := request.URL.Query().Get("range")
+	if window == "" {
+		window = "24h"
+	}
+	if window != "24h" && window != "7d" && window != "30d" && window != "90d" {
+		writeError(writer, http.StatusBadRequest, "range must be 24h, 7d, 30d or 90d")
+		return
+	}
+	writeJSON(writer, http.StatusOK, a.logs.History(window))
 }
 
 // listLogs serves GET /logs?search=&action=&offset=&limit=.

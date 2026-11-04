@@ -9,7 +9,9 @@
   import Stat from '../components/Stat.svelte';
   import TrafficChart from '../components/TrafficChart.svelte';
   import { formatBytes, formatCompact, formatDuration, formatNumber, formatPercent, formatRelative } from '../lib/format';
+  import { api } from '../lib/api';
   import { store } from '../lib/store.svelte';
+  import type { MetricPoint } from '../lib/types';
 
   const status = $derived(store.status);
   const blockedRatio = $derived(status && status.total_queries > 0 ? status.blocked_queries / status.total_queries : 0);
@@ -18,6 +20,30 @@
   const dnssec = $derived(status?.dnssec);
   const series = $derived(status?.series ?? []);
   let guide = $state(false);
+
+  const RANGES = [
+    { id: '30m', label: '30 分钟' },
+    { id: '24h', label: '24 小时' },
+    { id: '7d', label: '7 天' },
+    { id: '30d', label: '30 天' },
+    { id: '90d', label: '90 天' }
+  ] as const;
+  let range = $state<(typeof RANGES)[number]['id']>('30m');
+  let longPoints = $state<MetricPoint[]>([]);
+  let statsRequest = 0;
+  // Longer ranges come from the persisted counters; refreshed whenever the live status moves.
+  $effect(() => {
+    const selected = range;
+    status?.total_queries;
+    if (selected === '30m') return;
+    const id = ++statsRequest;
+    api.stats(selected).then((points) => {
+      if (id === statsRequest) longPoints = points;
+    }).catch(() => {});
+  });
+  const trend = $derived(range === '30m' ? series : longPoints);
+  const trendQueries = $derived(trend.reduce((sum, point) => sum + point.queries, 0));
+  const trendBlocked = $derived(trend.reduce((sum, point) => sum + point.blocked, 0));
   /** Ranking cards stay compact; the log page has the full picture. */
   const top = <T,>(items: T[] | undefined, count = 6) => (items ?? []).slice(0, count);
 </script>
@@ -46,8 +72,15 @@
 </section>
 
 <section class="trend">
-  <Card title="请求趋势" description="最近 30 分钟每分钟的查询数与拦截数；平均处理时间 {formatDuration(status?.dashboard?.average_processing_ms ?? 0)}。">
-    <TrafficChart points={series} />
+  <Card title="请求趋势" description="{formatNumber(trendQueries)} 次查询，{formatNumber(trendBlocked)} 次被拦截（{formatPercent(trendQueries > 0 ? trendBlocked / trendQueries : 0)}）· 平均处理 {formatDuration(status?.dashboard?.average_processing_ms ?? 0)}">
+    {#snippet actions()}
+      <div class="ranges" role="group" aria-label="时间范围">
+        {#each RANGES as item (item.id)}
+          <button type="button" class:active={range === item.id} aria-pressed={range === item.id} onclick={() => (range = item.id)}>{item.label}</button>
+        {/each}
+      </div>
+    {/snippet}
+    <TrafficChart points={trend} {range} />
   </Card>
   <Card title="上游健康" description="最近 30 分钟的延迟；红线表示该分钟有失败">
     {#if health.length === 0}
@@ -124,6 +157,11 @@
   /* Cards size to their own content: a tall one never stretches its neighbour. */
   .ranks { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; align-items: start; }
   .ops { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; align-items: start; }
+
+  .ranges { display: inline-flex; padding: 2px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--surface-2); }
+  .ranges button { padding: 3px 10px; border: 0; border-radius: 5px; background: none; color: var(--ink-2); font-size: 12px; cursor: pointer; white-space: nowrap; }
+  .ranges button:hover { color: var(--ink); }
+  .ranges button.active { background: var(--surface); color: var(--accent); font-weight: 600; box-shadow: var(--shadow); }
 
   .callout {
     display: flex; align-items: center; gap: 10px; padding: 11px 14px; border-radius: var(--radius);

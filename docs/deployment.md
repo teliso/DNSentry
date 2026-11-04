@@ -81,6 +81,7 @@ DNSENTRY_API_TOKEN=$(openssl rand -hex 24) docker compose -f deploy/compose.yaml
 | 配置 | `config.yaml` |
 | 配置历史 | `history/`（含完整的配置副本，**包含 DNSCrypt 密钥等敏感内容**） |
 | 本地规则 | `rules.txt` |
+| 统计数据 | `stats.json`（每小时的查询数和拦截数，最多 90 天，不含域名和客户端；丢失只会让历史图表清零） |
 | 规则源缓存 | `remote/`（可丢弃，丢失后会重新下载） |
 | 持久化查询日志 | `querylog-YYYY-MM-DD.jsonl`（若启用；包含客户端地址和域名） |
 

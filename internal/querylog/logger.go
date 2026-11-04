@@ -87,6 +87,9 @@ type Logger struct {
 	next          int     // index in ring that the next entry is written to
 	count         int     // number of valid entries in ring
 	metrics       map[int64]MetricPoint
+	hours         map[int64]hourBucket // long-range counters, see stats.go
+	hoursDirty    bool
+	statsSaver    *statsPersistence
 	max           int
 	total         atomic.Uint64
 	blocked       atomic.Uint64
@@ -103,7 +106,7 @@ func New(max int) *Logger {
 	if max < 1 {
 		max = 1
 	}
-	return &Logger{max: max, metrics: make(map[int64]MetricPoint)}
+	return &Logger{max: max, metrics: make(map[int64]MetricPoint), hours: make(map[int64]hourBucket)}
 }
 
 func (l *Logger) Add(entry Entry) {
@@ -143,6 +146,7 @@ func (l *Logger) Add(entry Entry) {
 		bucket.Blocked++
 	}
 	l.metrics[now.Unix()] = bucket
+	l.recordHourLocked(now, entry.Action == string(rules.ActionBlock))
 	l.mu.Unlock()
 	l.enqueuePersistence(entry)
 }

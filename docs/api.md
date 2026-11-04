@@ -27,6 +27,7 @@ curl -H "Authorization: Bearer $TOKEN" http://192.168.1.2:18080/api/status
 | `POST /cache/clear` | 清空 DNS 缓存 |
 | `POST /protection` | 暂停 / 恢复过滤，见下 |
 | `POST /upstreams/test` | 测试上游 `{"upstreams": [...], "domain": "example.com"}` |
+| `GET /stats?range=` | 长周期统计，`range` 为 `24h`（按小时）、`7d`、`30d`、`90d`（按天），默认 `24h`；返回 `[{"time","queries","blocked"}]`，重启后保留 |
 | `GET /logs` | 查询日志（分页） |
 | `GET /rules` | 规则（分页） |
 | `POST /rules` | 添加本地规则 `{"domain": "…", "action": "block"|"allow"}` |

@@ -8,6 +8,8 @@ export type RuleQuery = { search?: string; action?: RuleAction | ''; source?: st
 export type RuleCheck = { domain: string; rule?: Rule; candidates: Rule[] };
 export type LocalSummary = { rules: number; ignored: number; ignored_lines: number[] };
 
+/** Time range of the traffic chart: live minutes, or persisted hourly/daily counters. */
+export type TrendRange = '30m' | '24h' | '7d' | '30d' | '90d';
 export type MetricPoint = { time: string; queries: number; blocked: number };
 export type RankedCount = { name: string; count: number };
 export type Dashboard = {

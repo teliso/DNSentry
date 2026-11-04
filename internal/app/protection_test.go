@@ -78,3 +78,19 @@ func TestProtectionAPI(t *testing.T) {
 		t.Fatalf("resume = %d %s", response.Code, response.Body)
 	}
 }
+
+func TestStatsAPI(t *testing.T) {
+	api := newConfigTestAPI(t)
+	api.logs.Add(querylog.Entry{Domain: "a.test", Action: "block"})
+	var points []querylog.MetricPoint
+	response := callAPI(t, api, http.MethodGet, "/api/stats?range=7d", nil)
+	if response.Code != http.StatusOK || json.Unmarshal(response.Body.Bytes(), &points) != nil || len(points) != 7 || points[6].Queries != 1 || points[6].Blocked != 1 {
+		t.Fatalf("7d stats = %d %s", response.Code, response.Body)
+	}
+	if response := callAPI(t, api, http.MethodGet, "/api/stats", nil); response.Code != http.StatusOK {
+		t.Fatalf("default range = %d", response.Code)
+	}
+	if response := callAPI(t, api, http.MethodGet, "/api/stats?range=1y", nil); response.Code != http.StatusBadRequest {
+		t.Fatalf("bad range = %d", response.Code)
+	}
+}

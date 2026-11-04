@@ -89,6 +89,7 @@ func (l *Logger) enqueuePersistence(entry Entry) {
 }
 
 func (l *Logger) Close() error {
+	l.closeStats()
 	persistence := l.persistence
 	if persistence == nil {
 		return nil

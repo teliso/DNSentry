@@ -21,6 +21,7 @@ const PORTS = { dns: 25353, web: 28080, list: 28099, upstream: 25399, slow: 2539
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const cleanups = [];
+let stopServer = async () => {};
 
 // A minimal DNS responder: answers A queries with 203.0.113.x, other types empty.
 function fakeUpstream(port, maxDelay) {
@@ -114,8 +115,10 @@ rules:
   const binary = path.join(work, process.platform === 'win32' ? 'dnsentry.exe' : 'dnsentry');
   execFileSync('go', ['build', '-o', binary, './cmd/dnsentry'], { cwd: root, stdio: 'inherit' });
   const server = spawn(binary, ['-config', config], { stdio: 'ignore', env: { ...process.env, DNSENTRY_API_TOKEN: '' } });
+  const exited = new Promise((resolve) => server.once('exit', resolve));
   cleanups.push(() => server.kill());
   process.on('exit', () => server.kill()); // also on an uncaught error
+  stopServer = async () => { server.kill(); await Promise.race([exited, sleep(5000)]); };
   const base = `http://127.0.0.1:${PORTS.web}`;
   await waitFor(`${base}/healthz`);
   await traffic();
@@ -154,5 +157,6 @@ rules:
   await browser.close();
 } finally {
   for (const cleanup of cleanups) cleanup();
-  rmSync(work, { recursive: true, force: true });
+  await stopServer(); // the server saves its statistics on exit; wait before deleting its directory
+  rmSync(work, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
 }

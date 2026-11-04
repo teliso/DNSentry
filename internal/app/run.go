@@ -125,6 +125,10 @@ func run(ctx context.Context, stop context.CancelFunc, static fs.FS) error {
 	if err != nil {
 		return fmt.Errorf("initialize query logger: %w", err)
 	}
+	// Counters only (no domains or clients), so this is always on.
+	if err := logs.EnableStats(filepath.Join(filepath.Dir(configPath()), "stats.json")); err != nil {
+		slog.Warn("statistics", "error", err)
+	}
 	defer func() {
 		if err := logs.Close(); err != nil {
 			slog.Error("close query logger", "error", err)
