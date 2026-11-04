@@ -16,7 +16,7 @@
 
 ## 快速开始
 
-需要 Go 1.26+；从源码运行控制台还需要 Node 22 与 pnpm。
+需要 Go 1.27+；从源码运行控制台还需要 Node 22 与 pnpm。
 
 ```sh
 git clone https://github.com/teliso/DNSentry.git
