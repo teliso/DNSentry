@@ -1,9 +1,7 @@
 package rules
 
 import (
-	"bytes"
 	"runtime/debug"
-	"slices"
 	"sort"
 	"sync"
 	"sync/atomic"
@@ -30,16 +28,16 @@ type Store struct {
 }
 
 // snapshot is the immutable lookup structure: the lists in precedence order
-// and a sorted index with one reference per domain, pointing at its rule.
+// and a hash table with one reference per domain, pointing at its rule.
 type snapshot struct {
 	lists []*ruleList
-	index []ref
+	table *table
 	total int
 }
 
 func NewStore(file string) *Store {
 	store := &Store{file: file, remote: make(map[string]*ruleList)}
-	store.snapshot.Store(&snapshot{})
+	store.snapshot.Store(&snapshot{table: &table{}})
 	return store
 }
 
@@ -49,12 +47,7 @@ func (s *Store) Match(domain string) (Entry, bool) {
 	domain = dnsname.Normalize(domain)
 	snap := s.snapshot.Load()
 	for candidate := domain; candidate != ""; candidate = dnsname.Parent(candidate) {
-		name := []byte(candidate)
-		position, found := slices.BinarySearchFunc(snap.index, name, func(r ref, name []byte) int {
-			return bytes.Compare(snap.lists[r.list].domain(int(r.index)), name)
-		})
-		if found {
-			r := snap.index[position]
+		if r, found := snap.table.lookup(snap.lists, candidate); found {
 			return snap.lists[r.list].entry(int(r.index)), true
 		}
 	}
@@ -141,5 +134,5 @@ func buildSnapshot(lists []*ruleList) *snapshot {
 	for _, list := range lists {
 		total += list.len()
 	}
-	return &snapshot{lists: lists, index: buildIndex(lists), total: total}
+	return &snapshot{lists: lists, table: buildTable(lists), total: total}
 }

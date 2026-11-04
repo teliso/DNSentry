@@ -3,6 +3,7 @@ package rules
 import (
 	"fmt"
 	"testing"
+	"time"
 )
 
 func TestIndexPrecedenceAndDuplicates(t *testing.T) {
@@ -75,14 +76,20 @@ func TestLargeListLookups(t *testing.T) {
 
 func BenchmarkMatch400k(b *testing.B) {
 	entries := make([]Entry, 0, 400000)
+	hits := make([]string, 0, 1024)
 	for i := 0; i < 400000; i++ {
 		entries = append(entries, Entry{Domain: fmt.Sprintf("h%d.ads%d.example.test", i, i%997), Action: ActionBlock})
+		if i%400 == 0 {
+			hits = append(hits, entries[i].Domain)
+		}
 	}
 	store := NewStore("")
+	start := time.Now()
 	store.SetRemote("https://big", entries)
+	b.Logf("building the lookup structure for 400k rules: %v", time.Since(start))
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		store.Match("www.h12345.ads12345.example.org")                               // miss, several parents
-		store.Match(fmt.Sprintf("h%d.ads%d.example.test", i%400000, (i%400000)%997)) // hit
+		store.Match("www.h12345.ads12345.example.org") // miss, several parents
+		store.Match(hits[i%len(hits)])                 // hit
 	}
 }

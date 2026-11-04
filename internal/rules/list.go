@@ -2,6 +2,8 @@ package rules
 
 import (
 	"bytes"
+	"hash/maphash"
+	"math/bits"
 	"slices"
 )
 
@@ -110,38 +112,74 @@ type ref struct {
 	index uint32
 }
 
-// buildIndex returns, sorted by domain, one reference per distinct domain: the
-// rule that applies to it. Local rules override remote ones; within the same
-// kind an allow rule overrides a block.
-func buildIndex(lists []*ruleList) []ref {
+// table is an open-addressing hash table with one slot per distinct domain,
+// holding a reference to the rule that applies to it. Lookups hash the name
+// and then confirm it byte by byte, so a collision can never match a wrong
+// domain. Slots are ref+1 packed into a uint64; zero means empty.
+type table struct {
+	slots []uint64
+	seed  maphash.Seed
+}
+
+var tableSeed = maphash.MakeSeed()
+
+func packRef(r ref) uint64   { return (uint64(r.list)<<32 | uint64(r.index)) + 1 }
+func unpackRef(v uint64) ref { v--; return ref{list: uint16(v >> 32), index: uint32(v)} }
+
+// slotFor maps a hash to a start position without needing a power-of-two size.
+func (t *table) slotFor(hash uint64) int {
+	high, _ := bits.Mul64(hash, uint64(len(t.slots)))
+	return int(high)
+}
+
+// buildTable returns the table over lists. Where several lists have a rule
+// for the same domain, the one with the highest precedence is kept: local over
+// remote, and within the same kind allow over block.
+func buildTable(lists []*ruleList) *table {
 	size := 0
 	for _, list := range lists {
 		size += list.len()
 	}
-	refs := make([]ref, 0, size)
+	t := &table{slots: make([]uint64, size+size/2+16), seed: tableSeed}
 	for li, list := range lists {
 		for i := 0; i < list.len(); i++ {
-			refs = append(refs, ref{list: uint16(li), index: uint32(i)})
+			next := ref{list: uint16(li), index: uint32(i)}
+			name := list.domain(i)
+			for pos := t.slotFor(maphash.Bytes(t.seed, name)); ; pos = (pos + 1) % len(t.slots) {
+				current := t.slots[pos]
+				if current == 0 {
+					t.slots[pos] = packRef(next)
+					break
+				}
+				existing := unpackRef(current)
+				if !bytes.Equal(lists[existing.list].domain(int(existing.index)), name) {
+					continue
+				}
+				if precedence(lists, next, existing) < 0 {
+					t.slots[pos] = packRef(next)
+				}
+				break
+			}
 		}
 	}
-	slices.SortFunc(refs, func(a, b ref) int {
-		if c := bytes.Compare(lists[a.list].domain(int(a.index)), lists[b.list].domain(int(b.index))); c != 0 {
-			return c
-		}
-		return precedence(lists, a, b)
-	})
-	// The first of each run of equal domains has the highest precedence.
-	kept := refs[:0]
-	for i, r := range refs {
-		if i > 0 && bytes.Equal(lists[r.list].domain(int(r.index)), lists[kept[len(kept)-1].list].domain(int(kept[len(kept)-1].index))) {
-			continue
-		}
-		kept = append(kept, r)
+	return t
+}
+
+// lookup returns the rule for exactly name.
+func (t *table) lookup(lists []*ruleList, name string) (ref, bool) {
+	if len(t.slots) == 0 {
+		return ref{}, false
 	}
-	if len(kept) < len(refs)*9/10 {
-		return slices.Clone(kept)
+	for pos := t.slotFor(maphash.String(t.seed, name)); ; pos = (pos + 1) % len(t.slots) {
+		slot := t.slots[pos]
+		if slot == 0 {
+			return ref{}, false
+		}
+		r := unpackRef(slot)
+		if string(lists[r.list].domain(int(r.index))) == name {
+			return r, true
+		}
 	}
-	return kept
 }
 
 // precedence orders two rules for the same domain: negative when a wins.
