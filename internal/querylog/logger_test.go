@@ -166,3 +166,20 @@ func TestDashboardSlowAndFailedDomains(t *testing.T) {
 		t.Fatalf("failed domains = %#v", stats.FailedDomains)
 	}
 }
+
+func TestRingKeepsNewestEntriesInOrder(t *testing.T) {
+	logger := New(3)
+	if got := logger.List(); len(got) != 0 {
+		t.Fatalf("empty logger listed %d entries", len(got))
+	}
+	for i := 1; i <= 5; i++ {
+		logger.Add(Entry{Domain: string(rune('a' + i - 1))})
+	}
+	list := logger.List()
+	if len(list) != 3 || list[0].Domain != "e" || list[1].Domain != "d" || list[2].Domain != "c" {
+		t.Fatalf("list after wrap-around = %#v", list)
+	}
+	if page := logger.Query(Filter{Limit: 2}); page.Total != 3 || len(page.Items) != 2 || page.Items[0].Domain != "e" {
+		t.Fatalf("page = %#v", page)
+	}
+}

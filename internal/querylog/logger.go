@@ -83,7 +83,9 @@ type SecurityStats struct {
 
 type Logger struct {
 	mu            sync.RWMutex
-	entries       []Entry
+	ring          []Entry // fixed-size circular buffer of at most max entries
+	next          int     // index in ring that the next entry is written to
+	count         int     // number of valid entries in ring
 	metrics       map[int64]MetricPoint
 	max           int
 	total         atomic.Uint64
@@ -124,12 +126,7 @@ func (l *Logger) Add(entry Entry) {
 	}
 	now := time.Now().Truncate(time.Minute)
 	l.mu.Lock()
-	// Newest-first ring: shift in place instead of reallocating per query.
-	if len(l.entries) < l.max {
-		l.entries = append(l.entries, Entry{})
-	}
-	copy(l.entries[1:], l.entries)
-	l.entries[0] = entry
+	l.pushLocked(entry)
 	bucket, exists := l.metrics[now.Unix()]
 	if !exists {
 		// A new minute started: drop buckets older than the retained window.
@@ -150,11 +147,28 @@ func (l *Logger) Add(entry Entry) {
 	l.enqueuePersistence(entry)
 }
 
+// pushLocked stores entry as the newest one, overwriting the oldest when full.
+func (l *Logger) pushLocked(entry Entry) {
+	if l.ring == nil {
+		l.ring = make([]Entry, l.max)
+	}
+	l.ring[l.next] = entry
+	l.next = (l.next + 1) % len(l.ring)
+	l.count = min(l.count+1, len(l.ring))
+}
+
+// atLocked returns the i-th newest entry (0 = newest); i must be below count.
+func (l *Logger) atLocked(i int) Entry {
+	return l.ring[(l.next-1-i+2*len(l.ring))%len(l.ring)]
+}
+
 func (l *Logger) List() []Entry {
 	l.mu.RLock()
 	defer l.mu.RUnlock()
-	result := make([]Entry, len(l.entries))
-	copy(result, l.entries)
+	result := make([]Entry, l.count)
+	for i := range result {
+		result[i] = l.atLocked(i)
+	}
 	return result
 }
 
@@ -326,7 +340,8 @@ func (l *Logger) Query(filter Filter) Page {
 	seen := map[string]bool{}
 	l.mu.RLock()
 	defer l.mu.RUnlock()
-	for _, entry := range l.entries {
+	for i := 0; i < l.count; i++ {
+		entry := l.atLocked(i)
 		if !seen[entry.Action] {
 			seen[entry.Action] = true
 			page.Actions = append(page.Actions, entry.Action)
