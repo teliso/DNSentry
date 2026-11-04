@@ -1,7 +1,7 @@
 import { api, APIError, initToken, setToken, setUnauthorizedHandler } from './api';
 import { normalizeConfig, serializeConfig, validateConfig } from './config';
 import { toasts } from './toast.svelte';
-import type { Config, LocalRecord, LocalSummary, Rule, RuleAction, RuleSource, Status, UpstreamTest } from './types';
+import type { AuthStatus, Config, LocalRecord, LocalSummary, Rule, RuleAction, RuleSource, Status, UpstreamTest } from './types';
 
 const POLL_INTERVAL_MS = 10_000;
 
@@ -24,6 +24,9 @@ class ConsoleStore {
   online = $state(false);
   busy = $state(false);
   tokenRequired = $state(false);
+  /** The console has a password and this browser is not signed in. */
+  loginRequired = $state(false);
+  auth = $state.raw<AuthStatus | null>(null);
 
   /** Config as last returned by the server. */
   saved = $state.raw<Config | null>(null);
@@ -37,9 +40,8 @@ class ConsoleStore {
 
   async start() {
     initToken();
-    setUnauthorizedHandler(() => {
-      this.tokenRequired = true;
-    });
+    setUnauthorizedHandler(() => void this.askForCredentials());
+    await this.loadAuth();
     await Promise.all([this.refreshLive(), this.loadConfig()]);
     window.setInterval(() => {
       if (!document.hidden) void this.refreshLive();
@@ -47,6 +49,52 @@ class ConsoleStore {
     document.addEventListener('visibilitychange', () => {
       if (!document.hidden) void this.refreshLive();
     });
+  }
+
+  async loadAuth() {
+    try {
+      this.auth = await api.authStatus();
+    } catch {
+      /* the regular poll reports connection problems */
+    }
+  }
+
+  /** A request was refused: show the sign-in form if the console has a password, else the token dialog. */
+  private async askForCredentials() {
+    await this.loadAuth();
+    if (this.auth?.configured) this.loginRequired = true;
+    else this.tokenRequired = true;
+  }
+
+  async signIn(username: string, password: string): Promise<boolean> {
+    try {
+      this.auth = await api.login(username, password);
+    } catch (cause) {
+      toasts.error(messageOf(cause, '登录失败'));
+      return false;
+    }
+    this.loginRequired = false;
+    await Promise.all([this.refreshLive(), this.loadConfig()]);
+    return true;
+  }
+
+  async signOut() {
+    await this.act(async () => {
+      await api.logout();
+      this.auth = await api.authStatus();
+      this.status = null;
+      this.saved = null;
+      this.draft = null;
+      this.loginRequired = true;
+    }, '退出失败');
+  }
+
+  /** Sets, changes (current password required) or removes the console password. */
+  async changeLogin(change: { username: string; password: string; current: string } | { remove: true; current: string }): Promise<boolean> {
+    return this.act(async () => {
+      this.auth = 'remove' in change ? await api.removeLogin(change.current) : await api.setLogin(change.username, change.password, change.current);
+      toasts.success('remove' in change ? '控制台登录已关闭' : '控制台登录已保存');
+    }, '保存登录设置失败');
   }
 
   /** Runs a mutation with the shared busy flag and turns failures into toasts. */
@@ -79,6 +127,7 @@ class ConsoleStore {
   async submitToken(token: string) {
     setToken(token);
     this.tokenRequired = false;
+    this.loginRequired = false;
     await Promise.all([this.refreshLive(), this.loadConfig()]);
   }
 

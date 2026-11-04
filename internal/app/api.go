@@ -7,6 +7,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/teliso/DNSentry/internal/auth"
 	"github.com/teliso/DNSentry/internal/services"
 	"github.com/teliso/DNSentry/internal/upstream"
 
@@ -35,12 +36,15 @@ type API struct {
 	saved    *Config
 
 	authFailures authThrottle
+	auth         *auth.Store    // console login; opened on first use when nil
+	sessions     *auth.Sessions // browser sessions of that login
 }
 
 func newAPI(ctx context.Context, apiToken string, resolver *DNSServer, updater *rules.Updater, dnscrypt *DNSCryptService) *API {
 	return &API{
 		ctx:      ctx,
 		apiToken: apiToken,
+		sessions: auth.NewSessions(),
 		resolver: resolver,
 		rules:    resolver.rules,
 		cache:    resolver.cache,
@@ -69,6 +73,8 @@ var apiRoutes = []apiRoute{
 	{http.MethodPost, "/cache/clear", (*API).clearCache},
 	{http.MethodGet, "/stats", (*API).getStats},
 	{http.MethodGet, "/services", (*API).listServices},
+	{http.MethodPut, "/auth", (*API).setAuth},
+	{http.MethodDelete, "/auth", (*API).deleteAuth},
 	{http.MethodPost, "/protection", (*API).setProtection},
 	{http.MethodPost, "/upstreams/test", (*API).testUpstreams},
 	{http.MethodGet, "/rules", (*API).listRules},
@@ -94,43 +100,73 @@ func (a *API) authorize(writer http.ResponseWriter, request *http.Request) bool 
 		writeError(writer, http.StatusTooManyRequests, "too many failed authentication attempts")
 		return false
 	}
-	if a.apiToken == "" {
-		if !isLoopbackRequest(request) {
-			writer.Header().Set("WWW-Authenticate", "Bearer")
-			writeError(writer, http.StatusUnauthorized, "API access requires a loopback request or configured token")
-			return false
-		}
-		// Without a token the console trusts loopback callers, so a web page
-		// must not be able to reach it through DNS rebinding (a public name that
-		// resolves to 127.0.0.1). Browsers then send that name as the Host.
-		if !loopbackHost(request.Host) {
-			writeError(writer, http.StatusForbidden, "use http://localhost or an IP address to open the console, or configure DNSENTRY_API_TOKEN")
-			return false
-		}
+	loginSet := a.loginStore().Configured()
+	if a.sessionValid(request) {
+		// The session cookie is SameSite=Strict; checking the origin as well
+		// costs nothing and covers browsers that ignore the attribute.
 		if mutatingAPIRequest(request) && !sameOriginMutation(request) {
 			writeError(writer, http.StatusForbidden, "state-changing API requests require a same-origin request")
 			return false
 		}
 		return true
 	}
-	provided, ok := bearerToken(request)
-	if !ok || !tokensEqual(provided, a.apiToken) {
+	if a.apiToken != "" {
+		provided, ok := bearerToken(request)
+		if ok && tokensEqual(provided, a.apiToken) {
+			a.authFailures.succeed(client)
+			return true
+		}
 		if ok {
 			a.authFailures.fail(client)
 		}
 		writer.Header().Set("WWW-Authenticate", "Bearer")
-		writeError(writer, http.StatusUnauthorized, "invalid or missing API token")
+		if loginSet {
+			writeError(writer, http.StatusUnauthorized, "sign in or provide the API token")
+		} else {
+			writeError(writer, http.StatusUnauthorized, "invalid or missing API token")
+		}
 		return false
 	}
-	a.authFailures.succeed(client)
+	if loginSet {
+		writeError(writer, http.StatusUnauthorized, "sign in required")
+		return false
+	}
+	if !isLoopbackRequest(request) {
+		writer.Header().Set("WWW-Authenticate", "Bearer")
+		writeError(writer, http.StatusUnauthorized, "API access requires a loopback request or configured token")
+		return false
+	}
+	// Without a token the console trusts loopback callers, so a web page
+	// must not be able to reach it through DNS rebinding (a public name that
+	// resolves to 127.0.0.1). Browsers then send that name as the Host.
+	if !loopbackHost(request.Host) {
+		writeError(writer, http.StatusForbidden, "use http://localhost or an IP address to open the console, or set a console password or DNSENTRY_API_TOKEN")
+		return false
+	}
+	if mutatingAPIRequest(request) && !sameOriginMutation(request) {
+		writeError(writer, http.StatusForbidden, "state-changing API requests require a same-origin request")
+		return false
+	}
 	return true
 }
 
 func (a *API) handle(writer http.ResponseWriter, request *http.Request) {
+	path := strings.TrimPrefix(request.URL.Path, "/api")
+	// Signing in has to work without being signed in.
+	switch {
+	case path == "/auth" && request.Method == http.MethodGet:
+		a.getAuth(writer, request)
+		return
+	case path == "/login" && request.Method == http.MethodPost:
+		a.login(writer, request)
+		return
+	case path == "/logout" && request.Method == http.MethodPost:
+		a.logout(writer, request)
+		return
+	}
 	if !a.authorize(writer, request) {
 		return
 	}
-	path := strings.TrimPrefix(request.URL.Path, "/api")
 	for _, route := range apiRoutes {
 		if route.path == path && route.method == request.Method {
 			route.handler(a, writer, request)

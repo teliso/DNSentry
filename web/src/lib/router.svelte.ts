@@ -4,7 +4,7 @@ export const PAGES = {
   logs: [],
   filters: ['sources', 'rules', 'services', 'blocking'],
   dns: ['upstreams', 'routes', 'records', 'cache', 'advanced'],
-  settings: ['network', 'encryption', 'logging', 'maintenance']
+  settings: ['network', 'account', 'encryption', 'logging', 'maintenance']
 } as const;
 
 export type Page = keyof typeof PAGES;

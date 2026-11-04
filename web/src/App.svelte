@@ -4,6 +4,7 @@
   import AlertBanners from './components/AlertBanners.svelte';
   import SaveBar from './components/SaveBar.svelte';
   import Toasts from './components/Toasts.svelte';
+  import LoginDialog from './components/LoginDialog.svelte';
   import TokenDialog from './components/TokenDialog.svelte';
   import Dashboard from './pages/Dashboard.svelte';
   import Dns from './pages/Dns.svelte';
@@ -52,6 +53,9 @@
         <span class="dot" class:off={!store.online}></span>
         <span class="conn-text">{store.online ? '运行中' : store.status ? '连接中断' : '连接中…'}</span>
       </span>
+      {#if store.auth?.configured && store.auth.authenticated}
+        <button class="btn ghost sm" type="button" onclick={() => store.signOut()} title="退出登录（{store.auth.username}）">退出</button>
+      {/if}
       <button class="btn ghost sm icon" type="button" onclick={theme.toggle} aria-label={theme.current === 'dark' ? '切换到浅色主题' : '切换到深色主题'}>
         <Icon name={theme.current === 'dark' ? 'sun' : 'moon'} />
       </button>
@@ -68,7 +72,7 @@
 </main>
 
 <Toasts />
-{#if store.tokenRequired}<TokenDialog />{/if}
+{#if store.loginRequired}<LoginDialog />{:else if store.tokenRequired}<TokenDialog />{/if}
 
 <style>
   .topbar {

@@ -136,7 +136,7 @@ rules:
   mkdirSync(out, { recursive: true });
   const shots = [
     ['dashboard', 'overview', 1500], ['logs', 'logs', 900], ['sources', 'filters/sources', 800], ['rules', 'filters/rules', 900],
-    ['dns-settings', 'dns/upstreams', 800], ['routes', 'dns/routes', 800], ['records', 'dns/records', 800],
+    ['services', 'filters/services', 1000], ['dns-settings', 'dns/upstreams', 800], ['routes', 'dns/routes', 800], ['records', 'dns/records', 800],
     ['service-settings', 'settings/network', 1100], ['config-history', 'settings/maintenance', 900]
   ];
   const page = await (await browser.newContext({ viewport: { width: 1280, height: 800 } })).newPage();

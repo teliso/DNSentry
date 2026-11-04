@@ -6,6 +6,8 @@
 
 - **未设置 `DNSENTRY_API_TOKEN`**：只接受来自本机（回环地址）的请求，并且请求必须用 `localhost` 或 IP 地址作为主机名；写操作（POST / PUT / DELETE）还必须带同源的 `Origin` 或 `Referer` 头。
 - **设置了令牌**：所有请求都要带 `Authorization: Bearer <token>`，来源不限。连续 10 次错误会被限制 1 分钟（返回 429 和 `Retry-After`）。
+- **设置了控制台密码**：浏览器先 `POST /api/login`（`{"username","password"}`，必须同源）换取 HttpOnly 的会话 Cookie `dnsentry_session`，之后的请求带着它即可；也可以继续用令牌。没有凭据时返回 401。
+- 下面这几个接口**不需要认证**：`GET /api/auth`（返回 `{"configured","token_required","authenticated","username"}`，控制台用它判断该显示哪种登录）、`POST /api/login`、`POST /api/logout`。
 
 ```sh
 export TOKEN=...
@@ -31,6 +33,8 @@ curl -H "Authorization: Bearer $TOKEN" http://192.168.1.2:18080/api/status
 | `POST /cache/clear` | 清空 DNS 缓存 |
 | `POST /protection` | 暂停 / 恢复过滤，见下 |
 | `POST /upstreams/test` | 测试上游 `{"upstreams": [...], "domain": "example.com"}` |
+| `PUT /auth` | 设置或修改控制台密码：`{"username","password","current_password"}`（已有密码时必须提供当前密码；成功后其他浏览器的登录失效） |
+| `DELETE /auth` | 关闭控制台密码：`{"current_password"}` |
 | `GET /services` | 可整体屏蔽的服务目录：`[{"id","name","group","domains"}]`，配置里的 `blocked_services` 填其中的 `id` |
 | `GET /stats?range=` | 长周期统计，`range` 为 `24h`（按小时）、`7d`、`30d`、`90d`（按天），默认 `24h`；返回 `[{"time","queries","blocked"}]`，重启后保留 |
 | `GET /logs/export` | 导出内存日志（`format=csv`（默认）或 `json`，可带 `search`、`action` 过滤），作为下载文件返回 |

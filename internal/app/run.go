@@ -15,6 +15,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/teliso/DNSentry/internal/auth"
 	"github.com/teliso/DNSentry/internal/services"
 	"github.com/teliso/DNSentry/internal/upstream"
 
@@ -71,8 +72,8 @@ func checkWebExposure(config *Config, apiToken string) error {
 	if os.Getenv("DNSENTRY_ALLOW_PUBLIC_WEB") != "1" {
 		return fmt.Errorf("refusing non-loopback Web listen address %q; set DNSENTRY_ALLOW_PUBLIC_WEB=1 to allow public Web access", config.HTTPListen)
 	}
-	if apiToken == "" {
-		return errors.New("refusing public Web access without DNSENTRY_API_TOKEN")
+	if apiToken == "" && !auth.Exists(authFilePath()) {
+		return errors.New("refusing public Web access without DNSENTRY_API_TOKEN or a console password (set one from the console first, then listen publicly)")
 	}
 	return nil
 }
@@ -107,6 +108,10 @@ func run(ctx context.Context, stop context.CancelFunc, static fs.FS) error {
 		return err
 	}
 	apiToken := os.Getenv("DNSENTRY_API_TOKEN")
+	loginStore, err := auth.Open(authFilePath())
+	if err != nil {
+		return err
+	}
 	if err := checkWebExposure(config, apiToken); err != nil {
 		return err
 	}
@@ -168,6 +173,7 @@ func run(ctx context.Context, stop context.CancelFunc, static fs.FS) error {
 
 	updater := rules.NewUpdater(ruleStore, ruleCacheDir(config.RulesFile), config.RuleSources)
 	api := newAPI(ctx, apiToken, server, updater, services.dnscrypt)
+	api.auth = loginStore
 	httpServer := newHTTPServer(api, static, dnsService.Ready)
 	httpListener, err := net.Listen("tcp", config.HTTPListen)
 	if err != nil {

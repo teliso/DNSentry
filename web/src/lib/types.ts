@@ -1,5 +1,8 @@
 // Shapes of the DNSentry JSON API (see internal/app/api*.go).
 
+/** How the console is protected right now (GET /api/auth). */
+export type AuthStatus = { configured: boolean; token_required: boolean; authenticated: boolean; username?: string };
+
 /** A service that can be blocked as a whole (GET /api/services). */
 export type ServiceInfo = { id: string; name: string; group: string; domains: string[] };
 
