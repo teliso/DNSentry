@@ -2,6 +2,7 @@ package cache
 
 import (
 	"container/list"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -21,7 +22,16 @@ const (
 	maxCacheShards     = 32
 )
 
+// entryOverhead approximates what an entry costs besides its packet and key:
+// the map slot, the list element and the entry struct. It is counted against
+// the cache's size so that "4 MB" is close to what the cache really occupies.
+const entryOverhead = 192
+
+// entrySize is the number of bytes an entry is charged.
+func entrySize(key string, packet []byte) int { return entryOverhead + len(key) + len(packet) }
+
 type cacheEntry struct {
+	key     string
 	packet  []byte
 	expires time.Time
 	version uint64
@@ -31,9 +41,8 @@ type cacheEntry struct {
 
 type cacheShard struct {
 	mu          sync.Mutex
-	items       map[string]cacheEntry
+	items       map[string]*list.Element // values are *cacheEntry; the list is the LRU order, newest first
 	lru         *list.List
-	nodes       map[string]*list.Element
 	maxBytes    int
 	usedBytes   int
 	nextVersion uint64
@@ -86,9 +95,8 @@ func New(maxBytes int, enabled bool) *Cache {
 	cache.enabled.Store(enabled)
 	for index := range cache.shards {
 		cache.shards[index] = cacheShard{
-			items:    make(map[string]cacheEntry),
+			items:    make(map[string]*list.Element),
 			lru:      list.New(),
-			nodes:    make(map[string]*list.Element),
 			maxBytes: shardMaxBytes(maxBytes, shardCount, index),
 		}
 	}
@@ -164,12 +172,13 @@ func (c *Cache) Lookup(key string, optimistic bool, optimisticAnswerTTL, optimis
 
 	shard := c.shardFor(key)
 	shard.mu.Lock()
-	entry, ok := shard.items[key]
+	element, ok := shard.items[key]
 	if !ok {
 		shard.mu.Unlock()
 		c.misses.Add(1)
 		return Hit{}
 	}
+	entry := *element.Value.(*cacheEntry) // a copy: its packet is immutable, the rest is read here
 
 	now := c.now()
 	stale := !now.Before(entry.expires)
@@ -190,7 +199,7 @@ func (c *Cache) Lookup(key string, optimistic bool, optimisticAnswerTTL, optimis
 	message := new(dns.Msg)
 	if message.Unpack(entry.packet) != nil {
 		shard.mu.Lock()
-		if current, exists := shard.items[key]; exists && current.version == entry.version {
+		if current, exists := shard.items[key]; exists && current.Value.(*cacheEntry).version == entry.version {
 			shard.removeLocked(key)
 		}
 		shard.mu.Unlock()
@@ -200,13 +209,13 @@ func (c *Cache) Lookup(key string, optimistic bool, optimisticAnswerTTL, optimis
 
 	expiring := false
 	shard.mu.Lock()
-	if current, exists := shard.items[key]; exists && current.version == entry.version {
-		shard.touchLocked(key)
+	if element, exists := shard.items[key]; exists && element.Value.(*cacheEntry).version == entry.version {
+		current := element.Value.(*cacheEntry)
+		shard.lru.MoveToFront(element)
 		if !stale {
 			expiring = current.hits > 0 && current.ttl >= minPrefetchTTL && current.expires.Sub(now)*5 < time.Duration(current.ttl)*time.Second
 			if current.hits < ^uint32(0) {
 				current.hits++
-				shard.items[key] = current
 			}
 		}
 	}
@@ -248,32 +257,33 @@ func (c *Cache) Set(key string, message *dns.Msg, ttl uint32, _ time.Duration) b
 	shard := c.shardFor(key)
 	shard.mu.Lock()
 	defer shard.mu.Unlock()
-	if !c.enabled.Load() || generation != c.generation.Load() || len(packet) > shard.maxBytes {
+	size := entrySize(key, packet)
+	if !c.enabled.Load() || generation != c.generation.Load() || size > shard.maxBytes {
 		return false
 	}
 
 	shard.removeLocked(key)
-	for shard.usedBytes+len(packet) > shard.maxBytes && len(shard.items) > 0 {
+	for shard.usedBytes+size > shard.maxBytes && len(shard.items) > 0 {
 		oldest := shard.lru.Back()
 		if oldest == nil {
 			break
 		}
-		shard.removeLocked(oldest.Value.(string))
+		shard.removeLocked(oldest.Value.(*cacheEntry).key)
 		c.evictions.Add(1)
 	}
-	if shard.usedBytes+len(packet) > shard.maxBytes {
+	if shard.usedBytes+size > shard.maxBytes {
 		return false
 	}
 
 	shard.nextVersion++
-	shard.items[key] = cacheEntry{
+	shard.items[key] = shard.lru.PushFront(&cacheEntry{
+		key:     strings.Clone(key), // do not keep a larger string alive through the key
 		packet:  packet,
 		expires: c.now().Add(time.Duration(ttl) * time.Second),
 		version: shard.nextVersion,
 		ttl:     ttl,
-	}
-	shard.usedBytes += len(packet)
-	shard.touchLocked(key)
+	})
+	shard.usedBytes += size
 	return true
 }
 
@@ -310,45 +320,30 @@ func (c *Cache) SetMaxBytes(maxBytes int) {
 			if oldest == nil {
 				break
 			}
-			shard.removeLocked(oldest.Value.(string))
+			shard.removeLocked(oldest.Value.(*cacheEntry).key)
 			c.evictions.Add(1)
 		}
 		shard.mu.Unlock()
 	}
 }
 
-func (s *cacheShard) touchLocked(key string) {
-	if node, ok := s.nodes[key]; ok {
-		s.lru.MoveToFront(node)
-		return
-	}
-	s.nodes[key] = s.lru.PushFront(key)
-}
-
 func (s *cacheShard) removeLocked(key string) {
-	entry, ok := s.items[key]
+	element, ok := s.items[key]
 	if !ok {
-		if node, exists := s.nodes[key]; exists {
-			s.lru.Remove(node)
-			delete(s.nodes, key)
-		}
 		return
 	}
+	entry := element.Value.(*cacheEntry)
 	delete(s.items, key)
-	s.usedBytes -= len(entry.packet)
+	s.lru.Remove(element)
+	s.usedBytes -= entrySize(entry.key, entry.packet)
 	if s.usedBytes < 0 {
 		s.usedBytes = 0
-	}
-	if node, exists := s.nodes[key]; exists {
-		s.lru.Remove(node)
-		delete(s.nodes, key)
 	}
 }
 
 func (s *cacheShard) clearLocked() {
-	s.items = make(map[string]cacheEntry)
+	s.items = make(map[string]*list.Element)
 	s.lru.Init()
-	s.nodes = make(map[string]*list.Element)
 	s.usedBytes = 0
 }
 

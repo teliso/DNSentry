@@ -173,13 +173,13 @@ func (u *Updater) SetSources(sources []Source) error {
 		}
 	}
 	for _, url := range toRestore {
-		entries, err := u.cache.loadRules(url)
+		list, err := u.cache.loadRules(url)
 		if err != nil {
 			continue
 		}
 		u.mu.Lock()
 		if u.isEnabledLocked(url) {
-			u.store.SetRemote(url, entries)
+			u.store.setRemoteList(list)
 		}
 		u.mu.Unlock()
 	}
@@ -334,12 +334,12 @@ func (u *Updater) refresh(ctx context.Context, url string) {
 		LastModified: state.lastModified,
 	}
 	if err == nil && !result.notModified && u.isEnabledLocked(url) {
-		u.store.SetRemote(url, result.entries)
+		u.store.setRemoteList(result.list)
 	}
 	u.mu.Unlock()
 
 	if err == nil && !result.notModified {
-		if saveErr := u.cache.saveRules(url, result.entries); saveErr != nil {
+		if saveErr := u.cache.saveRules(url, result.list); saveErr != nil {
 			persisted.ETag, persisted.LastModified = "", "" // force a full download next time
 		}
 	}
@@ -347,7 +347,7 @@ func (u *Updater) refresh(ctx context.Context, url string) {
 }
 
 type downloadResult struct {
-	entries      []Entry
+	list         *ruleList
 	notModified  bool
 	etag         string
 	lastModified string
@@ -380,11 +380,10 @@ func download(ctx context.Context, client *http.Client, rawURL, etag, lastModifi
 	body := &io.LimitedReader{R: response.Body, N: maxListBytes + 1}
 	scanner := bufio.NewScanner(body)
 	scanner.Buffer(make([]byte, 4096), 1<<20)
-	var entries []Entry
+	builder := newListBuilder(rawURL)
 	for scanner.Scan() {
 		for _, entry := range ParseLine(scanner.Text()) {
-			entry.Source = rawURL
-			entries = append(entries, entry)
+			builder.Add(entry)
 		}
 	}
 	if err := scanner.Err(); err != nil {
@@ -394,7 +393,7 @@ func download(ctx context.Context, client *http.Client, rawURL, etag, lastModifi
 		return downloadResult{}, fmt.Errorf("rule list exceeds %d MB", maxListBytes>>20)
 	}
 	return downloadResult{
-		entries:      entries,
+		list:         builder.Build(),
 		etag:         response.Header.Get("ETag"),
 		lastModified: response.Header.Get("Last-Modified"),
 	}, nil

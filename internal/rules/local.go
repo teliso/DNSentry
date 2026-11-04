@@ -1,7 +1,9 @@
 package rules
 
 import (
+	"bufio"
 	"errors"
+	"io"
 	"os"
 	"strings"
 
@@ -29,43 +31,67 @@ type LocalSummary struct {
 
 const maxIgnoredReported = 50
 
-func parseLocal(text string) ([]Entry, LocalSummary) {
-	var entries []Entry
+func parseLocal(text string) (*ruleList, LocalSummary) {
+	list, summary, _ := parseLocalReader(strings.NewReader(text))
+	return list, summary
+}
+
+// parseLocalReader parses the local rules file line by line, so a big file is
+// never held in memory as a whole.
+func parseLocalReader(r io.Reader) (*ruleList, LocalSummary, error) {
+	builder := newListBuilder("")
 	summary := LocalSummary{IgnoredLines: []int{}}
-	for index, line := range strings.Split(text, "\n") {
-		parsed := ParseLine(line)
-		if parsed == nil {
-			trimmed := strings.TrimSpace(line)
-			if trimmed != "" && trimmed[0] != '#' && trimmed[0] != '!' {
-				summary.Ignored++
-				if len(summary.IgnoredLines) < maxIgnoredReported {
-					summary.IgnoredLines = append(summary.IgnoredLines, index+1)
+	reader := bufio.NewReaderSize(r, 64<<10)
+	for index := 0; ; index++ {
+		line, readErr := reader.ReadString('\n')
+		if line != "" {
+			parsed := ParseLine(strings.TrimSuffix(line, "\n"))
+			if parsed == nil {
+				trimmed := strings.TrimSpace(line)
+				if trimmed != "" && trimmed[0] != '#' && trimmed[0] != '!' {
+					summary.Ignored++
+					if len(summary.IgnoredLines) < maxIgnoredReported {
+						summary.IgnoredLines = append(summary.IgnoredLines, index+1)
+					}
 				}
 			}
-			continue
+			for _, entry := range parsed {
+				builder.Add(entry)
+			}
+			summary.Rules += len(parsed)
 		}
-		entries = append(entries, parsed...)
+		if readErr != nil {
+			if readErr == io.EOF {
+				readErr = nil
+			}
+			return builder.Build(), summary, readErr
+		}
 	}
-	summary.Rules = len(entries)
-	return entries, summary
 }
 
 // Reload re-reads the local rules file. A missing file means no local rules.
 func (s *Store) Reload() error {
 	s.fileMu.Lock()
 	defer s.fileMu.Unlock()
-	_, err := s.reloadLocked()
-	return err
+	return s.reloadLocked()
 }
 
-func (s *Store) reloadLocked() (string, error) {
-	data, err := os.ReadFile(s.file)
-	if err != nil && !os.IsNotExist(err) {
-		return "", err
+func (s *Store) reloadLocked() error {
+	file, err := os.Open(s.file)
+	if os.IsNotExist(err) {
+		s.setLocal(newRuleList("", nil))
+		return nil
 	}
-	entries, _ := parseLocal(string(data))
-	s.setLocal(entries)
-	return string(data), nil
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+	list, _, err := parseLocalReader(file)
+	if err != nil {
+		return err
+	}
+	s.setLocal(list)
+	return nil
 }
 
 // LocalText returns the raw content of the local rules file.
@@ -89,13 +115,13 @@ func (s *Store) SetLocalText(text string) (LocalSummary, error) {
 	if text != "" && !strings.HasSuffix(text, "\n") {
 		text += "\n"
 	}
-	entries, summary := parseLocal(text)
+	list, summary := parseLocal(text)
 	s.fileMu.Lock()
 	defer s.fileMu.Unlock()
 	if err := fsutil.WriteFileAtomic(s.file, []byte(text), 0644); err != nil {
 		return LocalSummary{}, err
 	}
-	s.setLocal(entries)
+	s.setLocal(list)
 	return summary, nil
 }
 
@@ -127,15 +153,21 @@ func (s *Store) Add(domain string, action Action) (Entry, error) {
 	}
 	s.fileMu.Lock()
 	defer s.fileMu.Unlock()
-	text, err := s.reloadLocked()
-	if err != nil {
+	if err := s.reloadLocked(); err != nil {
 		return Entry{}, err
 	}
+	data, err := os.ReadFile(s.file)
+	if err != nil && !os.IsNotExist(err) {
+		return Entry{}, err
+	}
+	text := string(data)
 	s.stateMu.RLock()
-	for _, existing := range s.local {
-		if existing.Domain == entry.Domain && existing.Action == entry.Action {
-			s.stateMu.RUnlock()
-			return Entry{}, ErrRuleExists
+	if s.local != nil {
+		for i := 0; i < s.local.len(); i++ {
+			if string(s.local.domain(i)) == entry.Domain && s.local.allow[i] == (entry.Action == ActionAllow) {
+				s.stateMu.RUnlock()
+				return Entry{}, ErrRuleExists
+			}
 		}
 	}
 	s.stateMu.RUnlock()
@@ -146,8 +178,7 @@ func (s *Store) Add(domain string, action Action) (Entry, error) {
 	if err := fsutil.WriteFileAtomic(s.file, []byte(text), 0644); err != nil {
 		return Entry{}, err
 	}
-	_, err = s.reloadLocked()
-	return entry, err
+	return entry, s.reloadLocked()
 }
 
 // Delete removes every local rule for exactly domain with the given action.
@@ -195,6 +226,6 @@ func (s *Store) Delete(domain string, action Action) error {
 	if err := fsutil.WriteFileAtomic(s.file, []byte(strings.Join(kept, "\n")), 0644); err != nil {
 		return err
 	}
-	_, err = s.reloadLocked()
+	err = s.reloadLocked()
 	return err
 }

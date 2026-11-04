@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -57,7 +58,7 @@ func (c sourceCache) loadState(url string) (cacheState, bool) {
 }
 
 // loadRules returns the cached rules of url.
-func (c sourceCache) loadRules(url string) ([]Entry, error) {
+func (c sourceCache) loadRules(url string) (*ruleList, error) {
 	if c.dir == "" {
 		return nil, os.ErrNotExist
 	}
@@ -67,29 +68,33 @@ func (c sourceCache) loadRules(url string) ([]Entry, error) {
 		return nil, err
 	}
 	defer file.Close()
-	var entries []Entry
+	builder := newListBuilder(url)
 	scanner := bufio.NewScanner(file)
 	scanner.Buffer(make([]byte, 4096), 1<<20)
 	for scanner.Scan() {
 		for _, entry := range ParseLine(scanner.Text()) {
-			entry.Source = url
-			entries = append(entries, entry)
+			builder.Add(entry)
 		}
 	}
-	return entries, scanner.Err()
+	if err := scanner.Err(); err != nil {
+		return nil, err
+	}
+	return builder.Build(), nil
 }
 
-func (c sourceCache) saveRules(url string, entries []Entry) error {
+func (c sourceCache) saveRules(url string, list *ruleList) error {
 	if c.dir == "" {
 		return nil
 	}
-	var builder strings.Builder
-	for _, entry := range entries {
-		builder.WriteString(entry.Text())
-		builder.WriteByte('\n')
-	}
 	rulesPath, _ := c.paths(url)
-	return fsutil.WriteFileAtomic(rulesPath, []byte(builder.String()), 0644)
+	return fsutil.WriteFileStreamAtomic(rulesPath, 0644, func(w io.Writer) error {
+		out := bufio.NewWriter(w)
+		for i := 0; i < list.len(); i++ {
+			_, _ = out.WriteString(list.entry(i).Text())
+			_ = out.WriteByte('\n')
+		}
+		return out.Flush()
+	})
 }
 
 func (c sourceCache) saveState(state cacheState) error {

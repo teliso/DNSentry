@@ -15,12 +15,11 @@ func expireEntry(t *testing.T, cache *Cache, key string) {
 	shard := cache.shardFor(key)
 	shard.mu.Lock()
 	defer shard.mu.Unlock()
-	entry, ok := shard.items[key]
+	element, ok := shard.items[key]
 	if !ok {
 		t.Fatalf("cache entry %q is missing", key)
 	}
-	entry.expires = time.Now().Add(-time.Second)
-	shard.items[key] = entry
+	element.Value.(*cacheEntry).expires = time.Now().Add(-time.Second)
 }
 
 func TestOptimisticMode(t *testing.T) {
@@ -49,7 +48,7 @@ func TestCacheUsesLRU(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	cache := New(len(packet)*2, true)
+	cache := New(entrySize("newest", packet)*2, true)
 	cache.Set("old", message, 60, time.Minute)
 	cache.Set("new", message, 60, time.Minute)
 	if response, _ := cache.Get("old", false, 0, 0); response == nil {
@@ -158,5 +157,24 @@ func TestLookupFlagsPopularEntriesNearExpiry(t *testing.T) {
 	}
 	if message, stale := cache.Get("hot", false, 0, 0); message == nil || stale {
 		t.Fatal("Get must keep working")
+	}
+}
+
+func TestUsedBytesCountsOverheadAndReturnsToZero(t *testing.T) {
+	message := new(dns.Msg)
+	message.Answer = []dns.RR{&dns.A{Hdr: dns.RR_Header{Name: "a.test.", Rrtype: dns.TypeA, Class: dns.ClassINET, Ttl: 60}, A: net.IPv4(192, 0, 2, 1)}}
+	packet, _ := message.Pack()
+	cache := New(1<<20, true)
+	cache.Set("key", message, 60, time.Minute)
+	if got, want := cache.Stats().UsedBytes, entrySize("key", packet); got != want || got <= len(packet)+len("key") {
+		t.Fatalf("UsedBytes = %d, want %d (packet %d plus overhead)", got, want, len(packet))
+	}
+	cache.Set("key", message, 60, time.Minute) // replacing must not double count
+	if got := cache.Stats().UsedBytes; got != entrySize("key", packet) {
+		t.Fatalf("UsedBytes after replacing = %d", got)
+	}
+	cache.Clear()
+	if stats := cache.Stats(); stats.UsedBytes != 0 || stats.Entries != 0 {
+		t.Fatalf("stats after Clear = %+v", stats)
 	}
 }

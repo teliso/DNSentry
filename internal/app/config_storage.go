@@ -85,7 +85,7 @@ func defaultConfig() *Config {
 		BlockedResponseTTL:    10,
 		RulesFile:             filepath.Join(dir, "rules.txt"),
 		CacheEnabled:          true,
-		CacheSize:             4 << 20,
+		CacheSize:             8 << 20,
 		ProgramLogLevel:       "info",
 		QueryLogSize:          defaultQueryLogSize,
 		QueryLogFile:          defaultQueryLogFile(),

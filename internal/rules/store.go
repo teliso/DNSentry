@@ -1,6 +1,7 @@
 package rules
 
 import (
+	"runtime/debug"
 	"sort"
 	"sync"
 	"sync/atomic"
@@ -20,20 +21,23 @@ type Store struct {
 
 	rebuildMu sync.Mutex // orders snapshot rebuilds so the newest inputs win
 	stateMu   sync.RWMutex
-	local     []Entry
-	remote    map[string][]Entry
+	local     *ruleList
+	remote    map[string]*ruleList
 
 	snapshot atomic.Pointer[snapshot]
 }
 
+// snapshot is the immutable lookup structure: the lists in precedence order
+// and a hash table with one reference per domain, pointing at its rule.
 type snapshot struct {
-	rules map[string]Entry // effective rule per domain
+	lists []*ruleList
+	table *table
 	total int
 }
 
 func NewStore(file string) *Store {
-	store := &Store{file: file, remote: make(map[string][]Entry)}
-	store.snapshot.Store(&snapshot{rules: map[string]Entry{}})
+	store := &Store{file: file, remote: make(map[string]*ruleList)}
+	store.snapshot.Store(&snapshot{table: &table{}})
 	return store
 }
 
@@ -41,10 +45,10 @@ func NewStore(file string) *Store {
 // specific matching name, walking from domain up through its parents.
 func (s *Store) Match(domain string) (Entry, bool) {
 	domain = dnsname.Normalize(domain)
-	rules := s.snapshot.Load().rules
+	snap := s.snapshot.Load()
 	for candidate := domain; candidate != ""; candidate = dnsname.Parent(candidate) {
-		if rule, ok := rules[candidate]; ok {
-			return rule, true
+		if r, found := snap.table.lookup(snap.lists, candidate); found {
+			return snap.lists[r.list].entry(int(r.index)), true
 		}
 	}
 	return Entry{}, false
@@ -58,7 +62,11 @@ func (s *Store) Len() int {
 // SetRemote replaces the rules loaded from source. The store takes ownership
 // of entries.
 func (s *Store) SetRemote(source string, entries []Entry) {
-	s.update(func() { s.remote[source] = entries })
+	s.setRemoteList(newRuleList(source, entries))
+}
+
+func (s *Store) setRemoteList(list *ruleList) {
+	s.update(func() { s.remote[list.source] = list })
 }
 
 // RemoveRemote unloads the rules of source.
@@ -74,8 +82,8 @@ func (s *Store) HasRemote(source string) bool {
 	return ok
 }
 
-func (s *Store) setLocal(entries []Entry) {
-	s.update(func() { s.local = entries })
+func (s *Store) setLocal(list *ruleList) {
+	s.update(func() { s.local = list })
 }
 
 func (s *Store) update(mutate func()) {
@@ -85,53 +93,46 @@ func (s *Store) update(mutate func()) {
 	mutate()
 	lists := s.listsLocked()
 	s.stateMu.Unlock()
-	s.snapshot.Store(buildSnapshot(lists))
+	built := buildSnapshot(lists)
+	s.snapshot.Store(built)
+	if built.total >= releaseThreshold {
+		// Parsing a big list leaves a lot of garbage; hand it back to the system now.
+		debug.FreeOSMemory()
+	}
 }
+
+// releaseThreshold is the rule count from which a rebuild is followed by
+// returning freed memory to the operating system.
+const releaseThreshold = 50_000
 
 // lists returns every rule list in precedence order: local rules first, then
 // remote sources ordered by URL.
-func (s *Store) lists() [][]Entry {
+func (s *Store) lists() []*ruleList {
 	s.stateMu.RLock()
 	defer s.stateMu.RUnlock()
 	return s.listsLocked()
 }
 
-func (s *Store) listsLocked() [][]Entry {
+func (s *Store) listsLocked() []*ruleList {
 	sources := make([]string, 0, len(s.remote))
 	for source := range s.remote {
 		sources = append(sources, source)
 	}
 	sort.Strings(sources)
-	lists := make([][]Entry, 0, len(sources)+1)
-	lists = append(lists, s.local)
+	lists := make([]*ruleList, 0, len(sources)+1)
+	if s.local != nil {
+		lists = append(lists, s.local)
+	}
 	for _, source := range sources {
 		lists = append(lists, s.remote[source])
 	}
 	return lists
 }
 
-func buildSnapshot(lists [][]Entry) *snapshot {
-	size := 0
+func buildSnapshot(lists []*ruleList) *snapshot {
+	total := 0
 	for _, list := range lists {
-		size += len(list)
+		total += list.len()
 	}
-	rules := make(map[string]Entry, size)
-	for _, list := range lists {
-		for _, entry := range list {
-			if current, exists := rules[entry.Domain]; !exists || wins(entry, current) {
-				rules[entry.Domain] = entry
-			}
-		}
-	}
-	return &snapshot{rules: rules, total: size}
-}
-
-// wins reports whether next overrides current for the same domain. Local rules
-// override remote ones; within the same kind an allow rule overrides a block.
-func wins(next, current Entry) bool {
-	nextLocal, currentLocal := next.Source == "", current.Source == ""
-	if nextLocal != currentLocal {
-		return nextLocal
-	}
-	return next.Action == ActionAllow && current.Action != ActionAllow
+	return &snapshot{lists: lists, table: buildTable(lists), total: total}
 }

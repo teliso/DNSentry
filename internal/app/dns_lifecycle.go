@@ -25,6 +25,7 @@ import (
 type DNSServer struct {
 	configMu              sync.RWMutex
 	clientMu              sync.RWMutex
+	udpPool               udpConnPool
 	dohMu                 sync.Mutex
 	doh3Mu                sync.Mutex
 	encryptedMu           sync.Mutex
@@ -155,6 +156,7 @@ func (s *DNSServer) applyConfig(config Config) error {
 	return nil
 }
 func (s *DNSServer) Close() error {
+	s.udpPool.closeAll()
 	s.closeDoH3Clients()
 	if !s.closeDoHClients() {
 		s.closeDNSSECValidator()

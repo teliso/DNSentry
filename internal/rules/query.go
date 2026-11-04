@@ -1,6 +1,7 @@
 package rules
 
 import (
+	"bytes"
 	"strings"
 
 	"github.com/teliso/DNSentry/internal/dnsname"
@@ -29,6 +30,7 @@ const maxPageSize = 500
 // Query returns the rules that pass filter, local rules first.
 func (s *Store) Query(filter Filter) Page {
 	search := strings.ToLower(strings.TrimSpace(filter.Search))
+	needle := []byte(search)
 	limit := filter.Limit
 	if limit <= 0 || limit > maxPageSize {
 		limit = 100
@@ -36,24 +38,24 @@ func (s *Store) Query(filter Filter) Page {
 	offset := max(filter.Offset, 0)
 	page := Page{Items: []Entry{}}
 	for _, list := range s.lists() {
-		if len(list) == 0 {
+		if list.len() == 0 {
 			continue
 		}
-		switch source := list[0].Source; {
+		switch source := list.source; {
 		case filter.Source == SourceLocal && source != "":
 			continue
 		case filter.Source != "" && filter.Source != SourceLocal && source != filter.Source:
 			continue
 		}
-		for _, entry := range list {
-			if filter.Action != "" && entry.Action != filter.Action {
+		for i := 0; i < list.len(); i++ {
+			if filter.Action != "" && (ActionBlock == filter.Action) == list.allow[i] {
 				continue
 			}
-			if search != "" && !strings.Contains(entry.Domain, search) {
+			if search != "" && !bytes.Contains(list.domain(i), needle) {
 				continue
 			}
 			if page.Total >= offset && len(page.Items) < limit {
-				page.Items = append(page.Items, entry)
+				page.Items = append(page.Items, list.entry(i))
 			}
 			page.Total++
 		}
@@ -88,9 +90,9 @@ func (s *Store) Check(domain string) (Check, error) {
 		names[name] = true
 	}
 	for _, list := range s.lists() {
-		for _, entry := range list {
-			if names[entry.Domain] && len(result.Candidates) < maxCheckCandidates {
-				result.Candidates = append(result.Candidates, entry)
+		for i := 0; i < list.len(); i++ {
+			if names[string(list.domain(i))] && len(result.Candidates) < maxCheckCandidates {
+				result.Candidates = append(result.Candidates, list.entry(i))
 			}
 		}
 	}
@@ -103,9 +105,9 @@ func (s *Store) Counts() map[string]int {
 	counts := map[string]int{}
 	s.stateMu.RLock()
 	defer s.stateMu.RUnlock()
-	counts[SourceLocal] = len(s.local)
-	for source, entries := range s.remote {
-		counts[source] = len(entries)
+	counts[SourceLocal] = s.local.len()
+	for source, list := range s.remote {
+		counts[source] = list.len()
 	}
 	return counts
 }

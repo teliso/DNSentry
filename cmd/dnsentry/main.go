@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"runtime/debug"
 	"strings"
 	"time"
 	_ "time/tzdata" // time zone names work even where the system has no zoneinfo (containers)
@@ -27,6 +28,11 @@ func main() {
 	logLevel := flag.String("log-level", envOr("DNSENTRY_LOG_LEVEL", "info"), "log level: debug, info, warn or error")
 	logFormat := flag.String("log-format", envOr("DNSENTRY_LOG_FORMAT", "text"), "log format: text or json")
 	flag.Parse()
+	// Keep less garbage around between collections; the program's live heap is small.
+	// An explicit GOGC in the environment wins.
+	if os.Getenv("GOGC") == "" {
+		debug.SetGCPercent(50)
+	}
 
 	if *version {
 		fmt.Println("dnsentry", buildinfo.String())

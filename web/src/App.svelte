@@ -6,11 +6,6 @@
   import Toasts from './components/Toasts.svelte';
   import LoginDialog from './components/LoginDialog.svelte';
   import TokenDialog from './components/TokenDialog.svelte';
-  import Dashboard from './pages/Dashboard.svelte';
-  import Dns from './pages/Dns.svelte';
-  import Filters from './pages/Filters.svelte';
-  import Logs from './pages/Logs.svelte';
-  import Settings from './pages/Settings.svelte';
   import { router, type Page } from './lib/router.svelte';
   import { store } from './lib/store.svelte';
   import { theme } from './lib/theme.svelte';
@@ -25,8 +20,14 @@
     { page: 'settings', label: '设置', icon: 'settings' }
   ];
 
-  const pages = { overview: Dashboard, logs: Logs, filters: Filters, dns: Dns, settings: Settings };
-  const Current = $derived(pages[router.current]);
+  // Pages are separate chunks, fetched the first time they are opened.
+  const pages = {
+    overview: () => import('./pages/Dashboard.svelte'),
+    logs: () => import('./pages/Logs.svelte'),
+    filters: () => import('./pages/Filters.svelte'),
+    dns: () => import('./pages/Dns.svelte'),
+    settings: () => import('./pages/Settings.svelte')
+  };
 
   onMount(() => {
     void store.start();
@@ -68,7 +69,10 @@
 <main>
   <AlertBanners />
   {#key router.current}
-    <Current />
+    {#await pages[router.current]() then module}
+      {@const Page = module.default}
+      <Page />
+    {/await}
   {/key}
   <SaveBar />
 </main>

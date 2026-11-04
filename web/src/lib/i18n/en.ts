@@ -4,6 +4,8 @@
  * with numbers or names in it ($1 … are the captured parts).
  */
 export const EN: Record<string, string> = {
+  "之类的私网反向区交给内网 DNS": "and similar private reverse zones to the internal DNS",
+  "也可以用于把": "it can also hand",
   "留空允许所有": "leave empty to allow all",
   "并设置环境变量": "and set the environment variable",
   "可以放心让局域网内的其他设备访问（还需要把控制台监听地址改成非回环地址": "other devices on the LAN can be allowed in safely (also change the console listen address to a non-loopback one",
@@ -472,7 +474,7 @@ export const EN: Record<string, string> = {
   "关闭后所有请求直接转发到上游。": "When off, every request goes straight to the upstream.",
   "被反复访问的条目在 TTL 最后 20% 时于后台刷新，避免过期。": "Entries that are requested repeatedly are refreshed in the background during the last 20% of their TTL.",
   "先返回过期响应，再在后台刷新。": "Serve the stale answer first, then refresh in the background.",
-  "字节，建议至少 4194304（4 MB）": "bytes; at least 4194304 (4 MB) recommended",
+  "字节，含每条记录约 200 字节的索引开销；建议至少 8388608（8 MB）": "bytes, including about 200 bytes of overhead per entry; at least 8388608 (8 MB) recommended",
   "TTL 下限": "Minimum TTL",
   "秒，0 表示不限制": "seconds; 0 means unlimited",
   "TTL 上限": "Maximum TTL",
