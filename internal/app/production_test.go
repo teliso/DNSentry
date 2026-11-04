@@ -9,6 +9,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/teliso/DNSentry/internal/upstream"
+
 	"github.com/miekg/dns"
 	"github.com/teliso/DNSentry/internal/cache"
 	"github.com/teliso/DNSentry/internal/querylog"
@@ -44,15 +46,15 @@ func TestServeDNSCacheLifecycle(t *testing.T) {
 		t.Fatal(err)
 	}
 	upstreamCount := atomic.Int32{}
-	upstream := &dns.Server{PacketConn: upstreamConn, Handler: dns.HandlerFunc(func(writer dns.ResponseWriter, request *dns.Msg) {
+	upstreamServer := &dns.Server{PacketConn: upstreamConn, Handler: dns.HandlerFunc(func(writer dns.ResponseWriter, request *dns.Msg) {
 		upstreamCount.Add(1)
 		response := new(dns.Msg)
 		response.SetReply(request)
 		response.Answer = []dns.RR{&dns.A{Hdr: dns.RR_Header{Name: request.Question[0].Name, Rrtype: dns.TypeA, Class: dns.ClassINET, Ttl: 60}, A: net.IPv4(192, 0, 2, 42)}}
 		_ = writer.WriteMsg(response)
 	})}
-	go func() { _ = upstream.ActivateAndServe() }()
-	defer upstream.Shutdown()
+	go func() { _ = upstreamServer.ActivateAndServe() }()
+	defer upstreamServer.Shutdown()
 
 	directory := t.TempDir()
 	rulesFile := filepath.Join(directory, "rules.txt")
@@ -74,7 +76,7 @@ func TestServeDNSCacheLifecycle(t *testing.T) {
 		cache:  cache.New(config.CacheSize, true),
 		logs:   querylog.New(20),
 		client: &dns.Client{Net: "udp", Timeout: time.Second},
-		pool:   NewUpstreamPool(config.Upstreams),
+		pool:   upstream.NewPool(config.Upstreams),
 	}
 	request := newTestRequest("cached.integration.test.", dns.TypeA)
 
@@ -109,7 +111,7 @@ func TestConcurrentIdenticalQueriesAreCoalesced(t *testing.T) {
 	}
 	defer upstreamConn.Close()
 	upstreamCount := atomic.Int32{}
-	upstream := &dns.Server{PacketConn: upstreamConn, Handler: dns.HandlerFunc(func(writer dns.ResponseWriter, request *dns.Msg) {
+	upstreamServer := &dns.Server{PacketConn: upstreamConn, Handler: dns.HandlerFunc(func(writer dns.ResponseWriter, request *dns.Msg) {
 		upstreamCount.Add(1)
 		time.Sleep(20 * time.Millisecond)
 		response := new(dns.Msg)
@@ -117,8 +119,8 @@ func TestConcurrentIdenticalQueriesAreCoalesced(t *testing.T) {
 		response.Answer = []dns.RR{&dns.A{Hdr: dns.RR_Header{Name: request.Question[0].Name, Rrtype: dns.TypeA, Class: dns.ClassINET, Ttl: 60}, A: net.IPv4(192, 0, 2, 43)}}
 		_ = writer.WriteMsg(response)
 	})}
-	go func() { _ = upstream.ActivateAndServe() }()
-	defer upstream.Shutdown()
+	go func() { _ = upstreamServer.ActivateAndServe() }()
+	defer upstreamServer.Shutdown()
 
 	directory := t.TempDir()
 	rulesFile := filepath.Join(directory, "rules.txt")
@@ -130,7 +132,7 @@ func TestConcurrentIdenticalQueriesAreCoalesced(t *testing.T) {
 		t.Fatal(err)
 	}
 	config := &Config{DNSListens: []string{":15353"}, HTTPListen: "127.0.0.1:18080", RulesFile: rulesFile, Upstreams: []string{upstreamConn.LocalAddr().String()}, CacheEnabled: true, CacheSize: 1 << 20, OptimisticAnswerTTL: cache.DefaultOptimisticAnswerTTL, OptimisticMaxAge: cache.DefaultOptimisticMaxAgeSeconds}
-	server := &DNSServer{config: config, rules: rules, cache: cache.New(config.CacheSize, true), logs: querylog.New(100), client: &dns.Client{Net: "udp", Timeout: time.Second}, pool: NewUpstreamPool(config.Upstreams)}
+	server := &DNSServer{config: config, rules: rules, cache: cache.New(config.CacheSize, true), logs: querylog.New(100), client: &dns.Client{Net: "udp", Timeout: time.Second}, pool: upstream.NewPool(config.Upstreams)}
 	request := newTestRequest("coalesced.integration.test.", dns.TypeA)
 	var wait sync.WaitGroup
 	for index := 0; index < 20; index++ {

@@ -5,6 +5,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/teliso/DNSentry/internal/upstream"
+
 	"github.com/miekg/dns"
 )
 
@@ -38,7 +40,7 @@ func newStrategyTestServer(mode string, upstreams []string) *DNSServer {
 	return &DNSServer{
 		config: &Config{UpstreamMode: mode},
 		client: &dns.Client{Net: "udp", Timeout: time.Second},
-		pool:   NewUpstreamPool(upstreams),
+		pool:   upstream.NewPool(upstreams),
 	}
 }
 
@@ -122,7 +124,7 @@ func TestFallbackUpstreamUsedAfterPrimarySERVFAIL(t *testing.T) {
 	backup := startStrategyUpstream(t, 0, "8.8.4.4")
 	server := newStrategyTestServer(upstreamModeLoadBalance, []string{primaryConn.LocalAddr().String()})
 	server.config.FallbackUpstreams = []string{backup}
-	server.fallbackPool = NewUpstreamPool(server.config.FallbackUpstreams)
+	server.fallbackPool = upstream.NewPool(server.config.FallbackUpstreams)
 
 	response, upstream, err := server.exchange(newTestRequest("fallback.test.", dns.TypeA))
 	if err != nil {

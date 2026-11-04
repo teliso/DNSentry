@@ -1,8 +1,8 @@
 import { hostOf } from './rules';
-import type { Route } from './router.svelte';
+import type { Target } from './router.svelte';
 import type { Status } from './types';
 
-export type Alert = { id: string; tone: 'warn' | 'danger'; text: string; route?: Route; action?: string };
+export type Alert = { id: string; tone: 'warn' | 'danger'; text: string; route?: Target; action?: string };
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -12,7 +12,7 @@ export function computeAlerts(status: Status | null, now = Date.now()): Alert[] 
   const alerts: Alert[] = [];
 
   if (status.restart_required) {
-    alerts.push({ id: 'restart', tone: 'warn', text: '已保存的配置中有监听地址、查询日志或加密 DNS 的改动，需要重启服务后生效；其余设置已即时应用。' });
+    alerts.push({ id: 'restart', tone: 'warn', text: '已保存的配置中有监听地址、日志存储或加密 DNS 的改动，需要重启服务后生效；其余设置已即时应用。' });
   }
 
   const health = status.upstream_health ?? [];
@@ -21,7 +21,7 @@ export function computeAlerts(status: Status | null, now = Date.now()): Alert[] 
       id: 'upstreams-down',
       tone: 'danger',
       text: '所有默认上游都处于失败状态，未命中缓存和规则的查询会失败（备用上游会在这种情况下接管）。',
-      route: 'dns',
+      route: 'dns/upstreams',
       action: '检查上游'
     });
   }
@@ -31,7 +31,7 @@ export function computeAlerts(status: Status | null, now = Date.now()): Alert[] 
         id: `route-down-${route.domains.join(',')}`,
         tone: 'danger',
         text: `域名分流“${route.name || route.domains[0]}”的专属上游全部失败，这些域名会解析失败（不会回退到默认上游）。`,
-        route: 'dns',
+        route: 'dns/routes',
         action: '检查分流'
       });
     }
@@ -49,7 +49,7 @@ export function computeAlerts(status: Status | null, now = Date.now()): Alert[] 
       id: `source-${source.url}`,
       tone: 'warn',
       text: `规则源“${name}”${since}：${source.last_error}${source.rule_count ? '（仍在使用缓存的规则）' : ''}`,
-      route: 'sources',
+      route: 'filters/sources',
       action: '查看规则源'
     });
   }

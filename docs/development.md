@@ -18,7 +18,10 @@ cmd/
   dnsentry/          服务入口
   dnsentry-query/    命令行 DNS 查询小工具（测试用）
 internal/
-  app/               服务核心：配置、DNS 处理、上游、加密 DNS 服务、HTTP API
+  app/               服务核心：配置、DNS 请求处理、加密 DNS 服务端、HTTP API
+  upstream/          上游服务器池：健康状态、冷却退避、30 分钟延迟历史
+  access/            客户端访问控制：允许/拒绝名单、单客户端限速、Rebinding 防护
+  dnssec/            DNSSEC 签名验证与信任锚文件读写
   rules/             过滤规则：解析、匹配、本地规则文件、远程规则源与磁盘缓存
   cache/             DNS 缓存（分片 LRU、预取、乐观缓存）
   querylog/          查询日志（内存环形缓冲 + 可选落盘）
@@ -26,9 +29,10 @@ internal/
   fsutil/            原子写文件等文件工具
   buildinfo/         版本号（构建时通过 ldflags 注入）
 web/
-  src/               Svelte 5 控制台源码（pages/ 页面，components/ 通用组件，lib/ 状态与工具）
+  src/               Svelte 5 控制台源码（pages/ 五个页面，panels/ 与 sections/ 页内的功能块，components/ 通用组件，lib/ 状态与工具）
   dist/              构建产物，已提交并通过 embed.FS 打进二进制
 deploy/              systemd 单元、Compose 文件、示例配置
+scripts/             开发脚本（screenshots.mjs：重新生成文档截图）
 docs/                本文档目录
 .github/workflows/   CI 与发布流程
 ```
@@ -44,6 +48,7 @@ go run ./cmd/dnsentry  # 只运行后端（使用已有的 web/dist）
 make test              # go vet + go test -race + svelte-check
 make build             # 静态二进制 ./dnsentry，带版本号
 make docker            # 构建本地镜像
+pnpm screenshots       # 用演示数据重新生成 docs/images（需要 Go 与 Chromium；浏览器路径可用 CHROME=… 指定）
 ```
 
 前端开发流程：先在一个终端运行后端，再在另一个终端 `pnpm dev`，浏览器打开 <http://127.0.0.1:5175> 即可热更新。

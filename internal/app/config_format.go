@@ -1,8 +1,10 @@
 package app
 
 import (
-	"path/filepath"
 	"strings"
+
+	"github.com/teliso/DNSentry/internal/access"
+	"github.com/teliso/DNSentry/internal/schedule"
 
 	"github.com/teliso/DNSentry/internal/rules"
 )
@@ -19,6 +21,8 @@ type yamlConfig struct {
 		UpstreamRoutes        []UpstreamRoute `yaml:"upstream_routes,omitempty"`
 		PrivateReverse        *bool           `yaml:"private_reverse"`
 		BlockAAAA             bool            `yaml:"block_aaaa"`
+		BlockedServices       []string        `yaml:"blocked_services,omitempty"`
+		SafeSearch            bool            `yaml:"safe_search"`
 		BootstrapDNS          []string        `yaml:"bootstrap_dns"`
 		UpstreamTimeout       int             `yaml:"upstream_timeout_seconds"`
 		BlockingMode          string          `yaml:"blocking_mode"`
@@ -32,7 +36,8 @@ type yamlConfig struct {
 		BlockedResponseTTL    uint32          `yaml:"blocked_response_ttl"`
 	} `yaml:"dns"`
 	Web struct {
-		Listen string `yaml:"listen"`
+		Listen string       `yaml:"listen"`
+		TLS    WebTLSConfig `yaml:"tls,omitempty"`
 	} `yaml:"web"`
 	Cache struct {
 		Enabled             *bool  `yaml:"enabled"`
@@ -48,9 +53,11 @@ type yamlConfig struct {
 		LocalFile string         `yaml:"local_file"`
 		Sources   []rules.Source `yaml:"sources,omitempty"`
 	} `yaml:"rules"`
-	Access     DNSAccessConfig  `yaml:"access"`
-	Encryption EncryptionConfig `yaml:"encryption"`
-	Logging    struct {
+	Access        access.Config       `yaml:"access"`
+	Encryption    EncryptionConfig    `yaml:"encryption"`
+	Notifications NotificationsConfig `yaml:"notifications,omitempty"`
+	Schedule      schedule.Config     `yaml:"schedule,omitempty"`
+	Logging       struct {
 		QueryLogSize          int    `yaml:"query_log_size"`
 		QueryLogEnabled       bool   `yaml:"enabled"`
 		QueryLogFile          string `yaml:"file"`
@@ -74,7 +81,7 @@ func (f yamlConfig) toConfig() *Config {
 	}
 	queryLogFile := strings.TrimSpace(f.Logging.QueryLogFile)
 	if queryLogFile == "" {
-		queryLogFile = filepath.Join("data", "querylog")
+		queryLogFile = defaultQueryLogFile()
 	}
 	queryLogRetentionDays := f.Logging.QueryLogRetentionDays
 	if queryLogRetentionDays == 0 {
@@ -83,6 +90,7 @@ func (f yamlConfig) toConfig() *Config {
 	return &Config{
 		DNSListens:            dnsListens,
 		HTTPListen:            f.Web.Listen,
+		WebTLS:                f.Web.TLS,
 		Upstreams:             f.DNS.Upstreams,
 		FallbackUpstreams:     f.DNS.FallbackUpstreams,
 		UpstreamMode:          f.DNS.UpstreamMode,
@@ -90,6 +98,8 @@ func (f yamlConfig) toConfig() *Config {
 		UpstreamRoutes:        append([]UpstreamRoute(nil), f.DNS.UpstreamRoutes...),
 		PrivateReverse:        privateReverse,
 		BlockAAAA:             f.DNS.BlockAAAA,
+		BlockedServices:       append([]string(nil), f.DNS.BlockedServices...),
+		SafeSearch:            f.DNS.SafeSearch,
 		CachePrefetch:         f.Cache.Prefetch,
 		BootstrapDNS:          f.DNS.BootstrapDNS,
 		UpstreamTimeout:       f.DNS.UpstreamTimeout,
@@ -117,6 +127,8 @@ func (f yamlConfig) toConfig() *Config {
 		RuleSources:           f.Rules.Sources,
 		Access:                f.Access,
 		Encryption:            f.Encryption,
+		Notifications:         f.Notifications,
+		Schedule:              f.Schedule,
 	}
 }
 
@@ -130,6 +142,8 @@ func newYAMLConfig(config *Config) yamlConfig {
 	fileConfig.DNS.UpstreamRoutes = append([]UpstreamRoute(nil), config.UpstreamRoutes...)
 	fileConfig.DNS.PrivateReverse = boolPtr(config.PrivateReverse)
 	fileConfig.DNS.BlockAAAA = config.BlockAAAA
+	fileConfig.DNS.BlockedServices = append([]string(nil), config.BlockedServices...)
+	fileConfig.DNS.SafeSearch = config.SafeSearch
 	fileConfig.Cache.Prefetch = config.CachePrefetch
 	fileConfig.DNS.BootstrapDNS = config.BootstrapDNS
 	fileConfig.DNS.UpstreamTimeout = config.UpstreamTimeout
@@ -143,6 +157,7 @@ func newYAMLConfig(config *Config) yamlConfig {
 	fileConfig.DNS.DNSSECAutoUpdate = config.DNSSECAutoUpdate
 	fileConfig.DNS.BlockedResponseTTL = config.BlockedResponseTTL
 	fileConfig.Web.Listen = config.HTTPListen
+	fileConfig.Web.TLS = config.WebTLS
 	fileConfig.Cache.Enabled = boolPtr(config.CacheEnabled)
 	fileConfig.Cache.Size = config.CacheSize
 	fileConfig.Cache.TTLMin = config.CacheTTLMin
@@ -158,6 +173,8 @@ func newYAMLConfig(config *Config) yamlConfig {
 	fileConfig.Logging.QueryLogFile = config.QueryLogFile
 	fileConfig.Logging.QueryLogRetentionDays = config.QueryLogRetentionDays
 	fileConfig.Encryption = config.Encryption
+	fileConfig.Notifications = config.Notifications
+	fileConfig.Schedule = config.Schedule
 	return fileConfig
 }
 

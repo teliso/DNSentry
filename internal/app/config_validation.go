@@ -5,9 +5,14 @@ import (
 	"fmt"
 	"net"
 	"net/url"
-	"path/filepath"
 	"strconv"
 	"strings"
+
+	"github.com/teliso/DNSentry/internal/dnssec"
+	"github.com/teliso/DNSentry/internal/schedule"
+	"github.com/teliso/DNSentry/internal/services"
+
+	"github.com/teliso/DNSentry/internal/access"
 
 	"github.com/teliso/DNSentry/internal/cache"
 	"github.com/teliso/DNSentry/internal/rules"
@@ -48,9 +53,12 @@ func validateConfig(config *Config) (*Config, error) {
 	if config.CacheSize == 0 {
 		config.CacheSize = 4 << 20
 	}
+	if config.QueryLogSize <= 0 {
+		config.QueryLogSize = defaultQueryLogSize
+	}
 	config.QueryLogFile = strings.TrimSpace(config.QueryLogFile)
 	if config.QueryLogFile == "" {
-		config.QueryLogFile = filepath.Join("data", "querylog")
+		config.QueryLogFile = defaultQueryLogFile()
 	}
 	if config.QueryLogRetentionDays == 0 {
 		config.QueryLogRetentionDays = 7
@@ -58,11 +66,11 @@ func validateConfig(config *Config) (*Config, error) {
 	if config.QueryLogRetentionDays < 1 || config.QueryLogRetentionDays > 365 {
 		return nil, errors.New("query_log_retention_days must be between 1 and 365")
 	}
-	if config.BlockingMode == "" {
-		config.BlockingMode = "default"
+	if config.BlockingMode == "" || config.BlockingMode == "default" { // "default" was a duplicate of null_ip
+		config.BlockingMode = "null_ip"
 	}
-	if config.BlockingMode != "default" && config.BlockingMode != "nxdomain" && config.BlockingMode != "null_ip" && config.BlockingMode != "custom_ip" && config.BlockingMode != "refused" {
-		return nil, errors.New("invalid blocking_mode: use default, nxdomain, null_ip, custom_ip, or refused")
+	if config.BlockingMode != "nxdomain" && config.BlockingMode != "null_ip" && config.BlockingMode != "custom_ip" && config.BlockingMode != "refused" {
+		return nil, errors.New("invalid blocking_mode: use nxdomain, null_ip, custom_ip, or refused")
 	}
 	if config.BlockingIPv4 == "" {
 		config.BlockingIPv4 = "0.0.0.0"
@@ -97,7 +105,7 @@ func validateConfig(config *Config) (*Config, error) {
 			return nil, errors.New("dnssec_auto_update cannot be used with dnssec_trust_anchors")
 		}
 		if config.DNSSECTrustAnchorFile == "" {
-			config.DNSSECTrustAnchorFile = defaultDNSSECTrustAnchorFile
+			config.DNSSECTrustAnchorFile = defaultDNSSECTrustAnchorFile()
 		}
 	}
 	if config.DNSSECTrustAnchorFile != "" && len(config.DNSSECTrustAnchors) > 0 {
@@ -106,7 +114,7 @@ func validateConfig(config *Config) (*Config, error) {
 	if config.DNSSECAutoUpdate && !config.DNSSECValidate {
 		return nil, errors.New("dnssec_auto_update requires dnssec_validate")
 	}
-	if err := validateDNSSECTrustAnchors(config.DNSSECTrustAnchors); err != nil {
+	if err := dnssec.ValidateAnchors(config.DNSSECTrustAnchors); err != nil {
 		return nil, err
 	}
 	if len(config.Upstreams) == 0 {
@@ -163,16 +171,31 @@ func validateConfig(config *Config) (*Config, error) {
 	} else if err := normalizeDNSCryptListeners(&config.Encryption.DNSCrypt); err != nil {
 		return nil, err
 	}
+	known, unknown := services.Normalize(config.BlockedServices)
+	if len(unknown) > 0 {
+		return nil, fmt.Errorf("unknown blocked service %q", unknown[0])
+	}
+	config.BlockedServices = known
 	if err := validateLocalRecords(config.LocalRecords); err != nil {
 		return nil, err
 	}
-	if err := validateDNSAccessConfig(config.Access); err != nil {
+	if err := access.Validate(config.Access); err != nil {
 		return nil, err
 	}
 	if config.Access.MaxConcurrentQueries == 0 {
 		config.Access.MaxConcurrentQueries = 2048
 	}
 	if err := validateEncryptionConfig(config.Encryption); err != nil {
+		return nil, err
+	}
+	if err := schedule.Normalize(&config.Schedule); err != nil {
+		return nil, err
+	}
+	if err := validateNotifications(&config.Notifications); err != nil {
+		return nil, err
+	}
+	normalizeWebTLS(&config.WebTLS)
+	if err := validateWebTLS(config.WebTLS, config.Encryption); err != nil {
 		return nil, err
 	}
 	sources, err := rules.NormalizeSources(config.RuleSources)

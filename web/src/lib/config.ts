@@ -1,4 +1,4 @@
-import type { AccessConfig, Config, DNSCryptConfig, EncryptionConfig, SecureProtocol } from './types';
+import type { WebTlsConfig, AccessConfig, Config, DNSCryptConfig, EncryptionConfig, SecureProtocol } from './types';
 
 export const SECURE_PROTOCOLS: SecureProtocol[] = ['dot', 'doh', 'doh3', 'doq'];
 
@@ -23,6 +23,8 @@ const defaultEncryption: EncryptionConfig = {
   doq_listens: [],
   dnscrypt: defaultDNSCrypt
 };
+
+const defaultWebTls: WebTlsConfig = { enabled: false, source: 'auto', certificate: '', private_key: '', server_name: '' };
 
 const defaultAccess: AccessConfig = {
   allowed_clients: [],
@@ -63,8 +65,12 @@ export function normalizeConfig(raw: Config): Config {
   return finalizeListeners({
     ...raw,
     dns_listens: cleanList(raw.dns_listens),
+    web_tls: { ...defaultWebTls, ...raw.web_tls },
+    schedule: { timezone: raw.schedule?.timezone ?? '', rules: (raw.schedule?.rules ?? []).map((rule) => ({ ...rule, days: [...(rule.days ?? [])], services: [...(rule.services ?? [])] })) },
+    notifications: { webhooks: raw.notifications?.webhooks ?? [], events: raw.notifications?.events ?? [] },
     upstreams: cleanList(raw.upstreams),
     fallback_upstreams: cleanList(raw.fallback_upstreams),
+    blocked_services: cleanList(raw.blocked_services),
     bootstrap_dns: cleanList(raw.bootstrap_dns),
     dnssec_trust_anchors: cleanList(raw.dnssec_trust_anchors),
     local_records: raw.local_records ?? [],
@@ -85,6 +91,10 @@ export function serializeConfig(config: Config): Config {
   const copy = JSON.parse(JSON.stringify(config)) as Config; // also unwraps Svelte proxies
   copy.upstreams = cleanList(copy.upstreams);
   copy.fallback_upstreams = cleanList(copy.fallback_upstreams);
+  copy.schedule.timezone = copy.schedule.timezone.trim();
+  copy.schedule.rules = copy.schedule.rules.map((rule) => ({ ...rule, name: rule.name.trim(), days: [...new Set(rule.days)].sort((a, b) => a - b), services: [...new Set(rule.services)].sort() }));
+  copy.notifications.webhooks = copy.notifications.webhooks.map((hook) => ({ ...hook, name: hook.name.trim(), url: hook.url.trim() })).filter((hook) => hook.url !== '');
+  copy.blocked_services = [...new Set(cleanList(copy.blocked_services))].sort();
   copy.bootstrap_dns = cleanList(copy.bootstrap_dns);
   copy.dnssec_trust_anchors = cleanList(copy.dnssec_trust_anchors);
   copy.upstream_routes = (copy.upstream_routes ?? [])

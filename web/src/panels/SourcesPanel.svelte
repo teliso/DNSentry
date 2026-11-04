@@ -4,7 +4,6 @@
   import Field from '../components/Field.svelte';
   import Icon from '../components/Icon.svelte';
   import Modal from '../components/Modal.svelte';
-  import PageHeader from '../components/PageHeader.svelte';
   import Switch from '../components/Switch.svelte';
   import { formatNumber, formatRelative } from '../lib/format';
   import { router } from '../lib/router.svelte';
@@ -21,6 +20,12 @@
     { minutes: 10080, label: '每周' }
   ];
 
+  const PRESETS = [
+    { name: 'AdGuard DNS 过滤器', url: 'https://adguardteam.github.io/HostlistsRegistry/assets/filter_1.txt', text: '广告与跟踪，综合性强，误拦较少' },
+    { name: 'AdAway', url: 'https://adaway.org/hosts.txt', text: '移动端广告域名，hosts 格式' },
+    { name: 'StevenBlack hosts', url: 'https://raw.githubusercontent.com/StevenBlack/hosts/master/hosts', text: '广告与恶意域名合集，hosts 格式' }
+  ];
+
   let url = $state('');
   let name = $state('');
   let interval = $state(360);
@@ -29,6 +34,12 @@
   const enabledCount = $derived(store.sources.filter((source) => source.enabled).length);
   const totalRules = $derived(store.sources.reduce((sum, source) => sum + (source.rule_count ?? 0), 0));
   const anyUpdating = $derived(store.sources.some((source) => source.updating));
+
+  const suggestions = $derived(PRESETS.filter((preset) => !store.sources.some((source) => source.url === preset.url)));
+
+  function addPreset(preset: (typeof PRESETS)[number]) {
+    void store.saveSources([...store.sources, { url: preset.url, name: preset.name, enabled: true, interval_minutes: 1440 }], `已订阅 ${preset.name}，正在下载`);
+  }
 
   function intervalLabel(minutes: number) {
     return INTERVALS.find((item) => item.minutes === minutes)?.label ?? `每 ${minutes} 分钟`;
@@ -66,19 +77,11 @@
 
   function viewRules(source: RuleSource) {
     store.ruleSourceFilter = source.url;
-    router.go('filters');
+    router.go('filters/rules');
   }
 </script>
 
-<PageHeader title="规则源" description="订阅 AdGuard 或 hosts 格式的在线规则列表。下载的列表缓存在本地，重启后立即生效；更新失败时继续使用上一次成功的版本。">
-  {#snippet actions()}
-    <button class="btn" type="button" disabled={store.busy || anyUpdating || enabledCount === 0} onclick={() => store.refreshSources()}>
-      <Icon name="refresh" />全部更新
-    </button>
-  {/snippet}
-</PageHeader>
-
-<Card title="添加规则源">
+<Card title="添加规则源" description="订阅 AdGuard 或 hosts 格式的在线列表。下载的列表缓存在本地，重启后立即生效；更新失败时继续使用上一次的版本。">
   <form class="add" onsubmit={add}>
     <Field label="列表地址">
       <input type="url" required placeholder="https://example.com/filter.txt" bind:value={url} />
@@ -93,9 +96,22 @@
     </Field>
     <button class="btn primary" type="submit" disabled={store.busy || !url.trim()}><Icon name="plus" />添加</button>
   </form>
+  {#if suggestions.length > 0}
+    <div class="presets">
+      <span class="muted">推荐：</span>
+      {#each suggestions as preset (preset.url)}
+        <button class="chip" type="button" disabled={store.busy} onclick={() => addPreset(preset)} title={preset.text}><Icon name="plus" size={13} />{preset.name}</button>
+      {/each}
+    </div>
+  {/if}
 </Card>
 
 <Card title="已订阅" description="{store.sources.length} 个规则源，{enabledCount} 个启用，共 {formatNumber(totalRules)} 条规则生效。" flush>
+  {#snippet actions()}
+    <button class="btn sm" type="button" disabled={store.busy || anyUpdating || enabledCount === 0} onclick={() => store.refreshSources()}>
+      <Icon name="refresh" />全部更新
+    </button>
+  {/snippet}
   {#if store.sources.length === 0}
     <EmptyState title="暂无远程规则源">添加一个列表地址后，它的规则会合并到过滤规则中。</EmptyState>
   {:else}
@@ -162,6 +178,13 @@
 
 <style>
   .add { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) 140px auto; gap: 12px; align-items: end; }
+  .presets { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 14px; }
+  .chip {
+    display: inline-flex; align-items: center; gap: 4px; padding: 3px 11px 3px 8px; cursor: pointer;
+    border: 1px solid var(--line-strong); border-radius: 999px; background: var(--surface); color: var(--ink-2); font-size: 13px;
+  }
+  .chip:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+  .chip:disabled { opacity: 0.5; cursor: not-allowed; }
   .sources { list-style: none; margin: 0; padding: 0; }
   .sources li { display: flex; align-items: center; gap: 18px; padding: 14px 20px; border-top: 1px solid var(--line); }
   .sources li:first-child { border-top: 0; }

@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
+
+	"gopkg.in/yaml.v3"
 )
 
 func TestConfigHistoryRecordsVersionsAndChanges(t *testing.T) {
@@ -106,5 +108,32 @@ func TestConfigHistoryIsPrunedAndBaselinedForOldInstallations(t *testing.T) {
 	}
 	if got := len(configVersionIDs()); got != maxConfigVersions {
 		t.Fatalf("history holds %d versions, want %d", got, maxConfigVersions)
+	}
+}
+
+func TestConfigChangesIgnoreMaterializedDefaults(t *testing.T) {
+	t.Chdir(t.TempDir())
+	// An older file that lacks keys newer versions write out explicitly.
+	older := []byte("version: 1\ndns:\n  listens: [\":15353\"]\n  upstreams: [\"1.1.1.1:53\", \"8.8.8.8:53\"]\nweb:\n  listen: 127.0.0.1:18080\n")
+	config, err := validateConfig(defaultConfig())
+	if err != nil {
+		t.Fatal(err)
+	}
+	config.DNSListens = []string{":15353"}
+	config.HTTPListen = "127.0.0.1:18080"
+	newer, _ := yaml.Marshal(newYAMLConfig(config))
+	if changes := configChanges(newer, older); len(changes) != 0 {
+		t.Fatalf("defaults written by a newer version were reported as changes: %v", changes)
+	}
+	// An explicitly empty value is the same as a missing key.
+	config.Encryption.DNSCrypt.ProviderName = ""
+	blank, _ := yaml.Marshal(newYAMLConfig(config))
+	if changes := configChanges(blank, older); len(changes) != 0 {
+		t.Fatalf("empty values reported as changes: %v", changes)
+	}
+	config.BlockAAAA = true
+	changed, _ := yaml.Marshal(newYAMLConfig(config))
+	if changes := configChanges(changed, older); len(changes) != 1 || changes[0] != "dns.block_aaaa" {
+		t.Fatalf("changes = %v", changes)
 	}
 }

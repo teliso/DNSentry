@@ -18,7 +18,12 @@ type LocalRecord struct {
 }
 
 type localRecordSnapshot struct {
+	// records is keyed by "name\x00TYPE"; a wildcard record ("*.home") is keyed
+	// by its literal name.
 	records map[string][]dns.RR
+	// names lists the exact (non-wildcard) names that have any record: a name
+	// that exists is never answered from a wildcard (RFC 4592).
+	names map[string]bool
 	// ptr holds reverse records derived from local A/AAAA records, keyed by
 	// the normalized reverse name (e.g. "10.1.168.192.in-addr.arpa").
 	ptr map[string][]dns.RR
@@ -31,8 +36,8 @@ func validateLocalRecords(records []LocalRecord) error {
 		record.Domain = dnsname.Normalize(record.Domain)
 		record.Type = strings.ToUpper(strings.TrimSpace(record.Type))
 		record.Value = strings.TrimSpace(record.Value)
-		if !dnsname.Valid(record.Domain) {
-			return fmt.Errorf("invalid local_records[%d] domain", index)
+		if !validLocalRecordName(record.Domain) {
+			return fmt.Errorf("invalid local_records[%d] domain (a wildcard looks like *.home.arpa)", index)
 		}
 		if record.TTL == 0 {
 			record.TTL = 300
@@ -69,8 +74,17 @@ func validateLocalRecords(records []LocalRecord) error {
 	return nil
 }
 
+// validLocalRecordName accepts a domain, or a wildcard "*.domain" that matches
+// everything below domain (but not domain itself).
+func validLocalRecordName(name string) bool {
+	if rest, wildcard := strings.CutPrefix(name, "*."); wildcard {
+		return dnsname.Valid(rest)
+	}
+	return dnsname.Valid(name)
+}
+
 func buildLocalRecordSnapshot(records []LocalRecord) *localRecordSnapshot {
-	snapshot := &localRecordSnapshot{records: make(map[string][]dns.RR), ptr: make(map[string][]dns.RR)}
+	snapshot := &localRecordSnapshot{records: make(map[string][]dns.RR), names: make(map[string]bool), ptr: make(map[string][]dns.RR)}
 	for _, record := range records {
 		name := dns.Fqdn(record.Domain)
 		header := dns.RR_Header{Name: name, Class: dns.ClassINET, Ttl: record.TTL}
@@ -88,8 +102,11 @@ func buildLocalRecordSnapshot(records []LocalRecord) *localRecordSnapshot {
 		if rr != nil {
 			key := record.Domain + "\x00" + record.Type
 			snapshot.records[key] = append(snapshot.records[key], rr)
+			if !strings.HasPrefix(record.Domain, "*.") {
+				snapshot.names[record.Domain] = true
+			}
 		}
-		if record.Type == "A" || record.Type == "AAAA" {
+		if (record.Type == "A" || record.Type == "AAAA") && !strings.HasPrefix(record.Domain, "*.") {
 			if reverse, err := dns.ReverseAddr(record.Value); err == nil {
 				snapshot.ptr[dnsname.Normalize(reverse)] = append(snapshot.ptr[dnsname.Normalize(reverse)], &dns.PTR{
 					Hdr: dns.RR_Header{Name: reverse, Rrtype: dns.TypePTR, Class: dns.ClassINET, Ttl: record.TTL},
@@ -118,7 +135,10 @@ func (s *DNSServer) localRecordResponse(request *dns.Msg, question dns.Question,
 		if question.Qtype == dns.TypePTR {
 			records = snapshot.ptr[name]
 		} else {
-			records = snapshot.records[name+"\x00"+dns.TypeToString[question.Qtype]]
+			records = snapshot.lookup(name, dns.TypeToString[question.Qtype])
+			if len(records) == 0 && (question.Qtype == dns.TypeA || question.Qtype == dns.TypeAAAA) {
+				records = snapshot.followAlias(name, dns.TypeToString[question.Qtype])
+			}
 		}
 	}
 	if len(records) == 0 {
@@ -141,6 +161,42 @@ func (s *DNSServer) localRecordResponse(request *dns.Msg, question dns.Question,
 		response.Answer = append(response.Answer, dns.Copy(record))
 	}
 	return response, true
+}
+
+// lookup returns the records of the given type for name: those of the exact
+// name, or else those of the closest enclosing wildcard. A name that exists
+// (with any record type) is not answered from a wildcard.
+func (s *localRecordSnapshot) lookup(name, rrtype string) []dns.RR {
+	if records := s.records[name+"\x00"+rrtype]; len(records) > 0 || s.names[name] {
+		return records
+	}
+	for parent := dnsname.Parent(name); parent != ""; parent = dnsname.Parent(parent) {
+		if records := s.records["*."+parent+"\x00"+rrtype]; len(records) > 0 {
+			// A wildcard answers under the name that was asked.
+			renamed := make([]dns.RR, len(records))
+			for index, record := range records {
+				renamed[index] = dns.Copy(record)
+				renamed[index].Header().Name = dns.Fqdn(name)
+			}
+			return renamed
+		}
+	}
+	return nil
+}
+
+// followAlias answers an A or AAAA query for a name that is a local CNAME: the
+// CNAME followed by the target's local records of that type, if it has any.
+func (s *localRecordSnapshot) followAlias(name, rrtype string) []dns.RR {
+	alias := s.lookup(name, "CNAME")
+	if len(alias) != 1 {
+		return nil
+	}
+	cname, ok := alias[0].(*dns.CNAME)
+	if !ok {
+		return nil
+	}
+	answer := []dns.RR{alias[0]}
+	return append(answer, s.lookup(dnsname.Normalize(cname.Target), rrtype)...)
 }
 
 // isPrivateReverseName reports whether name (normalized, without trailing dot)

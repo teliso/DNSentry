@@ -6,7 +6,6 @@
   let { config }: { config: Config } = $props();
 
   const HINTS: Record<BlockingMode, string> = {
-    default: '返回 0.0.0.0 或 ::。',
     null_ip: '返回 0.0.0.0 或 ::。',
     nxdomain: '返回 NXDOMAIN，并附带负缓存 SOA。',
     refused: '返回 REFUSED，客户端通常不会缓存。',
@@ -14,11 +13,10 @@
   };
 </script>
 
-<Card id="sec-blocking" title="拦截响应" description="命中过滤规则时返回给客户端的内容。">
+<Card id="sec-blocking" title="拦截响应" description="命中过滤规则或被屏蔽的服务时返回给客户端的内容。支持 EDNS 的客户端还会收到被拦截的原因（扩展 DNS 错误：规则为 Blocked，服务为 Filtered）。">
   <div class="form-grid">
     <Field label="拦截模式" hint={HINTS[config.blocking_mode]}>
       <select bind:value={config.blocking_mode}>
-        <option value="default">默认（空 IP）</option>
         <option value="nxdomain">NXDOMAIN</option>
         <option value="null_ip">空 IP</option>
         <option value="custom_ip">自定义 IP</option>

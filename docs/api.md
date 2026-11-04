@@ -6,6 +6,8 @@
 
 - **未设置 `DNSENTRY_API_TOKEN`**：只接受来自本机（回环地址）的请求，并且请求必须用 `localhost` 或 IP 地址作为主机名；写操作（POST / PUT / DELETE）还必须带同源的 `Origin` 或 `Referer` 头。
 - **设置了令牌**：所有请求都要带 `Authorization: Bearer <token>`，来源不限。连续 10 次错误会被限制 1 分钟（返回 429 和 `Retry-After`）。
+- **设置了控制台密码**：浏览器先 `POST /api/login`（`{"username","password"}`，必须同源）换取 HttpOnly 的会话 Cookie `dnsentry_session`，之后的请求带着它即可；也可以继续用令牌。没有凭据时返回 401。
+- 下面这几个接口**不需要认证**：`GET /api/auth`（返回 `{"configured","token_required","authenticated","username"}`，控制台用它判断该显示哪种登录）、`POST /api/login`、`POST /api/logout`。
 
 ```sh
 export TOKEN=...
@@ -23,9 +25,23 @@ curl -H "Authorization: Bearer $TOKEN" http://192.168.1.2:18080/api/status
 | `GET /config` | 当前保存的配置 |
 | `PUT /config` | 保存配置，立即应用可热更新的部分 |
 | `GET /config/history` | 配置版本列表（新的在前） |
+| `GET /config/export` | 下载当前保存的配置文件（含私钥等敏感信息） |
+| `POST /config/import` | 请求体为配置文件（YAML），校验后保存并应用，同 `PUT /config`（路径限制同样适用），记入配置历史 |
+| `GET /config/export` | 下载当前保存的配置文件（含私钥等敏感信息） |
+| `POST /config/import` | 请求体为配置文件（YAML），校验后保存并应用，同 `PUT /config`（路径限制同样适用），记入配置历史 |
 | `POST /config/restore` | 恢复配置，可选 `{"id": "…"}`，默认恢复上一个版本 |
 | `POST /cache/clear` | 清空 DNS 缓存 |
+| `POST /protection` | 暂停 / 恢复过滤，见下 |
 | `POST /upstreams/test` | 测试上游 `{"upstreams": [...], "domain": "example.com"}` |
+| `PUT /auth` | 设置或修改控制台密码：`{"username","password","current_password"}`（已有密码时必须提供当前密码；成功后其他浏览器的登录失效） |
+| `DELETE /auth` | 关闭控制台密码：`{"current_password"}` |
+| `POST /notifications/test` | 向一个 Webhook 发测试消息：`{"url","format","name"}`，成功返回 `{"status":"sent"}`，对方不可达或拒绝时 502 |
+| `GET /services` | 可整体屏蔽的服务目录：`[{"id","name","group","domains"}]`，配置里的 `blocked_services` 填其中的 `id` |
+| `GET /stats?range=` | 长周期统计，`range` 为 `24h`（按小时）、`7d`、`30d`、`90d`（按天），默认 `24h`；返回 `[{"time","queries","blocked"}]`，重启后保留 |
+| `GET /logs?date=YYYY-MM-DD` | 同 `GET /logs`，但读取磁盘上保存的那一天（需要开启“保存日志到磁盘”，否则 404） |
+| `GET /logs/days` | `{"enabled": bool, "days": ["2026-11-04", …]}`：是否保存到磁盘，以及有日志的日期（新的在前） |
+| `GET /logs/export` | 导出内存日志（`format=csv`（默认）或 `json`，可带 `search`、`action`、`date` 过滤），作为下载文件返回 |
+| `GET /logs/export` | 导出内存日志（`format=csv`（默认）或 `json`，可带 `search`、`action` 过滤），作为下载文件返回 |
 | `GET /logs` | 查询日志（分页） |
 | `GET /rules` | 规则（分页） |
 | `POST /rules` | 添加本地规则 `{"domain": "…", "action": "block"|"allow"}` |
@@ -36,11 +52,20 @@ curl -H "Authorization: Bearer $TOKEN" http://192.168.1.2:18080/api/status
 | `GET /sources`、`PUT /sources` | 规则源列表 / 整体替换 |
 | `POST /sources/refresh` | 立即更新规则源 `{"url": "…"}`，空则更新全部 |
 
+### 暂停过滤
+
+```http
+POST /api/protection
+{"enabled": false, "duration_minutes": 30}
+```
+
+`enabled` 为 `false` 时暂停过滤，`duration_minutes` 为 1–1440，`0` 表示直到手动恢复；`enabled` 为 `true` 时立即恢复。返回 `{"enabled": false, "resume_at": "2026-…Z"}`。暂停只保存在内存里，重启服务会恢复过滤。
+
 ## 常用接口详解
 
 ### `GET /status`
 
-返回一个大的对象，主要字段：`version`、`restart_required`、`config_path`、`rules_file`、`total_queries`、`blocked_queries`、`rules`、`local_rules`、`cache`（命中率、条目、字节数、预取次数等）、`dnssec`、`security`（被拒绝 / 限速 / 过载 / Rebinding 的计数）、`dnscrypt`（运行状态与 stamp）、`series`（最近 30 分钟每分钟的查询和拦截数）、`dashboard`（排行）、`upstream_health`（每个上游的健康状态和 30 分钟 `history`）、`upstream_routes`（分流及其上游健康）、`fallback_upstream_health`、`rule_sources`（规则源及运行状态）。
+返回一个大的对象，主要字段：`version`、`restart_required`、`active_schedules`（此刻生效中的计划名称）、`server_time`、`protection`（过滤是否开启及自动恢复时间）、`config_path`、`rules_file`、`total_queries`、`blocked_queries`、`rules`、`local_rules`、`cache`（命中率、条目、字节数、预取次数等）、`dnssec`、`security`（被拒绝 / 限速 / 过载 / Rebinding 的计数）、`dnscrypt`（运行状态与 stamp）、`series`（最近 30 分钟每分钟的查询和拦截数）、`dashboard`（排行）、`upstream_health`（每个上游的健康状态和 30 分钟 `history`）、`upstream_routes`（分流及其上游健康）、`fallback_upstream_health`、`rule_sources`（规则源及运行状态）。
 
 ### `GET /config` / `PUT /config`
 

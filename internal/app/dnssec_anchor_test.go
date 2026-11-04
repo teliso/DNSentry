@@ -4,6 +4,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/teliso/DNSentry/internal/dnssec"
 )
 
 func TestDNSSECAutoUpdateUsesManagedTrustAnchorFile(t *testing.T) {
@@ -14,7 +16,7 @@ func TestDNSSECAutoUpdateUsesManagedTrustAnchorFile(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if validated.DNSSECTrustAnchorFile != defaultDNSSECTrustAnchorFile || len(validated.DNSSECTrustAnchors) != 0 {
+	if validated.DNSSECTrustAnchorFile != defaultDNSSECTrustAnchorFile() || len(validated.DNSSECTrustAnchors) != 0 {
 		t.Fatalf("unexpected automatic trust anchor configuration: %#v", validated)
 	}
 	if _, err := effectiveDNSSECTrustAnchors(*validated); err != nil {
@@ -36,7 +38,7 @@ func TestDNSSECTrustAnchorFileLoadsValidatedDNSKEY(t *testing.T) {
 	if err := os.WriteFile(path, []byte("# managed trust anchor\n"+anchor+"\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	anchors, err := loadDNSSECTrustAnchorsFromFile(path)
+	anchors, err := dnssec.LoadAnchorsFromFile(path)
 	if err != nil {
 		t.Fatal(err)
 	}

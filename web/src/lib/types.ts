@@ -1,5 +1,11 @@
 // Shapes of the DNSentry JSON API (see internal/app/api*.go).
 
+/** How the console is protected right now (GET /api/auth). */
+export type AuthStatus = { configured: boolean; token_required: boolean; authenticated: boolean; username?: string };
+
+/** A service that can be blocked as a whole (GET /api/services). */
+export type ServiceInfo = { id: string; name: string; group: string; domains: string[] };
+
 export type RuleAction = 'block' | 'allow';
 /** A filter rule; `source` is empty for the local rules file, else the list URL. */
 export type Rule = { domain: string; action: RuleAction; ip?: string; source?: string };
@@ -8,6 +14,8 @@ export type RuleQuery = { search?: string; action?: RuleAction | ''; source?: st
 export type RuleCheck = { domain: string; rule?: Rule; candidates: Rule[] };
 export type LocalSummary = { rules: number; ignored: number; ignored_lines: number[] };
 
+/** Time range of the traffic chart: live minutes, or persisted hourly/daily counters. */
+export type TrendRange = '30m' | '24h' | '7d' | '30d' | '90d';
 export type MetricPoint = { time: string; queries: number; blocked: number };
 export type RankedCount = { name: string; count: number };
 export type Dashboard = {
@@ -69,9 +77,17 @@ export type DNSCryptStatus = {
   stamp?: string;
 };
 
+/** Whether filter rules are applied; `resume_at` is set for a timed pause. */
+export type Protection = { enabled: boolean; resume_at?: string };
+
 export type Status = {
   /** Saved configuration has startup-only changes that need a service restart. */
   restart_required: boolean;
+  web_tls: WebTlsInfo;
+  /** Names of the schedule windows that are open right now. */
+  active_schedules: string[];
+  server_time: string;
+  protection: Protection;
   version: string;
   config_path: string;
   rules_file: string;
@@ -107,8 +123,9 @@ export type LogEntry = {
   rule_source?: string;
 };
 
-export type LogQuery = { search?: string; action?: string; offset?: number; limit?: number };
-export type LogPage = { total: number; items: LogEntry[]; actions: string[] };
+export type LogQuery = { search?: string; action?: string; offset?: number; limit?: number; date?: string };
+export type LogPage = { total: number; items: LogEntry[]; actions: string[]; truncated?: boolean };
+export type LogDays = { enabled: boolean; days: string[] };
 
 export type LocalRecordType = 'A' | 'AAAA' | 'CNAME' | 'TXT';
 export type LocalRecord = { domain: string; type: LocalRecordType; value: string; ttl: number };
@@ -150,11 +167,47 @@ export type UpstreamRoute = { name?: string; domains: string[]; upstreams: strin
 export type RouteStatus = { name?: string; domains: string[]; upstreams: UpstreamHealth[] };
 
 export type UpstreamMode = 'load_balance' | 'parallel' | 'fastest_addr';
-export type BlockingMode = 'default' | 'nxdomain' | 'null_ip' | 'custom_ip' | 'refused';
+export type BlockingMode = 'nxdomain' | 'null_ip' | 'custom_ip' | 'refused';
+
+/** A weekly window that blocks services / forces safe search (see internal/schedule). */
+export type ScheduleRule = {
+  name: string;
+  enabled: boolean;
+  /** Weekdays the window starts on, 0 = Sunday; empty = every day. */
+  days: number[];
+  start: string;
+  end: string;
+  services: string[];
+  safe_search: boolean;
+};
+export type ScheduleConfig = { timezone: string; rules: ScheduleRule[] };
+
+export type WebhookFormat = 'json' | 'plain';
+export type Webhook = { name: string; url: string; format: WebhookFormat; enabled: boolean };
+export type NotificationEvent = 'upstream' | 'rule_source';
+export type NotificationsConfig = { webhooks: Webhook[]; events: NotificationEvent[] };
+
+export type WebTlsSource = 'auto' | 'encryption' | 'custom';
+export type WebTlsConfig = { enabled: boolean; source: WebTlsSource; certificate: string; private_key: string; server_name: string };
+/** The certificate the console is serving right now (Status.web_tls). */
+export type WebTlsInfo = {
+  enabled: boolean;
+  mode?: 'self-signed' | 'encryption' | 'custom';
+  fingerprint?: string;
+  not_after?: string;
+  /** Host names and addresses the certificate is valid for. */
+  names?: string[];
+  server_name?: string;
+  /** False when server_name is set but the certificate does not match it. */
+  covered: boolean;
+};
 
 export type Config = {
   dns_listens: string[];
   http_listen: string;
+  web_tls: WebTlsConfig;
+  notifications: NotificationsConfig;
+  schedule: ScheduleConfig;
   upstreams: string[];
   fallback_upstreams: string[];
   upstream_mode: UpstreamMode;
@@ -162,6 +215,8 @@ export type Config = {
   upstream_routes: UpstreamRoute[];
   private_reverse: boolean;
   block_aaaa: boolean;
+  blocked_services: string[];
+  safe_search: boolean;
   access: AccessConfig;
   bootstrap_dns: string[];
   upstream_timeout_seconds: number;

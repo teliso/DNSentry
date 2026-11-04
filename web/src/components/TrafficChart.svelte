@@ -1,8 +1,21 @@
 <script lang="ts">
   import { formatClock, formatNumber } from '../lib/format';
-  import type { MetricPoint } from '../lib/types';
+  import type { MetricPoint, TrendRange } from '../lib/types';
 
-  let { points }: { points: MetricPoint[] } = $props();
+  let { points, range = '30m' }: { points: MetricPoint[]; range?: TrendRange } = $props();
+
+  const pad = (value: number) => String(value).padStart(2, '0');
+  /** Axis label: clock time for the live view, hour for a day, date for longer ranges. */
+  function label(value: string, long = false): string {
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return value;
+    if (range === '30m') return formatClock(value).slice(0, 5);
+    const day = `${date.getMonth() + 1}/${date.getDate()}`;
+    if (range === '24h') return long ? `${day} ${pad(date.getHours())}:00` : `${pad(date.getHours())}:00`;
+    return day;
+  }
+  const CAPTIONS: Record<TrendRange, string> = { '30m': '按分钟聚合 · 每 10 秒刷新', '24h': '按小时聚合', '7d': '按天聚合', '30d': '按天聚合', '90d': '按天聚合' };
+  const caption = $derived(CAPTIONS[range]);
 
   const W = 600;
   const H = 180;
@@ -45,7 +58,7 @@
     <div class="yaxis tabular" aria-hidden="true">
       {#each ticks as tick (tick)}<span>{formatNumber(tick)}</span>{/each}
     </div>
-    <div class="canvas" role="img" aria-label="最近 30 分钟的查询与拦截趋势" {onpointermove} onpointerleave={() => (hover = null)}>
+    <div class="canvas" role="img" aria-label="查询与拦截趋势" {onpointermove} onpointerleave={() => (hover = null)}>
       <svg viewBox="0 0 {W} {H}" preserveAspectRatio="none">
         {#each ticks as tick (tick)}
           <line x1="0" x2={W} y1={y(tick)} y2={y(tick)} class="grid" />
@@ -59,7 +72,7 @@
       {#if active}
         <div class="cursor" style:left="{left}%"></div>
         <div class="tip tabular" style:left="{left}%" class:flip={left > 70}>
-          <strong>{formatClock(active.time).slice(0, 5)}</strong>
+          <strong>{label(active.time, true)}</strong>
           <span><i class="key total"></i>查询 {formatNumber(active.queries)}</span>
           <span><i class="key blocked"></i>拦截 {formatNumber(active.blocked)}</span>
         </div>
@@ -67,16 +80,16 @@
     </div>
     <div class="xaxis tabular" aria-hidden="true">
       {#if points.length > 0}
-        <span>{formatClock(points[0].time).slice(0, 5)}</span>
-        <span>{formatClock(points[Math.floor(points.length / 2)].time).slice(0, 5)}</span>
-        <span>{formatClock(points[points.length - 1].time).slice(0, 5)}</span>
+        <span>{label(points[0].time)}</span>
+        <span>{label(points[Math.floor(points.length / 2)].time)}</span>
+        <span>{label(points[points.length - 1].time)}</span>
       {/if}
     </div>
   </div>
   <figcaption>
     <span><i class="key total"></i>全部查询</span>
     <span><i class="key blocked"></i>已拦截</span>
-    <span class="muted">按分钟聚合 · 每 10 秒刷新</span>
+    <span class="muted">{caption}</span>
   </figcaption>
 </figure>
 

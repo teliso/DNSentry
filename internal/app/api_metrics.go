@@ -5,6 +5,8 @@ import (
 	"io"
 	"net/http"
 	"strings"
+
+	"github.com/teliso/DNSentry/internal/upstream"
 )
 
 func (a *API) writeMetrics(writer http.ResponseWriter, _ *http.Request) {
@@ -46,7 +48,7 @@ func (a *API) writeMetrics(writer http.ResponseWriter, _ *http.Request) {
 	writeUpstreamPoolMetrics(writer, "fallback", a.resolver.fallbackPool)
 }
 
-func writeUpstreamPoolMetrics(writer io.Writer, role string, pool *UpstreamPool) {
+func writeUpstreamPoolMetrics(writer io.Writer, role string, pool *upstream.Pool) {
 	if pool == nil {
 		return
 	}

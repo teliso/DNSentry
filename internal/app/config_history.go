@@ -111,23 +111,60 @@ func flattenYAML(data []byte) map[string]any {
 	return flat
 }
 
-// configChanges returns the dotted keys whose values differ, sorted.
+// emptyConfigValue reports whether a YAML value is the zero value of its type.
+func emptyConfigValue(value any) bool {
+	switch typed := value.(type) {
+	case nil:
+		return true
+	case string:
+		return typed == ""
+	case bool:
+		return !typed
+	case int:
+		return typed == 0
+	case []any:
+		return len(typed) == 0
+	}
+	return false
+}
+
+// configChanges returns the dotted keys whose values differ, sorted. A key
+// that is absent from one file counts as its default (or empty) value: files
+// written by older versions lack keys that newer ones write explicitly, and
+// that is not a change the user made.
 func configChanges(newer, older []byte) []string {
 	after, before := flattenYAML(newer), flattenYAML(older)
-	changed := map[string]struct{}{}
-	for key, value := range after {
-		if previous, ok := before[key]; !ok || !reflect.DeepEqual(value, previous) {
-			changed[key] = struct{}{}
+	defaults := map[string]any{}
+	if config, err := validateConfig(defaultConfig()); err == nil {
+		defaultData, _ := yaml.Marshal(newYAMLConfig(config))
+		defaults = flattenYAML(defaultData)
+	}
+	// A key present in only one file is unchanged when it holds an empty value
+	// or the default: that is what the other file means by leaving it out.
+	same := func(key string) bool {
+		left, leftOK := after[key]
+		right, rightOK := before[key]
+		switch {
+		case leftOK && rightOK:
+			return (emptyConfigValue(left) && emptyConfigValue(right)) || reflect.DeepEqual(left, right)
+		case leftOK:
+			return emptyConfigValue(left) || reflect.DeepEqual(left, defaults[key])
+		default:
+			return emptyConfigValue(right) || reflect.DeepEqual(right, defaults[key])
 		}
 	}
-	for key := range before {
-		if _, ok := after[key]; !ok {
-			changed[key] = struct{}{}
+	keys := make([]string, 0)
+	seen := map[string]struct{}{}
+	for _, flat := range []map[string]any{after, before} {
+		for key := range flat {
+			if _, done := seen[key]; done {
+				continue
+			}
+			seen[key] = struct{}{}
+			if !same(key) {
+				keys = append(keys, key)
+			}
 		}
-	}
-	keys := make([]string, 0, len(changed))
-	for key := range changed {
-		keys = append(keys, key)
 	}
 	sort.Strings(keys)
 	return keys

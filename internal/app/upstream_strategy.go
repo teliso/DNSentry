@@ -6,6 +6,8 @@ import (
 	"net"
 	"time"
 
+	"github.com/teliso/DNSentry/internal/upstream"
+
 	"github.com/miekg/dns"
 )
 
@@ -35,7 +37,7 @@ type addressProbeResult struct {
 	ok      bool
 }
 
-func (s *DNSServer) exchangeLoadBalance(request *dns.Msg, candidates []string, pool *UpstreamPool) (*dns.Msg, string, error) {
+func (s *DNSServer) exchangeLoadBalance(request *dns.Msg, candidates []string, pool *upstream.Pool) (*dns.Msg, string, error) {
 	var fallback *upstreamQueryResult
 	var lastErr error
 	var lastUpstream string
@@ -58,7 +60,7 @@ func (s *DNSServer) exchangeLoadBalance(request *dns.Msg, candidates []string, p
 	return noUsableUpstreamResponse(fallback, lastUpstream, lastErr)
 }
 
-func (s *DNSServer) exchangeParallel(request *dns.Msg, candidates []string, pool *UpstreamPool) (*dns.Msg, string, error) {
+func (s *DNSServer) exchangeParallel(request *dns.Msg, candidates []string, pool *upstream.Pool) (*dns.Msg, string, error) {
 	results := s.queryAllUpstreams(request, candidates, pool)
 	var fallback *upstreamQueryResult
 	var lastErr error
@@ -79,7 +81,7 @@ func (s *DNSServer) exchangeParallel(request *dns.Msg, candidates []string, pool
 	return noUsableUpstreamResponse(fallback, lastUpstream, lastErr)
 }
 
-func (s *DNSServer) exchangeFastestAddr(request *dns.Msg, candidates []string, pool *UpstreamPool) (*dns.Msg, string, error) {
+func (s *DNSServer) exchangeFastestAddr(request *dns.Msg, candidates []string, pool *upstream.Pool) (*dns.Msg, string, error) {
 	if len(candidates) == 1 {
 		return s.exchangeLoadBalance(request, candidates, pool)
 	}
@@ -132,7 +134,7 @@ func (s *DNSServer) exchangeFastestAddr(request *dns.Msg, candidates []string, p
 	return best.response, best.upstream, nil
 }
 
-func (s *DNSServer) queryAllUpstreams(request *dns.Msg, candidates []string, pool *UpstreamPool) <-chan upstreamQueryResult {
+func (s *DNSServer) queryAllUpstreams(request *dns.Msg, candidates []string, pool *upstream.Pool) <-chan upstreamQueryResult {
 	results := make(chan upstreamQueryResult, len(candidates))
 	for _, upstream := range candidates {
 		upstream := upstream
@@ -143,7 +145,7 @@ func (s *DNSServer) queryAllUpstreams(request *dns.Msg, candidates []string, poo
 	return results
 }
 
-func (s *DNSServer) queryUpstream(request *dns.Msg, upstream string, pool *UpstreamPool) upstreamQueryResult {
+func (s *DNSServer) queryUpstream(request *dns.Msg, upstream string, pool *upstream.Pool) upstreamQueryResult {
 	started := time.Now()
 	response, err := s.exchangeUpstream(request, upstream)
 	latency := time.Since(started)

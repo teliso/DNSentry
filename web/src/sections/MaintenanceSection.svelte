@@ -18,6 +18,28 @@
       .catch((cause) => toasts.error(cause instanceof Error ? cause.message : '读取配置历史失败'));
   });
 
+  let picker: HTMLInputElement | undefined = $state();
+
+  async function exportConfig() {
+    try {
+      await api.exportConfig();
+    } catch (cause) {
+      toasts.error(cause instanceof Error ? cause.message : '导出失败');
+    }
+  }
+
+  async function importFile(event: Event) {
+    const input = event.currentTarget as HTMLInputElement;
+    const file = input.files?.[0];
+    input.value = '';
+    if (!file) return;
+    if (file.size > 1 << 20) {
+      toasts.error('配置文件太大（超过 1 MB）');
+      return;
+    }
+    if (confirm(`用“${file.name}”替换当前配置？当前配置会保留在历史中，可以再恢复回来。`)) await store.importConfig(await file.text());
+  }
+
   function restore(version: ConfigVersion) {
     if (confirm(`恢复到 ${new Date(version.time).toLocaleString('zh-CN', { hour12: false })} 保存的配置？当前配置会保留在历史中，可以再恢复回来。`)) {
       void store.restoreConfig(version.id);
@@ -62,6 +84,17 @@
 
     <div class="row">
       <div>
+        <strong>导出 / 导入配置</strong>
+        <p class="muted">导出的文件包含私钥等敏感信息，请妥善保管。导入会像在控制台保存一样校验并立即应用，并记入上面的历史，随时可以恢复。</p>
+      </div>
+      <div class="buttons">
+        <button class="btn" type="button" onclick={exportConfig}>导出</button>
+        <button class="btn" type="button" disabled={store.busy} onclick={() => picker?.click()}>导入…</button>
+        <input bind:this={picker} type="file" accept=".yaml,.yml,text/yaml,application/yaml" hidden onchange={importFile} />
+      </div>
+    </div>
+    <div class="row">
+      <div>
         <strong>清空 DNS 缓存</strong>
         <p class="muted">上游记录变更后需要立即生效时使用。</p>
       </div>
@@ -84,6 +117,7 @@
   .end { text-align: right; }
   .row { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 14px 0; border-top: 1px solid var(--line); }
   .row p { font-size: 13px; }
+  .buttons { display: flex; gap: 8px; flex: none; }
   .about { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 12px 16px; margin: 4px 0 0; }
   dt { color: var(--muted); font-size: 12px; }
   dd { margin: 0; font-size: 13px; overflow-wrap: anywhere; }

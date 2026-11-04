@@ -7,6 +7,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/teliso/DNSentry/internal/dnssec"
+
 	"github.com/0xERR0R/blocky/model"
 	blockydnssec "github.com/0xERR0R/blocky/resolver/dnssec"
 	"github.com/miekg/dns"
@@ -75,7 +77,7 @@ func TestDNSSECValidatorReportsRealSecureInsecureAndBogusResults(t *testing.T) {
 	answer := &dns.A{Hdr: dns.RR_Header{Name: question.Name, Rrtype: dns.TypeA, Class: dns.ClassINET, Ttl: 300}, A: net.ParseIP("192.0.2.1")}
 	answerSignature := signTestRRSet(t, []dns.RR{answer}, dns.TypeA, childKey, childPrivate, "signed.example.")
 
-	secureValidator, err := NewDNSSECValidator(context.Background(), []string{anchor}, resolver)
+	secureValidator, err := dnssec.NewValidator(context.Background(), []string{anchor}, resolver)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -107,7 +109,7 @@ func TestDNSSECValidatorReportsRealSecureInsecureAndBogusResults(t *testing.T) {
 			return &model.Response{Res: &dns.Msg{}}, nil
 		}
 	}}
-	insecureValidator, err := NewDNSSECValidator(context.Background(), []string{insecureAnchor}, insecureResolver)
+	insecureValidator, err := dnssec.NewValidator(context.Background(), []string{insecureAnchor}, insecureResolver)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -119,7 +121,7 @@ func TestDNSSECValidatorReportsRealSecureInsecureAndBogusResults(t *testing.T) {
 
 	forgedAnswer := &dns.A{Hdr: answer.Hdr, A: append(net.IP(nil), answer.A...)}
 	forgedAnswer.A = net.ParseIP("203.0.113.66")
-	bogusValidator, err := NewDNSSECValidator(context.Background(), []string{anchor}, resolver)
+	bogusValidator, err := dnssec.NewValidator(context.Background(), []string{anchor}, resolver)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -143,7 +145,7 @@ func TestDNSSECConfigInitializesTrustAnchorsAndRoundTrips(t *testing.T) {
 	if !fileConfig.DNS.DNSSECValidate || len(fileConfig.DNS.DNSSECTrustAnchors) != 1 {
 		t.Fatalf("DNSSEC YAML fields were not initialized: %#v", fileConfig.DNS)
 	}
-	defaultValidator, err := NewDNSSECValidator(context.Background(), nil, dnssecTestResolver{resolve: func(*model.Request) (*model.Response, error) {
+	defaultValidator, err := dnssec.NewValidator(context.Background(), nil, dnssecTestResolver{resolve: func(*model.Request) (*model.Response, error) {
 		return &model.Response{Res: &dns.Msg{}}, nil
 	}})
 	if err != nil {

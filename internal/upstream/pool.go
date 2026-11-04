@@ -1,4 +1,6 @@
-package app
+// Package upstream tracks the health and latency of DNS upstream servers and
+// decides which of them a query may be sent to.
+package upstream
 
 import (
 	"sync"
@@ -6,7 +8,7 @@ import (
 	"time"
 )
 
-type UpstreamHealth struct {
+type Health struct {
 	Address     string `json:"address"`
 	Healthy     bool   `json:"healthy"`
 	Failures    int    `json:"failures"`
@@ -81,7 +83,8 @@ func (state *upstreamState) points(now time.Time) []HealthPoint {
 	return points
 }
 
-type UpstreamPool struct {
+// Pool is a set of upstreams with per-server health, cooldown and history.
+type Pool struct {
 	mu            sync.RWMutex
 	states        map[string]*upstreamState
 	addresses     []string
@@ -89,13 +92,13 @@ type UpstreamPool struct {
 	probeInFlight bool
 }
 
-func NewUpstreamPool(addresses []string) *UpstreamPool {
-	pool := &UpstreamPool{states: make(map[string]*upstreamState)}
+func NewPool(addresses []string) *Pool {
+	pool := &Pool{states: make(map[string]*upstreamState)}
 	pool.Set(addresses)
 	return pool
 }
 
-func (p *UpstreamPool) Set(addresses []string) {
+func (p *Pool) Set(addresses []string) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	seen := make(map[string]struct{}, len(addresses))
@@ -122,7 +125,7 @@ func (p *UpstreamPool) Set(addresses []string) {
 	p.probeInFlight = false
 }
 
-func (p *UpstreamPool) Candidates() []string {
+func (p *Pool) Candidates() []string {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	if len(p.addresses) == 0 {
@@ -164,7 +167,7 @@ func (p *UpstreamPool) Candidates() []string {
 	return []string{probe.address}
 }
 
-func (p *UpstreamPool) RecordSuccess(address string, latency time.Duration) {
+func (p *Pool) RecordSuccess(address string, latency time.Duration) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	state, ok := p.states[address]
@@ -181,7 +184,7 @@ func (p *UpstreamPool) RecordSuccess(address string, latency time.Duration) {
 	state.record(state.lastSuccess, latency, true)
 }
 
-func (p *UpstreamPool) RecordFailure(address string) {
+func (p *Pool) RecordFailure(address string) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	state, ok := p.states[address]
@@ -207,17 +210,17 @@ func (p *UpstreamPool) RecordFailure(address string) {
 	}
 }
 
-func (p *UpstreamPool) Health() []UpstreamHealth {
+func (p *Pool) Health() []Health {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
-	result := make([]UpstreamHealth, 0, len(p.addresses))
+	result := make([]Health, 0, len(p.addresses))
 	now := time.Now()
 	for _, address := range p.addresses {
 		state := p.states[address]
 		if state == nil {
 			continue
 		}
-		result = append(result, UpstreamHealth{
+		result = append(result, Health{
 			Address:     address,
 			Healthy:     now.After(state.unhealthyUntil),
 			Failures:    state.failures,

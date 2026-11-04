@@ -26,7 +26,7 @@ dns:
     - "1.1.1.1:53"
     - "8.8.8.8:53"
   upstream_timeout_seconds: 4
-  # Answer for blocked names: default (0.0.0.0/::) | nxdomain | null_ip | custom_ip | refused
+  # Answer for blocked names: nxdomain | null_ip (0.0.0.0/::) | custom_ip | refused
   blocking_mode: "nxdomain"
   blocking_ipv4: "0.0.0.0" # custom_ip only
   blocking_ipv6: "::"      # custom_ip only
@@ -48,6 +48,10 @@ dns:
   private_reverse: true
   # Answer AAAA queries with an empty response (for networks without IPv6).
   block_aaaa: false
+  # Block whole services by id (see GET /api/services), e.g. [tiktok, youtube].
+  blocked_services: []
+  # Redirect Google, Bing, DuckDuckGo, YouTube and Pixabay to their safe-search hosts.
+  safe_search: false
   # Answered locally before cache and upstreams (filter rules still apply first).
   local_records: []
   #  - { domain: nas.home.arpa, type: A, value: 192.168.1.10, ttl: 300 }
@@ -56,6 +60,17 @@ web:
   # [restart] Console and API. A non-loopback address additionally requires
   # DNSENTRY_ALLOW_PUBLIC_WEB=1 and DNSENTRY_API_TOKEN in the environment.
   listen: "127.0.0.1:18080"
+  # [restart] Serve the console over HTTPS.
+  tls:
+    enabled: false
+    # auto: self-signed | encryption: reuse the certificate of the encrypted DNS
+    # service | custom: certificate/private_key below.
+    source: auto
+    # certificate: /etc/ssl/dnsentry/fullchain.pem
+    # private_key: /etc/ssl/dnsentry/privkey.pem
+    # Host name the console is opened with (e.g. the DoH/DoT name). A self-signed
+    # certificate is issued for it; other certificates are checked against it.
+    # server_name: dns.example.com
 
 cache:
   enabled: true
@@ -89,6 +104,19 @@ logging:
   enabled: false             # [restart] also write daily JSONL files
   file: "data/querylog"      # [restart] prefix: data/querylog-YYYY-MM-DD.jsonl
   retention_days: 7          # [restart]
+
+# Block services / force safe search during weekly windows.
+schedule:
+  timezone: ""               # IANA name such as Asia/Shanghai; empty = server local time
+  rules: []
+  #  - { name: night, enabled: true, days: [], start: "22:00", end: "07:00", services: [steam, roblox], safe_search: false }
+  #    days: 0 = Sunday ... 6 = Saturday, empty = every day; an end before the start runs past midnight.
+
+# Notifications about upstream and rule source problems (webhooks).
+notifications:
+  events: []                 # upstream | rule_source; empty = all
+  webhooks: []
+  #  - { name: phone, url: "https://ntfy.sh/my-dnsentry", format: plain, enabled: true }
 
 # [restart] Inbound encrypted DNS. Certificate and key can be given as paths or
 # pasted PEM (certificate_pem / private_key_pem).

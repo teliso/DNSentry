@@ -12,7 +12,7 @@ After=network-online.target
 
 [Service]
 Type=simple
-ExecStart=/usr/local/bin/dnsentry -config /var/lib/dnsentry/config.yaml
+ExecStart=/usr/local/bin/dnsentry -data-dir /var/lib/dnsentry
 WorkingDirectory=/var/lib/dnsentry
 EnvironmentFile=-/etc/dnsentry/env
 Environment=DNSENTRY_DNS_LISTEN=:53

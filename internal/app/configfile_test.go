@@ -289,7 +289,7 @@ func TestValidateConfigAppliesExistingDefaults(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if validated.UpstreamTimeout != 4 || validated.UpstreamMode != upstreamModeLoadBalance || validated.Access.MaxConcurrentQueries != 2048 || validated.CacheSize != 4<<20 || validated.QueryLogFile != filepath.Join("data", "querylog") || validated.QueryLogRetentionDays != 7 || validated.BlockingMode != "default" || validated.BlockingIPv4 != "0.0.0.0" || validated.BlockingIPv6 != "::" || validated.OptimisticAnswerTTL != cache.DefaultOptimisticAnswerTTL || validated.OptimisticMaxAge != cache.DefaultOptimisticMaxAgeSeconds || validated.BlockedResponseTTL != 10 {
+	if validated.UpstreamTimeout != 4 || validated.UpstreamMode != upstreamModeLoadBalance || validated.Access.MaxConcurrentQueries != 2048 || validated.CacheSize != 4<<20 || validated.QueryLogFile != filepath.Join("data", "querylog") || validated.QueryLogRetentionDays != 7 || validated.BlockingMode != "null_ip" || validated.BlockingIPv4 != "0.0.0.0" || validated.BlockingIPv6 != "::" || validated.OptimisticAnswerTTL != cache.DefaultOptimisticAnswerTTL || validated.OptimisticMaxAge != cache.DefaultOptimisticMaxAgeSeconds || validated.BlockedResponseTTL != 10 {
 		t.Fatalf("existing defaults changed: %#v", validated)
 	}
 	if len(validated.BootstrapDNS) != 2 || validated.Upstreams[0] != "1.1.1.1:53" {
@@ -343,5 +343,20 @@ func TestLegacySingleListenKeysAreReadButNeverWritten(t *testing.T) {
 	}
 	if singles != 1 || strings.Contains(string(out), "dot_listen:") {
 		t.Errorf("legacy single-address keys were written back:\n%s", out)
+	}
+}
+
+func TestMinimalConfigKeepsQueryLog(t *testing.T) {
+	var fileConfig yamlConfig
+	minimal := "version: 1\ndns:\n  listens: [':15353']\n  upstreams: ['1.1.1.1:53']\nweb:\n  listen: ':18080'\nrules:\n  local_file: data/rules.txt\n"
+	if err := yaml.Unmarshal([]byte(minimal), &fileConfig); err != nil {
+		t.Fatal(err)
+	}
+	validated, err := validateConfig(fileConfig.toConfig())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if validated.QueryLogSize != defaultQueryLogSize || validated.QueryLogFile != defaultQueryLogFile() {
+		t.Fatalf("a config without logging settings lost its query log: size=%d file=%q", validated.QueryLogSize, validated.QueryLogFile)
 	}
 }

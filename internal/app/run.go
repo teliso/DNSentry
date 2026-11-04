@@ -15,6 +15,11 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/teliso/DNSentry/internal/auth"
+	"github.com/teliso/DNSentry/internal/schedule"
+	"github.com/teliso/DNSentry/internal/services"
+	"github.com/teliso/DNSentry/internal/upstream"
+
 	"github.com/miekg/dns"
 	"github.com/teliso/DNSentry/internal/buildinfo"
 	"github.com/teliso/DNSentry/internal/cache"
@@ -34,13 +39,8 @@ type listenerService interface {
 	Close() error
 }
 
-// SetConfigPath selects the YAML configuration file. Call it before Run or
-// CheckConfig.
-func SetConfigPath(path string) {
-	if path != "" {
-		configFile = path
-	}
-}
+// ConfigPath is the configuration file in use.
+func ConfigPath() string { return configPath() }
 
 // CheckConfig validates the configuration file and the environment it needs
 // without starting any listener.
@@ -68,8 +68,8 @@ func checkWebExposure(config *Config, apiToken string) error {
 	if os.Getenv("DNSENTRY_ALLOW_PUBLIC_WEB") != "1" {
 		return fmt.Errorf("refusing non-loopback Web listen address %q; set DNSENTRY_ALLOW_PUBLIC_WEB=1 to allow public Web access", config.HTTPListen)
 	}
-	if apiToken == "" {
-		return errors.New("refusing public Web access without DNSENTRY_API_TOKEN")
+	if apiToken == "" && !auth.Exists(authFilePath()) {
+		return errors.New("refusing public Web access without DNSENTRY_API_TOKEN or a console password (set one from the console first, then listen publicly)")
 	}
 	return nil
 }
@@ -104,6 +104,10 @@ func run(ctx context.Context, stop context.CancelFunc, static fs.FS) error {
 		return err
 	}
 	apiToken := os.Getenv("DNSENTRY_API_TOKEN")
+	loginStore, err := auth.Open(authFilePath())
+	if err != nil {
+		return err
+	}
 	if err := checkWebExposure(config, apiToken); err != nil {
 		return err
 	}
@@ -123,6 +127,10 @@ func run(ctx context.Context, stop context.CancelFunc, static fs.FS) error {
 	if err != nil {
 		return fmt.Errorf("initialize query logger: %w", err)
 	}
+	// Counters only (no domains or clients), so this is always on.
+	if err := logs.EnableStats(filepath.Join(filepath.Dir(configPath()), "stats.json")); err != nil {
+		slog.Warn("statistics", "error", err)
+	}
 	defer func() {
 		if err := logs.Close(); err != nil {
 			slog.Error("close query logger", "error", err)
@@ -135,12 +143,14 @@ func run(ctx context.Context, stop context.CancelFunc, static fs.FS) error {
 		cache:         cache.New(config.CacheSize, config.CacheEnabled),
 		logs:          logs,
 		client:        &dns.Client{Net: "udp", Timeout: upstreamTimeout(config.UpstreamTimeout)},
-		pool:          NewUpstreamPool(config.Upstreams),
-		fallbackPool:  NewUpstreamPool(config.FallbackUpstreams),
+		pool:          upstream.NewPool(config.Upstreams),
+		fallbackPool:  upstream.NewPool(config.FallbackUpstreams),
 		dnssecCacheOK: make(map[string]struct{}),
 	}
 	server.configureAccess(config.Access)
 	server.setLocalRecords(config.LocalRecords)
+	server.blockedServices.Store(services.NewMatcher(config.BlockedServices))
+	server.schedules.Store(schedule.Compile(config.Schedule))
 	server.setUpstreamRoutes(config.UpstreamRoutes)
 	if config.DNSSECValidate {
 		if err := server.rebuildDNSSECValidator(*config); err != nil {
@@ -160,7 +170,24 @@ func run(ctx context.Context, stop context.CancelFunc, static fs.FS) error {
 
 	updater := rules.NewUpdater(ruleStore, ruleCacheDir(config.RulesFile), config.RuleSources)
 	api := newAPI(ctx, apiToken, server, updater, services.dnscrypt)
+	api.auth = loginStore
+	notifier := newNotifier(func() NotificationsConfig { return server.configSnapshot().Notifications }, collectProblems(server, updater))
+	go notifier.Run(ctx)
+	go server.watchSchedule(ctx)
 	httpServer := newHTTPServer(api, static, dnsService.Ready)
+	scheme := "http"
+	if config.WebTLS.Enabled {
+		certs, err := newWebCertificates(config.WebTLS, config.Encryption, filepath.Dir(configPath()))
+		if err != nil {
+			services.closeAll()
+			return err
+		}
+		api.webTLS = certs
+		httpServer.TLSConfig = certs.tlsConfig()
+		scheme = "https"
+	} else if !isLoopbackHTTPListen(config.HTTPListen) {
+		slog.Warn("the web console is reachable over plain HTTP: passwords and session cookies are not encrypted; enable HTTPS in Settings or put it behind an HTTPS reverse proxy")
+	}
 	httpListener, err := net.Listen("tcp", config.HTTPListen)
 	if err != nil {
 		services.closeAll()
@@ -169,7 +196,7 @@ func run(ctx context.Context, stop context.CancelFunc, static fs.FS) error {
 	for _, address := range dnsService.Addresses() {
 		slog.Info("DNS listening", "address", address, "protocols", "udp,tcp")
 	}
-	slog.Info("web console listening", "url", "http://"+httpListener.Addr().String())
+	slog.Info("web console listening", "url", scheme+"://"+httpListener.Addr().String())
 
 	if err := services.start(ctx); err != nil {
 		_ = httpListener.Close()
@@ -184,7 +211,13 @@ func run(ctx context.Context, stop context.CancelFunc, static fs.FS) error {
 	dnssecAnchorDone := make(chan struct{})
 	go server.watchDNSSECTrustAnchorFile(ctx, dnssecAnchorDone)
 	httpServeDone := make(chan error, 1)
-	go func() { httpServeDone <- httpServer.Serve(httpListener) }()
+	go func() {
+		if config.WebTLS.Enabled {
+			httpServeDone <- httpServer.ServeTLS(httpListener, "", "") // certificates come from TLSConfig.GetCertificate
+		} else {
+			httpServeDone <- httpServer.Serve(httpListener)
+		}
+	}()
 
 	select {
 	case err := <-httpServeDone:

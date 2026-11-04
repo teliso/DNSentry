@@ -8,6 +8,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/teliso/DNSentry/internal/upstream"
+
 	"github.com/miekg/dns"
 
 	"github.com/teliso/DNSentry/internal/cache"
@@ -49,7 +51,7 @@ func newRoutingServer(t *testing.T, config *Config) *DNSServer {
 	server := &DNSServer{
 		config: config, rules: store, cache: cache.New(config.CacheSize, true), logs: querylog.New(50),
 		client: &dns.Client{Net: "udp", Timeout: time.Second},
-		pool:   NewUpstreamPool(config.Upstreams), dnssecCacheOK: map[string]struct{}{},
+		pool:   upstream.NewPool(config.Upstreams), dnssecCacheOK: map[string]struct{}{},
 	}
 	server.setUpstreamRoutes(config.UpstreamRoutes)
 	server.setLocalRecords(config.LocalRecords)

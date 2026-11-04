@@ -7,6 +7,13 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/teliso/DNSentry/internal/dnssec"
+	"github.com/teliso/DNSentry/internal/schedule"
+	"github.com/teliso/DNSentry/internal/services"
+
+	"github.com/teliso/DNSentry/internal/access"
+	"github.com/teliso/DNSentry/internal/upstream"
+
 	"github.com/miekg/dns"
 	"github.com/teliso/DNSentry/internal/cache"
 	"github.com/teliso/DNSentry/internal/querylog"
@@ -15,45 +22,48 @@ import (
 )
 
 type DNSServer struct {
-	configMu             sync.RWMutex
-	clientMu             sync.RWMutex
-	dohMu                sync.Mutex
-	doh3Mu               sync.Mutex
-	encryptedMu          sync.Mutex
-	dnscryptMu           sync.Mutex
-	config               *Config
-	generation           uint64
-	rules                *rules.Store
-	cache                *cache.Cache
-	logs                 *querylog.Logger
-	client               *dns.Client
-	pool                 *UpstreamPool
-	fallbackPool         *UpstreamPool
-	accessMu             sync.RWMutex
-	accessPolicy         *clientAccessPolicy
-	clientLimiter        *clientRateLimiter
-	inFlightQueries      atomic.Int64
-	maxConcurrentQueries atomic.Int64
-	refreshInFlight      atomic.Int64
-	dohClients           map[string]*dohClientEntry
-	doh3Clients          map[string]*doh3ClientEntry
-	dohClosed            bool
-	doh3Closed           bool
-	dotClients           map[string]*dotClientEntry
-	doqClients           map[string]*doqClientEntry
-	dnscryptClients      map[string]*dnscryptClientEntry
-	dnscryptClosed       bool
-	encryptedClosed      bool
-	refreshing           sync.Map
-	inflight             singleflight.Group
-	dnssecMu             sync.RWMutex
-	dnssec               *DNSSECValidator
-	dnssecCacheMu        sync.Mutex
-	dnssecCacheOK        map[string]struct{}
-	localRecords         atomic.Pointer[localRecordSnapshot]
-	routes               atomic.Pointer[routeTable]
-	fastestAddrProbe     addressProbeFunc
-	doh3TLSConfig        *tls.Config
+	configMu              sync.RWMutex
+	clientMu              sync.RWMutex
+	dohMu                 sync.Mutex
+	doh3Mu                sync.Mutex
+	encryptedMu           sync.Mutex
+	dnscryptMu            sync.Mutex
+	config                *Config
+	generation            uint64
+	rules                 *rules.Store
+	cache                 *cache.Cache
+	logs                  *querylog.Logger
+	client                *dns.Client
+	pool                  *upstream.Pool
+	fallbackPool          *upstream.Pool
+	accessMu              sync.RWMutex
+	accessPolicy          *access.Policy
+	clientLimiter         *access.Limiter
+	inFlightQueries       atomic.Int64
+	maxConcurrentQueries  atomic.Int64
+	protectionPausedUntil atomic.Int64 // unix nanoseconds; 0 = filtering on
+	blockedServices       atomic.Pointer[services.Matcher]
+	schedules             atomic.Pointer[schedule.Set]
+	refreshInFlight       atomic.Int64
+	dohClients            map[string]*dohClientEntry
+	doh3Clients           map[string]*doh3ClientEntry
+	dohClosed             bool
+	doh3Closed            bool
+	dotClients            map[string]*dotClientEntry
+	doqClients            map[string]*doqClientEntry
+	dnscryptClients       map[string]*dnscryptClientEntry
+	dnscryptClosed        bool
+	encryptedClosed       bool
+	refreshing            sync.Map
+	inflight              singleflight.Group
+	dnssecMu              sync.RWMutex
+	dnssec                *dnssec.Validator
+	dnssecCacheMu         sync.Mutex
+	dnssecCacheOK         map[string]struct{}
+	localRecords          atomic.Pointer[localRecordSnapshot]
+	routes                atomic.Pointer[routeTable]
+	fastestAddrProbe      addressProbeFunc
+	doh3TLSConfig         *tls.Config
 }
 
 func (s *DNSServer) configSnapshot() Config {
@@ -112,7 +122,7 @@ func (s *DNSServer) applyConfig(config Config) error {
 	previous := s.configSnapshot()
 	dnssecChanged := previous.DNSSECValidate != config.DNSSECValidate || previous.DNSSECAutoUpdate != config.DNSSECAutoUpdate || previous.DNSSECTrustAnchorFile != config.DNSSECTrustAnchorFile || !slices.Equal(previous.DNSSECTrustAnchors, config.DNSSECTrustAnchors)
 	localRecordsChanged := !localRecordsEqual(previous.LocalRecords, config.LocalRecords)
-	accessChanged := !dnsAccessConfigEqual(previous.Access, config.Access)
+	accessChanged := !access.Equal(previous.Access, config.Access)
 	if dnssecChanged {
 		// validateConfig has already checked the anchors. Keep the old validator
 		// if an unexpected construction error occurs, rather than serving with a
@@ -124,8 +134,10 @@ func (s *DNSServer) applyConfig(config Config) error {
 	s.updateConfig(config)
 	s.configureAccess(config.Access)
 	s.setLocalRecords(config.LocalRecords)
+	s.blockedServices.Store(services.NewMatcher(config.BlockedServices))
+	s.schedules.Store(schedule.Compile(config.Schedule))
 	s.setUpstreamRoutes(config.UpstreamRoutes)
-	if previous.CacheEnabled != config.CacheEnabled || previous.CacheSize != config.CacheSize || previous.CacheTTLMin != config.CacheTTLMin || previous.CacheTTLMax != config.CacheTTLMax || previous.OptimisticCache != config.OptimisticCache || previous.OptimisticAnswerTTL != config.OptimisticAnswerTTL || previous.OptimisticMaxAge != config.OptimisticMaxAge || previous.EnableDNSSEC != config.EnableDNSSEC || dnssecChanged || previous.UpstreamMode != config.UpstreamMode || localRecordsChanged || !upstreamRoutesEqual(previous.UpstreamRoutes, config.UpstreamRoutes) || previous.PrivateReverse != config.PrivateReverse || previous.BlockAAAA != config.BlockAAAA || accessChanged || !slices.Equal(previous.Upstreams, config.Upstreams) || !slices.Equal(previous.FallbackUpstreams, config.FallbackUpstreams) || !slices.Equal(previous.BootstrapDNS, config.BootstrapDNS) {
+	if previous.CacheEnabled != config.CacheEnabled || previous.CacheSize != config.CacheSize || previous.CacheTTLMin != config.CacheTTLMin || previous.CacheTTLMax != config.CacheTTLMax || previous.OptimisticCache != config.OptimisticCache || previous.OptimisticAnswerTTL != config.OptimisticAnswerTTL || previous.OptimisticMaxAge != config.OptimisticMaxAge || previous.EnableDNSSEC != config.EnableDNSSEC || dnssecChanged || previous.UpstreamMode != config.UpstreamMode || localRecordsChanged || !upstreamRoutesEqual(previous.UpstreamRoutes, config.UpstreamRoutes) || previous.PrivateReverse != config.PrivateReverse || previous.SafeSearch != config.SafeSearch || previous.BlockAAAA != config.BlockAAAA || accessChanged || !slices.Equal(previous.Upstreams, config.Upstreams) || !slices.Equal(previous.FallbackUpstreams, config.FallbackUpstreams) || !slices.Equal(previous.BootstrapDNS, config.BootstrapDNS) {
 		s.cache.Clear()
 		s.clearDNSSECCacheMarks()
 	}
@@ -134,7 +146,7 @@ func (s *DNSServer) applyConfig(config Config) error {
 	s.setUpstreamTimeout(upstreamTimeout(config.UpstreamTimeout))
 	s.pool.Set(config.Upstreams)
 	if s.fallbackPool == nil {
-		s.fallbackPool = NewUpstreamPool(config.FallbackUpstreams)
+		s.fallbackPool = upstream.NewPool(config.FallbackUpstreams)
 	} else {
 		s.fallbackPool.Set(config.FallbackUpstreams)
 	}

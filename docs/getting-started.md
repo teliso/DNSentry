@@ -25,6 +25,7 @@ pnpm install && pnpm start
 
 ```sh
 ./dnsentry            # 在当前目录使用 data/config.yaml
+./dnsentry -data-dir ~/dnsentry-data   # 或者指定一个固定的数据目录（推荐长期使用）
 ```
 
 首次运行会自动创建：
@@ -58,7 +59,7 @@ go run ./cmd/dnsentry-query -server 127.0.0.1:15353 example.com
 **给家里的设备用**：需要 DNSentry 监听 53 端口，并让路由器把它发给所有设备。
 
 1. 给运行 DNSentry 的机器一个固定的内网 IP（在路由器里做 DHCP 静态分配），下文假设为 `192.168.1.2`。
-2. 让 DNSentry 监听 53 端口。最简单的办法是首次启动前设置环境变量（或事后在控制台“服务设置 → 监听”里改成 `:53` 并重启）：
+2. 让 DNSentry 监听 53 端口。最简单的办法是首次启动前设置环境变量（或事后在控制台“设置 → 网络与访问”里改成 `:53` 并重启）：
    ```sh
    DNSENTRY_DNS_LISTEN=:53 ./dnsentry
    ```
@@ -72,7 +73,7 @@ go run ./cmd/dnsentry-query -server 127.0.0.1:15353 example.com
 
 1. 在设备上访问几个网站，然后打开控制台的 **查询日志**：应该能看到来自这台设备的请求。
 2. 添加一条测试规则：**过滤规则 → 添加本地规则**，输入 `ads.example.com`，再用 `nslookup ads.example.com` 查询，应该得到被拦截的应答。
-3. 在 **规则源** 页订阅一个在线列表（比如 AdGuard DNS 过滤器），几十秒后规则数量会出现在仪表盘上。
+3. 在“过滤 → 规则源”订阅（也可以直接点“推荐”里的列表）一个在线列表（比如 AdGuard DNS 过滤器），几十秒后规则数量会出现在概览页上。
 
 ## 6. 下一步
 

@@ -478,8 +478,33 @@ func blockedResponse(request *dns.Msg, question dns.Question, config *Config) *d
 	case dns.TypeAAAA:
 		header.Rrtype = dns.TypeAAAA
 		response.Answer = append(response.Answer, &dns.AAAA{Hdr: header, AAAA: ipv6.To16()})
+	default:
+		// There is no address to give for other types (HTTPS, MX, TXT, ...).
+		// Say so with an SOA so resolvers cache the empty answer instead of retrying.
+		response.Ns = []dns.RR{&dns.SOA{
+			Hdr: dns.RR_Header{Name: question.Name, Rrtype: dns.TypeSOA, Class: question.Qclass, Ttl: ttl},
+			Ns:  "localhost.", Mbox: "hostmaster.localhost.",
+			Serial: 1, Refresh: 3600, Retry: 600, Expire: 86400, Minttl: ttl,
+		}}
 	}
 	return response
+}
+
+// addExtendedError tells a client that supports EDNS why the query was
+// answered the way it was (RFC 8914), so that software can show "blocked"
+// instead of a bare failure. Clients without EDNS get nothing extra.
+func addExtendedError(response, request *dns.Msg, code uint16, text string) {
+	edns := request.IsEdns0()
+	if edns == nil {
+		return
+	}
+	opt := response.IsEdns0()
+	if opt == nil {
+		opt = &dns.OPT{Hdr: dns.RR_Header{Name: ".", Rrtype: dns.TypeOPT, Class: edns.UDPSize()}}
+		opt.SetDo(edns.Do())
+		response.Extra = append(response.Extra, opt)
+	}
+	opt.Option = append(opt.Option, &dns.EDNS0_EDE{InfoCode: code, ExtraText: text})
 }
 
 // noDataResponse is an empty NOERROR answer with an SOA record so clients can

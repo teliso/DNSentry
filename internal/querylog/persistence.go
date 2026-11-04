@@ -57,7 +57,9 @@ func NewWithPersistence(max int, config PersistenceConfig) (*Logger, error) {
 	if err != nil {
 		return nil, fmt.Errorf("load query logs: %w", err)
 	}
-	logger.entries = entries
+	for i := len(entries) - 1; i >= 0; i-- { // loaded newest-first; replay oldest-first
+		logger.pushLocked(entries[i])
+	}
 	logger.persistence = &persistence{
 		filePrefix:    config.File,
 		retentionDays: config.RetentionDays,
@@ -87,6 +89,7 @@ func (l *Logger) enqueuePersistence(entry Entry) {
 }
 
 func (l *Logger) Close() error {
+	l.closeStats()
 	persistence := l.persistence
 	if persistence == nil {
 		return nil
