@@ -1,4 +1,7 @@
-import { EN, EN_PATTERNS } from './en';
+type Dictionary = typeof import('./en');
+
+// The English dictionary is a separate chunk, fetched only when it is needed.
+let dictionary: Dictionary | null = null;
 
 export type Language = 'zh' | 'en';
 
@@ -17,7 +20,7 @@ function initialLanguage(): Language {
 
 /** Translates Chinese UI text into the current language; other text is returned unchanged. */
 export function translate(text: string, language: Language): string {
-  if (language === 'zh' || !/[一-龥]/.test(text)) return text;
+  if (language === 'zh' || dictionary === null || !/[一-龥]/.test(text)) return text;
   const lead = text.match(/^\s*/)?.[0] ?? '';
   const trail = text.match(/\s*$/)?.[0] ?? '';
   return lead + translateCore(text.trim()) + trail;
@@ -27,6 +30,7 @@ const PUNCTUATION: Record<string, string> = { '，': ', ', '。': '. ', '；': '
 
 function translateCore(core: string): string {
   if (!/[一-龥]/.test(core)) return core;
+  const { EN, EN_PATTERNS } = dictionary!;
   const exact = EN[core];
   if (exact !== undefined) return exact;
   for (const [pattern, replacement] of EN_PATTERNS) {
@@ -51,7 +55,8 @@ function translateCore(core: string): string {
 class I18n {
   language = $state<Language>(initialLanguage());
 
-  set(language: Language) {
+  async set(language: Language) {
+    if (language === 'en') await loadDictionary();
     this.language = language;
     try {
       localStorage.setItem(STORAGE_KEY, language);
@@ -126,6 +131,21 @@ function apply(root: Node) {
     applyAttributes(element);
   }
   for (const child of Array.from(root.childNodes)) apply(child);
+}
+
+async function loadDictionary() {
+  dictionary ??= await import('./en');
+}
+
+/** Loads what the current language needs; call before the first render. */
+export async function prepareI18n() {
+  if (i18n.language === 'en') {
+    try {
+      await loadDictionary();
+    } catch {
+      i18n.language = 'zh'; // the dictionary could not be fetched: show the source text
+    }
+  }
 }
 
 let observer: MutationObserver | undefined;

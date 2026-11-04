@@ -4,6 +4,8 @@
  * with numbers or names in it ($1 … are the captured parts).
  */
 export const EN: Record<string, string> = {
+  "之类的私网反向区交给内网 DNS": "and similar private reverse zones to the internal DNS",
+  "也可以用于把": "it can also hand",
   "留空允许所有": "leave empty to allow all",
   "并设置环境变量": "and set the environment variable",
   "可以放心让局域网内的其他设备访问（还需要把控制台监听地址改成非回环地址": "other devices on the LAN can be allowed in safely (also change the console listen address to a non-loopback one",
