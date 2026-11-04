@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"net"
 	"net/url"
-	"path/filepath"
 	"strconv"
 	"strings"
 
@@ -48,9 +47,12 @@ func validateConfig(config *Config) (*Config, error) {
 	if config.CacheSize == 0 {
 		config.CacheSize = 4 << 20
 	}
+	if config.QueryLogSize <= 0 {
+		config.QueryLogSize = defaultQueryLogSize
+	}
 	config.QueryLogFile = strings.TrimSpace(config.QueryLogFile)
 	if config.QueryLogFile == "" {
-		config.QueryLogFile = filepath.Join("data", "querylog")
+		config.QueryLogFile = defaultQueryLogFile()
 	}
 	if config.QueryLogRetentionDays == 0 {
 		config.QueryLogRetentionDays = 7

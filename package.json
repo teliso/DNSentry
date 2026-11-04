@@ -7,7 +7,11 @@
     "dev": "pnpm --filter dnsentry-console dev",
     "build": "pnpm --filter dnsentry-console build",
     "check": "pnpm --filter dnsentry-console check",
-    "start": "pnpm run build && go run ./cmd/dnsentry"
+    "start": "pnpm run build && go run ./cmd/dnsentry",
+    "screenshots": "node scripts/screenshots.mjs"
   },
-  "license": "AGPL-3.0-only"
+  "license": "AGPL-3.0-only",
+  "devDependencies": {
+    "playwright-core": "^1.64.1"
+  }
 }

@@ -124,6 +124,12 @@ func TestConfigChangesIgnoreMaterializedDefaults(t *testing.T) {
 	if changes := configChanges(newer, older); len(changes) != 0 {
 		t.Fatalf("defaults written by a newer version were reported as changes: %v", changes)
 	}
+	// An explicitly empty value is the same as a missing key.
+	config.Encryption.DNSCrypt.ProviderName = ""
+	blank, _ := yaml.Marshal(newYAMLConfig(config))
+	if changes := configChanges(blank, older); len(changes) != 0 {
+		t.Fatalf("empty values reported as changes: %v", changes)
+	}
 	config.BlockAAAA = true
 	changed, _ := yaml.Marshal(newYAMLConfig(config))
 	if changes := configChanges(changed, older); len(changes) != 1 || changes[0] != "dns.block_aaaa" {

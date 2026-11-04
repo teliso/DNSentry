@@ -139,14 +139,19 @@ func configChanges(newer, older []byte) []string {
 		defaultData, _ := yaml.Marshal(newYAMLConfig(config))
 		defaults = flattenYAML(defaultData)
 	}
-	value := func(flat map[string]any, key string) any {
-		if v, ok := flat[key]; ok {
-			return v
+	// A key present in only one file is unchanged when it holds an empty value
+	// or the default: that is what the other file means by leaving it out.
+	same := func(key string) bool {
+		left, leftOK := after[key]
+		right, rightOK := before[key]
+		switch {
+		case leftOK && rightOK:
+			return (emptyConfigValue(left) && emptyConfigValue(right)) || reflect.DeepEqual(left, right)
+		case leftOK:
+			return emptyConfigValue(left) || reflect.DeepEqual(left, defaults[key])
+		default:
+			return emptyConfigValue(right) || reflect.DeepEqual(right, defaults[key])
 		}
-		return defaults[key]
-	}
-	same := func(left, right any) bool {
-		return (emptyConfigValue(left) && emptyConfigValue(right)) || reflect.DeepEqual(left, right)
 	}
 	keys := make([]string, 0)
 	seen := map[string]struct{}{}
@@ -156,7 +161,7 @@ func configChanges(newer, older []byte) []string {
 				continue
 			}
 			seen[key] = struct{}{}
-			if !same(value(after, key), value(before, key)) {
+			if !same(key) {
 				keys = append(keys, key)
 			}
 		}

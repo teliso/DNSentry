@@ -15,7 +15,14 @@ import (
 	"github.com/teliso/DNSentry/internal/fsutil"
 )
 
-const maxConfiguredUpstreams = 32
+const (
+	maxConfiguredUpstreams = 32
+	defaultQueryLogSize    = 1000
+)
+
+// defaultQueryLogFile is where the query log goes unless configured: next to
+// the configuration file.
+func defaultQueryLogFile() string { return filepath.Join(filepath.Dir(configPath()), "querylog") }
 
 // configFile is the YAML configuration path; Run may override it once at startup.
 var configFile = filepath.Join("data", "config.yaml")
@@ -43,8 +50,8 @@ func defaultConfig() *Config {
 		RulesFile:             filepath.Join(dir, "rules.txt"),
 		CacheEnabled:          true,
 		CacheSize:             4 << 20,
-		QueryLogSize:          1000,
-		QueryLogFile:          filepath.Join(dir, "querylog"),
+		QueryLogSize:          defaultQueryLogSize,
+		QueryLogFile:          defaultQueryLogFile(),
 		QueryLogRetentionDays: 7,
 		Access:                DNSAccessConfig{MaxConcurrentQueries: 2048},
 		Encryption:            EncryptionConfig{DNSCrypt: DNSCryptConfig{ProviderName: "dnsentry", CertificateTTLHours: 24}},

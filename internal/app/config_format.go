@@ -1,7 +1,6 @@
 package app
 
 import (
-	"path/filepath"
 	"strings"
 
 	"github.com/teliso/DNSentry/internal/rules"
@@ -74,7 +73,7 @@ func (f yamlConfig) toConfig() *Config {
 	}
 	queryLogFile := strings.TrimSpace(f.Logging.QueryLogFile)
 	if queryLogFile == "" {
-		queryLogFile = filepath.Join("data", "querylog")
+		queryLogFile = defaultQueryLogFile()
 	}
 	queryLogRetentionDays := f.Logging.QueryLogRetentionDays
 	if queryLogRetentionDays == 0 {
