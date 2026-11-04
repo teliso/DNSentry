@@ -2,11 +2,12 @@ package app
 
 import (
 	"context"
-	"github.com/teliso/DNSentry/internal/upstream"
 	"net/http"
 	"strconv"
 	"strings"
 	"sync"
+
+	"github.com/teliso/DNSentry/internal/upstream"
 
 	"github.com/teliso/DNSentry/internal/buildinfo"
 	"github.com/teliso/DNSentry/internal/cache"

@@ -8,6 +8,8 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/teliso/DNSentry/internal/access"
+
 	"github.com/teliso/DNSentry/internal/cache"
 	"github.com/teliso/DNSentry/internal/rules"
 )
@@ -168,7 +170,7 @@ func validateConfig(config *Config) (*Config, error) {
 	if err := validateLocalRecords(config.LocalRecords); err != nil {
 		return nil, err
 	}
-	if err := validateDNSAccessConfig(config.Access); err != nil {
+	if err := access.Validate(config.Access); err != nil {
 		return nil, err
 	}
 	if config.Access.MaxConcurrentQueries == 0 {

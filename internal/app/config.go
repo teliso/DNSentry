@@ -1,6 +1,9 @@
 package app
 
-import "github.com/teliso/DNSentry/internal/rules"
+import (
+	"github.com/teliso/DNSentry/internal/access"
+	"github.com/teliso/DNSentry/internal/rules"
+)
 
 // Config is the effective service configuration. JSON tags describe the Web API
 // shape; the on-disk YAML layout lives in config_format.go.
@@ -39,6 +42,6 @@ type Config struct {
 	OptimisticAnswerTTL   uint32           `json:"cache_optimistic_answer_ttl"`
 	OptimisticMaxAge      uint32           `json:"cache_optimistic_max_age"`
 	RuleSources           []rules.Source   `json:"rule_sources,omitempty"`
-	Access                DNSAccessConfig  `json:"access" yaml:"access"`
+	Access                access.Config    `json:"access" yaml:"access"`
 	Encryption            EncryptionConfig `json:"encryption" yaml:"encryption"`
 }

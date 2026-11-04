@@ -2,10 +2,11 @@ package app
 
 import (
 	"fmt"
-	"github.com/teliso/DNSentry/internal/upstream"
 	"io"
 	"net/http"
 	"strings"
+
+	"github.com/teliso/DNSentry/internal/upstream"
 )
 
 func (a *API) writeMetrics(writer http.ResponseWriter, _ *http.Request) {

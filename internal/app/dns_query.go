@@ -5,6 +5,8 @@ import (
 	"net"
 	"time"
 
+	"github.com/teliso/DNSentry/internal/access"
+
 	blockydnssec "github.com/0xERR0R/blocky/resolver/dnssec"
 	"github.com/miekg/dns"
 	"github.com/teliso/DNSentry/internal/dnsname"
@@ -134,7 +136,7 @@ func (s *DNSServer) ServeDNS(writer dns.ResponseWriter, request *dns.Msg) {
 			rebindingPolicy := s.accessPolicySnapshot()
 			rebindingBlocked := false
 			if s.routeFor(request) == nil { // explicitly routed names are trusted
-				response, rebindingBlocked = filterRebindingResponse(response, question, rebindingPolicy)
+				response, rebindingBlocked = access.FilterRebinding(response, question, rebindingPolicy)
 			}
 			validated = validated && !rebindingBlocked
 			response = filterCachedResponseWithDNSSEC(response, request, validated)
@@ -170,7 +172,7 @@ func (s *DNSServer) ServeDNS(writer dns.ResponseWriter, request *dns.Msg) {
 		rebindingBlocked := false
 		routed := s.routeFor(request) != nil // explicitly routed names are trusted
 		if !routed {
-			response, rebindingBlocked = filterRebindingResponse(response, question, rebindingPolicy)
+			response, rebindingBlocked = access.FilterRebinding(response, question, rebindingPolicy)
 		}
 		validated := false
 		if config.DNSSECValidate && !rebindingBlocked && !routed {
@@ -262,7 +264,7 @@ func (s *DNSServer) refreshInBackground(request *dns.Msg, key string) bool {
 		rebindingBlocked := false
 		routed := s.routeFor(request) != nil
 		if !routed {
-			response, rebindingBlocked = filterRebindingResponse(response, request.Question[0], rebindingPolicy)
+			response, rebindingBlocked = access.FilterRebinding(response, request.Question[0], rebindingPolicy)
 		}
 		validated := false
 		if config.DNSSECValidate && !rebindingBlocked && !routed {

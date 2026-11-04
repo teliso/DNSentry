@@ -3,9 +3,10 @@ package app
 import (
 	"errors"
 	"fmt"
-	"github.com/teliso/DNSentry/internal/upstream"
 	"reflect"
 	"strings"
+
+	"github.com/teliso/DNSentry/internal/upstream"
 
 	"github.com/miekg/dns"
 

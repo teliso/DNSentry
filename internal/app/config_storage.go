@@ -10,6 +10,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/teliso/DNSentry/internal/access"
+
 	"gopkg.in/yaml.v3"
 
 	"github.com/teliso/DNSentry/internal/fsutil"
@@ -53,7 +55,7 @@ func defaultConfig() *Config {
 		QueryLogSize:          defaultQueryLogSize,
 		QueryLogFile:          defaultQueryLogFile(),
 		QueryLogRetentionDays: 7,
-		Access:                DNSAccessConfig{MaxConcurrentQueries: 2048},
+		Access:                access.Config{MaxConcurrentQueries: 2048},
 		Encryption:            EncryptionConfig{DNSCrypt: DNSCryptConfig{ProviderName: "dnsentry", CertificateTTLHours: 24}},
 	}
 }

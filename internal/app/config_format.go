@@ -3,6 +3,8 @@ package app
 import (
 	"strings"
 
+	"github.com/teliso/DNSentry/internal/access"
+
 	"github.com/teliso/DNSentry/internal/rules"
 )
 
@@ -47,7 +49,7 @@ type yamlConfig struct {
 		LocalFile string         `yaml:"local_file"`
 		Sources   []rules.Source `yaml:"sources,omitempty"`
 	} `yaml:"rules"`
-	Access     DNSAccessConfig  `yaml:"access"`
+	Access     access.Config    `yaml:"access"`
 	Encryption EncryptionConfig `yaml:"encryption"`
 	Logging    struct {
 		QueryLogSize          int    `yaml:"query_log_size"`

@@ -2,11 +2,13 @@ package app
 
 import (
 	"crypto/tls"
-	"github.com/teliso/DNSentry/internal/upstream"
 	"slices"
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/teliso/DNSentry/internal/access"
+	"github.com/teliso/DNSentry/internal/upstream"
 
 	"github.com/miekg/dns"
 	"github.com/teliso/DNSentry/internal/cache"
@@ -31,8 +33,8 @@ type DNSServer struct {
 	pool                  *upstream.Pool
 	fallbackPool          *upstream.Pool
 	accessMu              sync.RWMutex
-	accessPolicy          *clientAccessPolicy
-	clientLimiter         *clientRateLimiter
+	accessPolicy          *access.Policy
+	clientLimiter         *access.Limiter
 	inFlightQueries       atomic.Int64
 	maxConcurrentQueries  atomic.Int64
 	protectionPausedUntil atomic.Int64 // unix nanoseconds; 0 = filtering on
@@ -114,7 +116,7 @@ func (s *DNSServer) applyConfig(config Config) error {
 	previous := s.configSnapshot()
 	dnssecChanged := previous.DNSSECValidate != config.DNSSECValidate || previous.DNSSECAutoUpdate != config.DNSSECAutoUpdate || previous.DNSSECTrustAnchorFile != config.DNSSECTrustAnchorFile || !slices.Equal(previous.DNSSECTrustAnchors, config.DNSSECTrustAnchors)
 	localRecordsChanged := !localRecordsEqual(previous.LocalRecords, config.LocalRecords)
-	accessChanged := !dnsAccessConfigEqual(previous.Access, config.Access)
+	accessChanged := !access.Equal(previous.Access, config.Access)
 	if dnssecChanged {
 		// validateConfig has already checked the anchors. Keep the old validator
 		// if an unexpected construction error occurs, rather than serving with a

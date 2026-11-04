@@ -1,4 +1,6 @@
-package app
+// Package access decides which clients may use the resolver: allow and deny
+// lists, per-client rate limiting and DNS rebinding protection.
+package access
 
 import (
 	"errors"
@@ -15,9 +17,10 @@ import (
 	"github.com/teliso/DNSentry/internal/dnsname"
 )
 
-const maxClientRateLimitQPS = 1_000_000
+const maxRateLimitQPS = 1_000_000
 
-type DNSAccessConfig struct {
+// Config is the access section of the configuration.
+type Config struct {
 	AllowedClients        []string `json:"allowed_clients,omitempty" yaml:"allowed_clients,omitempty"`
 	DeniedClients         []string `json:"denied_clients,omitempty" yaml:"denied_clients,omitempty"`
 	ClientRateLimitQPS    int      `json:"client_rate_limit_qps" yaml:"client_rate_limit_qps"`
@@ -26,16 +29,17 @@ type DNSAccessConfig struct {
 	RebindingAllowDomains []string `json:"rebinding_allow_domains,omitempty" yaml:"rebinding_allow_domains,omitempty"`
 }
 
-type clientAccessPolicy struct {
+// Policy is the compiled form of the allow and deny lists.
+type Policy struct {
 	allowed      []netip.Prefix
 	denied       []netip.Prefix
 	rebinding    bool
 	allowDomains []string
 }
 
-func validateDNSAccessConfig(config DNSAccessConfig) error {
-	if config.ClientRateLimitQPS < 0 || config.ClientRateLimitQPS > maxClientRateLimitQPS {
-		return fmt.Errorf("client_rate_limit_qps must be between 0 and %d", maxClientRateLimitQPS)
+func Validate(config Config) error {
+	if config.ClientRateLimitQPS < 0 || config.ClientRateLimitQPS > maxRateLimitQPS {
+		return fmt.Errorf("client_rate_limit_qps must be between 0 and %d", maxRateLimitQPS)
 	}
 	if config.MaxConcurrentQueries < 0 {
 		return errors.New("max_concurrent_queries must not be negative")
@@ -73,7 +77,7 @@ func parseClientPrefix(value string) (netip.Prefix, error) {
 	return prefix.Masked(), nil
 }
 
-func dnsAccessConfigEqual(left, right DNSAccessConfig) bool {
+func Equal(left, right Config) bool {
 	return slices.Equal(left.AllowedClients, right.AllowedClients) &&
 		slices.Equal(left.DeniedClients, right.DeniedClients) &&
 		left.ClientRateLimitQPS == right.ClientRateLimitQPS &&
@@ -82,8 +86,8 @@ func dnsAccessConfigEqual(left, right DNSAccessConfig) bool {
 		slices.Equal(left.RebindingAllowDomains, right.RebindingAllowDomains)
 }
 
-func newClientAccessPolicy(config DNSAccessConfig) *clientAccessPolicy {
-	policy := &clientAccessPolicy{rebinding: config.RebindingProtection}
+func NewPolicy(config Config) *Policy {
+	policy := &Policy{rebinding: config.RebindingProtection}
 	for _, value := range config.AllowedClients {
 		if prefix, err := parseClientPrefix(value); err == nil {
 			policy.allowed = append(policy.allowed, prefix)
@@ -104,7 +108,7 @@ func newClientAccessPolicy(config DNSAccessConfig) *clientAccessPolicy {
 	return policy
 }
 
-func (p *clientAccessPolicy) allows(client string) bool {
+func (p *Policy) Allows(client string) bool {
 	if p == nil {
 		return true
 	}
@@ -128,7 +132,7 @@ func (p *clientAccessPolicy) allows(client string) bool {
 	return false
 }
 
-func (p *clientAccessPolicy) allowsRebindingDomain(domain string) bool {
+func (p *Policy) AllowsRebindingDomain(domain string) bool {
 	if p == nil || !p.rebinding {
 		return true
 	}
@@ -148,20 +152,21 @@ type clientRateState struct {
 	last   time.Time
 }
 
-type clientRateLimiter struct {
+// Limiter is a per-client token bucket.
+type Limiter struct {
 	mu       sync.Mutex
 	states   map[string]clientRateState
 	qps      int
 	maxItems int
 }
 
-func newClientRateLimiter(qps int) *clientRateLimiter {
-	limiter := &clientRateLimiter{states: make(map[string]clientRateState), maxItems: 8192}
+func NewLimiter(qps int) *Limiter {
+	limiter := &Limiter{states: make(map[string]clientRateState), maxItems: 8192}
 	limiter.SetQPS(qps)
 	return limiter
 }
 
-func (l *clientRateLimiter) SetQPS(qps int) {
+func (l *Limiter) SetQPS(qps int) {
 	l.mu.Lock()
 	l.qps = qps
 	if qps <= 0 {
@@ -170,7 +175,7 @@ func (l *clientRateLimiter) SetQPS(qps int) {
 	l.mu.Unlock()
 }
 
-func (l *clientRateLimiter) Allow(client string) bool {
+func (l *Limiter) Allow(client string) bool {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	if l.qps <= 0 {
@@ -199,7 +204,7 @@ func (l *clientRateLimiter) Allow(client string) bool {
 	return true
 }
 
-func (l *clientRateLimiter) evictOneLocked() {
+func (l *Limiter) evictOneLocked() {
 	var oldestClient string
 	var oldest time.Time
 	for client, state := range l.states {
@@ -213,60 +218,12 @@ func (l *clientRateLimiter) evictOneLocked() {
 	}
 }
 
-func (s *DNSServer) configureAccess(config DNSAccessConfig) {
-	policy := newClientAccessPolicy(config)
-	s.accessMu.Lock()
-	s.accessPolicy = policy
-	if s.clientLimiter == nil {
-		s.clientLimiter = newClientRateLimiter(config.ClientRateLimitQPS)
-	} else {
-		s.clientLimiter.SetQPS(config.ClientRateLimitQPS)
-	}
-	s.accessMu.Unlock()
-	s.maxConcurrentQueries.Store(int64(config.MaxConcurrentQueries))
-}
-
-func (s *DNSServer) accessPolicySnapshot() *clientAccessPolicy {
-	s.accessMu.RLock()
-	defer s.accessMu.RUnlock()
-	return s.accessPolicy
-}
-
-func (s *DNSServer) clientAllowed(client string) bool {
-	return s.accessPolicySnapshot().allows(client)
-}
-
-func (s *DNSServer) clientRateAllowed(client string) bool {
-	s.accessMu.RLock()
-	limiter := s.clientLimiter
-	s.accessMu.RUnlock()
-	return limiter == nil || limiter.Allow(client)
-}
-
-func (s *DNSServer) acquireQuerySlot() bool {
-	max := s.maxConcurrentQueries.Load()
-	for {
-		current := s.inFlightQueries.Load()
-		if max > 0 && current >= max {
-			return false
-		}
-		if s.inFlightQueries.CompareAndSwap(current, current+1) {
-			return true
-		}
-		max = s.maxConcurrentQueries.Load()
-	}
-}
-
-func (s *DNSServer) releaseQuerySlot() {
-	s.inFlightQueries.Add(-1)
-}
-
 func isPrivateDNSAddress(ip net.IP) bool {
 	return ip != nil && (ip.IsPrivate() || ip.IsLoopback() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() || ip.IsUnspecified())
 }
 
-func filterRebindingResponse(response *dns.Msg, question dns.Question, policy *clientAccessPolicy) (*dns.Msg, bool) {
-	if response == nil || policy == nil || !policy.rebinding || policy.allowsRebindingDomain(question.Name) {
+func FilterRebinding(response *dns.Msg, question dns.Question, policy *Policy) (*dns.Msg, bool) {
+	if response == nil || policy == nil || !policy.rebinding || policy.AllowsRebindingDomain(question.Name) {
 		return response, false
 	}
 	blocked := false

@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/teliso/DNSentry/internal/upstream"
 	"io/fs"
 	"log/slog"
 	"net"
@@ -15,6 +14,8 @@ import (
 	"sync"
 	"syscall"
 	"time"
+
+	"github.com/teliso/DNSentry/internal/upstream"
 
 	"github.com/miekg/dns"
 	"github.com/teliso/DNSentry/internal/buildinfo"

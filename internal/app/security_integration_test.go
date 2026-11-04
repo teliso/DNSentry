@@ -7,6 +7,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/teliso/DNSentry/internal/access"
+
 	"github.com/teliso/DNSentry/internal/upstream"
 
 	"github.com/miekg/dns"
@@ -65,7 +67,7 @@ func TestDNSAccessControlAppliesToServeDNS(t *testing.T) {
 	config := &Config{DNSListens: []string{":15353"}, HTTPListen: "127.0.0.1:18080", CacheEnabled: true, Upstreams: []string{"127.0.0.1:1"}}
 	server := newSecurityPipelineServer(t, config)
 	server.setLocalRecords([]LocalRecord{{Domain: "router.home", Type: "A", Value: "192.168.1.1", TTL: 60}})
-	server.configureAccess(DNSAccessConfig{AllowedClients: []string{"192.0.2.0/24"}})
+	server.configureAccess(access.Config{AllowedClients: []string{"192.0.2.0/24"}})
 	request := newTestRequest("router.home.", dns.TypeA)
 
 	denied := &securityCaptureWriter{remote: &net.UDPAddr{IP: net.ParseIP("198.51.100.10"), Port: 4000}}
@@ -89,7 +91,7 @@ func TestClientRateLimitAppliesBeforeResolution(t *testing.T) {
 	config := &Config{DNSListens: []string{":15353"}, HTTPListen: "127.0.0.1:18080", CacheEnabled: true, Upstreams: []string{"127.0.0.1:1"}}
 	server := newSecurityPipelineServer(t, config)
 	server.setLocalRecords([]LocalRecord{{Domain: "router.home", Type: "A", Value: "192.168.1.1", TTL: 60}})
-	server.configureAccess(DNSAccessConfig{ClientRateLimitQPS: 1})
+	server.configureAccess(access.Config{ClientRateLimitQPS: 1})
 	request := newTestRequest("router.home.", dns.TypeA)
 	remote := &net.UDPAddr{IP: net.ParseIP("192.0.2.10"), Port: 4000}
 
@@ -126,7 +128,7 @@ func TestRebindingProtectionAppliesToUpstreamResponse(t *testing.T) {
 
 	config := &Config{DNSListens: []string{":15353"}, HTTPListen: "127.0.0.1:18080", CacheEnabled: true, Upstreams: []string{connection.LocalAddr().String()}}
 	server := newSecurityPipelineServer(t, config)
-	server.configureAccess(DNSAccessConfig{RebindingProtection: true})
+	server.configureAccess(access.Config{RebindingProtection: true})
 	writer := &securityCaptureWriter{remote: &net.UDPAddr{IP: net.ParseIP("192.0.2.10"), Port: 4000}}
 	server.ServeDNS(writer, newTestRequest("public.example.", dns.TypeA))
 	if writer.response == nil || writer.response.Rcode != dns.RcodeServerFailure {
