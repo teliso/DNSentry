@@ -36,6 +36,9 @@ func validateConfig(config *Config) (*Config, error) {
 	if err := validateListenAddress("web listen", config.HTTPListen); err != nil {
 		return nil, err
 	}
+	if err := validateWebTLS(config.WebTLS); err != nil {
+		return nil, err
+	}
 	if config.UpstreamTimeout <= 0 {
 		config.UpstreamTimeout = 4
 	}

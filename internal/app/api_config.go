@@ -21,6 +21,7 @@ func publicConfig(config Config) Config {
 func restartRequired(saved, running Config) bool {
 	return !slices.Equal(saved.DNSListens, running.DNSListens) ||
 		saved.HTTPListen != running.HTTPListen ||
+		saved.WebTLS != running.WebTLS ||
 		saved.RulesFile != running.RulesFile ||
 		queryLogSettingsChanged(saved, running) ||
 		!encryptionConfigEqual(saved.Encryption, running.Encryption)
@@ -38,6 +39,7 @@ func queryLogSettingsChanged(next, current Config) bool {
 func withRunningStartupSettings(config, running Config) Config {
 	config.DNSListens = running.DNSListens
 	config.HTTPListen = running.HTTPListen
+	config.WebTLS = running.WebTLS
 	config.RulesFile = running.RulesFile
 	config.QueryLogSize, config.QueryLogEnabled = running.QueryLogSize, running.QueryLogEnabled
 	config.QueryLogFile, config.QueryLogRetentionDays = running.QueryLogFile, running.QueryLogRetentionDays
@@ -163,6 +165,8 @@ func checkAPIPaths(next, saved Config) error {
 	}{
 		{"rules_file", next.RulesFile, saved.RulesFile},
 		{"query_log_file", next.QueryLogFile, saved.QueryLogFile},
+		{"web_tls.certificate", next.WebTLS.Certificate, saved.WebTLS.Certificate},
+		{"web_tls.private_key", next.WebTLS.PrivateKey, saved.WebTLS.PrivateKey},
 		{"dnssec_trust_anchor_file", next.DNSSECTrustAnchorFile, saved.DNSSECTrustAnchorFile},
 		{"encryption.certificate", next.Encryption.Certificate, saved.Encryption.Certificate},
 		{"encryption.private_key", next.Encryption.PrivateKey, saved.Encryption.PrivateKey},

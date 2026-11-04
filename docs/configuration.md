@@ -84,6 +84,10 @@ dns:
   local_records: []                # 也可在控制台“本地记录”页维护
 web:
   listen: 127.0.0.1:18080          # [restart]
+  tls:                             # [restart] 控制台 HTTPS，见 docs/deployment.md
+    enabled: false
+    certificate: ""                # PEM 证书路径；留空 = 自动生成自签名证书
+    private_key: ""
 cache:
   enabled: true
   size: 4194304                    # 字节

@@ -6,6 +6,7 @@
   import AccountSection from '../sections/AccountSection.svelte';
   import AccessSection from '../sections/AccessSection.svelte';
   import EncryptionSection from '../sections/EncryptionSection.svelte';
+  import WebTlsSection from '../sections/WebTlsSection.svelte';
   import ListenSection from '../sections/ListenSection.svelte';
   import LoggingSection from '../sections/LoggingSection.svelte';
   import MaintenanceSection from '../sections/MaintenanceSection.svelte';
@@ -29,6 +30,7 @@
 {:else if store.draft}
   {#if router.tab === 'network'}
     <ListenSection config={store.draft} />
+    <WebTlsSection config={store.draft} />
     <AccessSection config={store.draft} />
   {:else if router.tab === 'encryption'}
     <EncryptionSection config={store.draft} />

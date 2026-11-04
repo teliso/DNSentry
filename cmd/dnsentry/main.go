@@ -2,6 +2,7 @@
 package main
 
 import (
+	"crypto/tls"
 	"flag"
 	"fmt"
 	"log/slog"
@@ -50,19 +51,33 @@ func main() {
 	}
 }
 
+// probe requests url and reports whether it answers 200. A loopback http URL is
+// also tried as https (the console may be serving TLS with a self-signed
+// certificate, which is not verified for the local check).
 func probe(url string) int {
-	client := http.Client{Timeout: 3 * time.Second}
-	response, err := client.Get(url)
-	if err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		return 1
+	candidates := []string{url}
+	if strings.HasPrefix(url, "http://127.0.0.1") || strings.HasPrefix(url, "http://localhost") || strings.HasPrefix(url, "http://[::1]") {
+		candidates = append(candidates, "https://"+strings.TrimPrefix(url, "http://"))
 	}
-	_ = response.Body.Close()
-	if response.StatusCode != http.StatusOK {
-		fmt.Fprintln(os.Stderr, "unhealthy:", response.Status)
-		return 1
+	var last error
+	for _, candidate := range candidates {
+		client := http.Client{Timeout: 3 * time.Second}
+		if strings.HasPrefix(candidate, "https://") {
+			client.Transport = &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true, MinVersion: tls.VersionTLS12}} // loopback health check only
+		}
+		response, err := client.Get(candidate)
+		if err != nil {
+			last = err
+			continue
+		}
+		_ = response.Body.Close()
+		if response.StatusCode == http.StatusOK {
+			return 0
+		}
+		last = fmt.Errorf("unhealthy: %s", response.Status)
 	}
-	return 0
+	fmt.Fprintln(os.Stderr, last)
+	return 1
 }
 
 func envOr(key, fallback string) string {

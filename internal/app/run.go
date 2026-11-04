@@ -175,6 +175,19 @@ func run(ctx context.Context, stop context.CancelFunc, static fs.FS) error {
 	api := newAPI(ctx, apiToken, server, updater, services.dnscrypt)
 	api.auth = loginStore
 	httpServer := newHTTPServer(api, static, dnsService.Ready)
+	scheme := "http"
+	if config.WebTLS.Enabled {
+		certs, err := newWebCertificates(config.WebTLS, filepath.Dir(configPath()))
+		if err != nil {
+			services.closeAll()
+			return err
+		}
+		api.webTLS = certs
+		httpServer.TLSConfig = certs.tlsConfig()
+		scheme = "https"
+	} else if !isLoopbackHTTPListen(config.HTTPListen) {
+		slog.Warn("the web console is reachable over plain HTTP: passwords and session cookies are not encrypted; enable HTTPS in Settings or put it behind an HTTPS reverse proxy")
+	}
 	httpListener, err := net.Listen("tcp", config.HTTPListen)
 	if err != nil {
 		services.closeAll()
@@ -183,7 +196,7 @@ func run(ctx context.Context, stop context.CancelFunc, static fs.FS) error {
 	for _, address := range dnsService.Addresses() {
 		slog.Info("DNS listening", "address", address, "protocols", "udp,tcp")
 	}
-	slog.Info("web console listening", "url", "http://"+httpListener.Addr().String())
+	slog.Info("web console listening", "url", scheme+"://"+httpListener.Addr().String())
 
 	if err := services.start(ctx); err != nil {
 		_ = httpListener.Close()
@@ -198,7 +211,13 @@ func run(ctx context.Context, stop context.CancelFunc, static fs.FS) error {
 	dnssecAnchorDone := make(chan struct{})
 	go server.watchDNSSECTrustAnchorFile(ctx, dnssecAnchorDone)
 	httpServeDone := make(chan error, 1)
-	go func() { httpServeDone <- httpServer.Serve(httpListener) }()
+	go func() {
+		if config.WebTLS.Enabled {
+			httpServeDone <- httpServer.ServeTLS(httpListener, "", "") // certificates come from TLSConfig.GetCertificate
+		} else {
+			httpServeDone <- httpServer.Serve(httpListener)
+		}
+	}()
 
 	select {
 	case err := <-httpServeDone:

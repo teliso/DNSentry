@@ -10,6 +10,7 @@ import (
 type Config struct {
 	DNSListens            []string         `json:"dns_listens,omitempty"`
 	HTTPListen            string           `json:"http_listen"`
+	WebTLS                WebTLSConfig     `json:"web_tls"`
 	Upstreams             []string         `json:"upstreams"`
 	FallbackUpstreams     []string         `json:"fallback_upstreams"`
 	UpstreamMode          string           `json:"upstream_mode"`

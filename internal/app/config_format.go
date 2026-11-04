@@ -35,7 +35,8 @@ type yamlConfig struct {
 		BlockedResponseTTL    uint32          `yaml:"blocked_response_ttl"`
 	} `yaml:"dns"`
 	Web struct {
-		Listen string `yaml:"listen"`
+		Listen string       `yaml:"listen"`
+		TLS    WebTLSConfig `yaml:"tls,omitempty"`
 	} `yaml:"web"`
 	Cache struct {
 		Enabled             *bool  `yaml:"enabled"`
@@ -86,6 +87,7 @@ func (f yamlConfig) toConfig() *Config {
 	return &Config{
 		DNSListens:            dnsListens,
 		HTTPListen:            f.Web.Listen,
+		WebTLS:                f.Web.TLS,
 		Upstreams:             f.DNS.Upstreams,
 		FallbackUpstreams:     f.DNS.FallbackUpstreams,
 		UpstreamMode:          f.DNS.UpstreamMode,
@@ -150,6 +152,7 @@ func newYAMLConfig(config *Config) yamlConfig {
 	fileConfig.DNS.DNSSECAutoUpdate = config.DNSSECAutoUpdate
 	fileConfig.DNS.BlockedResponseTTL = config.BlockedResponseTTL
 	fileConfig.Web.Listen = config.HTTPListen
+	fileConfig.Web.TLS = config.WebTLS
 	fileConfig.Cache.Enabled = boolPtr(config.CacheEnabled)
 	fileConfig.Cache.Size = config.CacheSize
 	fileConfig.Cache.TTLMin = config.CacheTTLMin

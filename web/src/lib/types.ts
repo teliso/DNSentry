@@ -83,6 +83,7 @@ export type Protection = { enabled: boolean; resume_at?: string };
 export type Status = {
   /** Saved configuration has startup-only changes that need a service restart. */
   restart_required: boolean;
+  web_tls: WebTlsInfo;
   protection: Protection;
   version: string;
   config_path: string;
@@ -164,9 +165,14 @@ export type RouteStatus = { name?: string; domains: string[]; upstreams: Upstrea
 export type UpstreamMode = 'load_balance' | 'parallel' | 'fastest_addr';
 export type BlockingMode = 'nxdomain' | 'null_ip' | 'custom_ip' | 'refused';
 
+export type WebTlsConfig = { enabled: boolean; certificate: string; private_key: string };
+/** The certificate the console is serving right now (Status.web_tls). */
+export type WebTlsInfo = { enabled: boolean; mode?: 'custom' | 'self-signed'; fingerprint?: string; not_after?: string };
+
 export type Config = {
   dns_listens: string[];
   http_listen: string;
+  web_tls: WebTlsConfig;
   upstreams: string[];
   fallback_upstreams: string[];
   upstream_mode: UpstreamMode;

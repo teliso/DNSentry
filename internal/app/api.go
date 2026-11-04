@@ -36,8 +36,9 @@ type API struct {
 	saved    *Config
 
 	authFailures authThrottle
-	auth         *auth.Store    // console login; opened on first use when nil
-	sessions     *auth.Sessions // browser sessions of that login
+	auth         *auth.Store      // console login; opened on first use when nil
+	webTLS       *webCertificates // nil when the console is served over plain HTTP
+	sessions     *auth.Sessions   // browser sessions of that login
 }
 
 func newAPI(ctx context.Context, apiToken string, resolver *DNSServer, updater *rules.Updater, dnscrypt *DNSCryptService) *API {
@@ -195,6 +196,7 @@ func (a *API) getStatus(writer http.ResponseWriter, _ *http.Request) {
 		"config_path":              configPath(),
 		"rules_file":               config.RulesFile,
 		"restart_required":         pendingRestart,
+		"web_tls":                  a.webTLS.Info(),
 		"protection":               a.resolver.protectionStatus(),
 		"dns_listens":              config.DNSListens,
 		"http_listen":              config.HTTPListen,

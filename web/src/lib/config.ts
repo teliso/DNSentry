@@ -1,4 +1,4 @@
-import type { AccessConfig, Config, DNSCryptConfig, EncryptionConfig, SecureProtocol } from './types';
+import type { WebTlsConfig, AccessConfig, Config, DNSCryptConfig, EncryptionConfig, SecureProtocol } from './types';
 
 export const SECURE_PROTOCOLS: SecureProtocol[] = ['dot', 'doh', 'doh3', 'doq'];
 
@@ -23,6 +23,8 @@ const defaultEncryption: EncryptionConfig = {
   doq_listens: [],
   dnscrypt: defaultDNSCrypt
 };
+
+const defaultWebTls: WebTlsConfig = { enabled: false, certificate: '', private_key: '' };
 
 const defaultAccess: AccessConfig = {
   allowed_clients: [],
@@ -63,6 +65,7 @@ export function normalizeConfig(raw: Config): Config {
   return finalizeListeners({
     ...raw,
     dns_listens: cleanList(raw.dns_listens),
+    web_tls: { ...defaultWebTls, ...raw.web_tls },
     upstreams: cleanList(raw.upstreams),
     fallback_upstreams: cleanList(raw.fallback_upstreams),
     blocked_services: cleanList(raw.blocked_services),
