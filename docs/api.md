@@ -37,7 +37,9 @@ curl -H "Authorization: Bearer $TOKEN" http://192.168.1.2:18080/api/status
 | `DELETE /auth` | 关闭控制台密码：`{"current_password"}` |
 | `GET /services` | 可整体屏蔽的服务目录：`[{"id","name","group","domains"}]`，配置里的 `blocked_services` 填其中的 `id` |
 | `GET /stats?range=` | 长周期统计，`range` 为 `24h`（按小时）、`7d`、`30d`、`90d`（按天），默认 `24h`；返回 `[{"time","queries","blocked"}]`，重启后保留 |
-| `GET /logs/export` | 导出内存日志（`format=csv`（默认）或 `json`，可带 `search`、`action` 过滤），作为下载文件返回 |
+| `GET /logs?date=YYYY-MM-DD` | 同 `GET /logs`，但读取磁盘上保存的那一天（需要开启“保存日志到磁盘”，否则 404） |
+| `GET /logs/days` | `{"enabled": bool, "days": ["2026-11-04", …]}`：是否保存到磁盘，以及有日志的日期（新的在前） |
+| `GET /logs/export` | 导出内存日志（`format=csv`（默认）或 `json`，可带 `search`、`action`、`date` 过滤），作为下载文件返回 |
 | `GET /logs/export` | 导出内存日志（`format=csv`（默认）或 `json`，可带 `search`、`action` 过滤），作为下载文件返回 |
 | `GET /logs` | 查询日志（分页） |
 | `GET /rules` | 规则（分页） |

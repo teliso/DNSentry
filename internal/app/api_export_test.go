@@ -3,6 +3,7 @@ package app
 import (
 	"bytes"
 	"encoding/csv"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -73,5 +74,23 @@ func TestConfigExportAndImportRoundTrip(t *testing.T) {
 	}
 	if response := post(exported.Body.String() + "\nrules_dummy: 1\n"); response.Code != http.StatusOK {
 		t.Fatalf("unknown keys must be ignored: %d", response.Code)
+	}
+}
+
+func TestSavedLogEndpointsWithoutPersistence(t *testing.T) {
+	api := newConfigTestAPI(t)
+	var days struct {
+		Enabled bool     `json:"enabled"`
+		Days    []string `json:"days"`
+	}
+	response := callAPI(t, api, http.MethodGet, "/api/logs/days", nil)
+	if response.Code != http.StatusOK || json.Unmarshal(response.Body.Bytes(), &days) != nil || days.Enabled || days.Days == nil || len(days.Days) != 0 {
+		t.Fatalf("days = %d %s", response.Code, response.Body)
+	}
+	if code := callAPI(t, api, http.MethodGet, "/api/logs?date=2026-01-01", nil).Code; code != http.StatusNotFound {
+		t.Fatalf("a saved day without persistence = %d", code)
+	}
+	if code := callAPI(t, api, http.MethodGet, "/api/logs/export?date=2026-01-01", nil).Code; code != http.StatusNotFound {
+		t.Fatalf("exporting a saved day without persistence = %d", code)
 	}
 }

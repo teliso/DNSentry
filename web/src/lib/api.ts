@@ -1,4 +1,4 @@
-import type { AuthStatus, Config, ServiceInfo, MetricPoint, ConfigVersion, LocalSummary, LogPage, LogQuery, Rule, RuleAction, RuleCheck, Protection, RulePage, RuleQuery, RuleSource, Status, UpstreamTest } from './types';
+import type { LogDays, AuthStatus, Config, ServiceInfo, MetricPoint, ConfigVersion, LocalSummary, LogPage, LogQuery, Rule, RuleAction, RuleCheck, Protection, RulePage, RuleQuery, RuleSource, Status, UpstreamTest } from './types';
 
 const TOKEN_KEY = 'dnsentry_api_token';
 
@@ -117,7 +117,8 @@ export const api = {
   removeLogin: (currentPassword: string) => request<AuthStatus>('/auth', 'DELETE', { current_password: currentPassword }),
   services: () => request<ServiceInfo[]>('/services'),
   stats: (range: string) => request<MetricPoint[]>(`/stats?range=${range}`),
-  exportLogs: (format: 'csv' | 'json', query: { search?: string; action?: string }) => download(`/logs/export?${toParams({ ...query, format })}`, `dnsentry-logs.${format}`),
+  logDays: () => request<LogDays>('/logs/days'),
+  exportLogs: (format: 'csv' | 'json', query: { search?: string; action?: string; date?: string }) => download(`/logs/export?${toParams({ ...query, format })}`, `dnsentry-logs.${format}`),
   exportConfig: () => download('/config/export', 'dnsentry-config.yaml'),
   importConfig: (yaml: string) => request<Config>('/config/import', 'POST', yaml),
   setProtection: (enabled: boolean, durationMinutes = 0) => request<Protection>('/protection', 'POST', { enabled, duration_minutes: durationMinutes }),

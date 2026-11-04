@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"strconv"
 	"strings"
@@ -89,6 +90,7 @@ var apiRoutes = []apiRoute{
 	{http.MethodPut, "/sources", (*API).updateSources},
 	{http.MethodPost, "/sources/refresh", (*API).refreshSources},
 	{http.MethodGet, "/logs/export", (*API).exportLogs},
+	{http.MethodGet, "/logs/days", (*API).listLogDays},
 	{http.MethodGet, "/logs", (*API).listLogs},
 }
 
@@ -246,15 +248,44 @@ func (a *API) getStats(writer http.ResponseWriter, request *http.Request) {
 	writeJSON(writer, http.StatusOK, a.logs.History(window))
 }
 
-// listLogs serves GET /logs?search=&action=&offset=&limit=.
+// listLogs serves GET /logs?search=&action=&offset=&limit= (the recent
+// in-memory log) and, with date=YYYY-MM-DD, a day saved on disk.
 func (a *API) listLogs(writer http.ResponseWriter, request *http.Request) {
 	query := request.URL.Query()
 	offset, _ := strconv.Atoi(query.Get("offset"))
 	limit, _ := strconv.Atoi(query.Get("limit"))
-	writeJSON(writer, http.StatusOK, a.logs.Query(querylog.Filter{
-		Search: query.Get("search"),
-		Action: query.Get("action"),
-		Offset: offset,
-		Limit:  limit,
-	}))
+	filter := querylog.Filter{Search: query.Get("search"), Action: query.Get("action"), Offset: offset, Limit: limit}
+	if day := query.Get("date"); day != "" {
+		page, err := a.logs.QueryHistory(day, filter)
+		if !writeHistoryError(writer, err) {
+			return
+		}
+		writeJSON(writer, http.StatusOK, page)
+		return
+	}
+	writeJSON(writer, http.StatusOK, a.logs.Query(filter))
+}
+
+// writeHistoryError reports a failed saved-log read and returns whether there was none.
+func writeHistoryError(writer http.ResponseWriter, err error) bool {
+	switch {
+	case err == nil:
+		return true
+	case errors.Is(err, querylog.ErrNoHistory):
+		writeError(writer, http.StatusNotFound, err.Error())
+	case errors.Is(err, querylog.ErrBadDate):
+		writeError(writer, http.StatusBadRequest, err.Error())
+	default:
+		writeError(writer, http.StatusInternalServerError, "could not read the saved log")
+	}
+	return false
+}
+
+// listLogDays serves GET /logs/days: whether logs are saved to disk and which days exist.
+func (a *API) listLogDays(writer http.ResponseWriter, _ *http.Request) {
+	days := a.logs.HistoryDays()
+	if days == nil {
+		days = []string{}
+	}
+	writeJSON(writer, http.StatusOK, map[string]any{"enabled": a.resolver.configSnapshot().QueryLogEnabled, "days": days})
 }

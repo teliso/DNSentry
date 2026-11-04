@@ -120,8 +120,9 @@ export type LogEntry = {
   rule_source?: string;
 };
 
-export type LogQuery = { search?: string; action?: string; offset?: number; limit?: number };
-export type LogPage = { total: number; items: LogEntry[]; actions: string[] };
+export type LogQuery = { search?: string; action?: string; offset?: number; limit?: number; date?: string };
+export type LogPage = { total: number; items: LogEntry[]; actions: string[]; truncated?: boolean };
+export type LogDays = { enabled: boolean; days: string[] };
 
 export type LocalRecordType = 'A' | 'AAAA' | 'CNAME' | 'TXT';
 export type LocalRecord = { domain: string; type: LocalRecordType; value: string; ttl: number };

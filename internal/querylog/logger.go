@@ -348,6 +348,9 @@ type Page struct {
 	Total   int      `json:"total"`
 	Items   []Entry  `json:"items"`
 	Actions []string `json:"actions"`
+	// Truncated is set when a saved day held more matching entries than are
+	// kept in memory, so the oldest of them are missing.
+	Truncated bool `json:"truncated,omitempty"`
 }
 
 const maxPageSize = 500

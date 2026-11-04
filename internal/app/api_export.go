@@ -35,7 +35,14 @@ func csvSafe(value string) string {
 // in-memory log entry that matches the filter, as a download.
 func (a *API) exportLogs(writer http.ResponseWriter, request *http.Request) {
 	query := request.URL.Query()
-	entries := a.logs.Export(querylog.Filter{Search: query.Get("search"), Action: query.Get("action")})
+	filter := querylog.Filter{Search: query.Get("search"), Action: query.Get("action")}
+	entries := a.logs.Export(filter)
+	if day := query.Get("date"); day != "" {
+		var err error
+		if entries, err = a.logs.ExportHistory(day, filter); !writeHistoryError(writer, err) {
+			return
+		}
+	}
 	stamp := time.Now().Format("20060102-150405")
 	switch format := query.Get("format"); format {
 	case "", "csv":

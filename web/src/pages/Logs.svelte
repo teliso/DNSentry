@@ -24,6 +24,19 @@
   let page = $state(1);
   let live = $state(true);
   let result = $state<LogPage | null>(null);
+  /** A saved day (YYYY-MM-DD) being browsed, or '' for the live in-memory log. */
+  let day = $state('');
+  let days = $state<string[]>([]);
+  const browsing = $derived(day !== '');
+
+  async function loadDays() {
+    try {
+      days = (await api.logDays()).days;
+    } catch {
+      days = [];
+    }
+  }
+  void loadDays();
 
   $effect(() => {
     const value = search;
@@ -33,6 +46,7 @@
   $effect(() => {
     debounced;
     action;
+    day;
     page = 1;
   });
 
@@ -40,7 +54,7 @@
   async function load() {
     const id = ++request;
     try {
-      const next = await api.logs({ search: debounced, action, offset: (page - 1) * PAGE_SIZE, limit: PAGE_SIZE });
+      const next = await api.logs({ search: debounced, action, date: day, offset: (page - 1) * PAGE_SIZE, limit: PAGE_SIZE });
       if (id === request) result = next;
     } catch (cause) {
       if (id === request) toasts.error(cause instanceof Error ? cause.message : '读取查询日志失败');
@@ -50,6 +64,7 @@
   $effect(() => {
     debounced;
     action;
+    day;
     page;
     store.rulesVersion;
     void load();
@@ -58,14 +73,14 @@
   // Follow new queries only on the first page, so paging back is not disturbed.
   onMount(() => {
     const timer = window.setInterval(() => {
-      if (live && page === 1 && !document.hidden) void load();
+      if (live && !browsing && page === 1 && !document.hidden) void load();
     }, LIVE_INTERVAL_MS);
     return () => window.clearInterval(timer);
   });
 
   async function exportLogs() {
     try {
-      await api.exportLogs('csv', { search: debounced, action });
+      await api.exportLogs('csv', { search: debounced, action, date: day });
     } catch (cause) {
       toasts.error(cause instanceof Error ? cause.message : '导出失败');
     }
@@ -76,13 +91,23 @@
   }
 </script>
 
-<PageHeader title="查询日志" description="最近的 DNS 请求及其处理结果（内存中保留最近 {formatNumber(store.saved?.query_log_size ?? 0)} 条）。">
+<PageHeader title="查询日志" description={browsing ? `${day} 保存在磁盘上的查询日志。` : `最近的 DNS 请求及其处理结果（内存中保留最近 ${formatNumber(store.saved?.query_log_size ?? 0)} 条${days.length > 0 ? '；更早的在右上角按天查看' : ''}）。`}>
   {#snippet actions()}
-    <Switch bind:checked={live} label="实时刷新" />
+    {#if days.length > 0}
+      <select aria-label="查看哪一天的日志" bind:value={day}>
+        <option value="">最近（内存）</option>
+        {#each days as value (value)}<option {value}>{value}</option>{/each}
+      </select>
+    {/if}
+    {#if !browsing}<Switch bind:checked={live} label="实时刷新" />{/if}
     <button class="btn" type="button" onclick={load}><Icon name="refresh" />刷新</button>
     <button class="btn" type="button" onclick={exportLogs} title="导出当前筛选条件下的全部内存日志（CSV，可用 Excel 打开）"><Icon name="download" />导出</button>
   {/snippet}
 </PageHeader>
+
+{#if result?.truncated}
+  <p class="warning">这一天的匹配记录太多，只显示最新的 20 万条。可以用搜索或结果筛选缩小范围。</p>
+{/if}
 
 <Card flush>
   <div class="toolbar">
@@ -142,6 +167,7 @@
 </Card>
 
 <style>
+  .warning { padding: 9px 12px; border-radius: var(--radius-sm); background: var(--warn-soft); color: var(--ink-2); }
   .toolbar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 0 16px 12px; }
   .search { position: relative; flex: 1 1 240px; }
   .search :global(svg) { position: absolute; left: 10px; top: 9px; color: var(--muted); }
