@@ -4,7 +4,7 @@ go 1.26.10
 
 require (
 	github.com/0xERR0R/blocky v0.35.0
-	github.com/AdguardTeam/dnscrypt v0.0.2
+	github.com/AdguardTeam/dnscrypt v0.0.3
 	github.com/ameshkov/dnsstamps v1.0.3
 	github.com/miekg/dns v1.1.73
 	github.com/quic-go/quic-go v0.62.0
