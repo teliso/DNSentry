@@ -3,6 +3,7 @@
   import Tabs from '../components/Tabs.svelte';
   import { router } from '../lib/router.svelte';
   import { store } from '../lib/store.svelte';
+  import NotificationsSection from '../sections/NotificationsSection.svelte';
   import AccountSection from '../sections/AccountSection.svelte';
   import AccessSection from '../sections/AccessSection.svelte';
   import EncryptionSection from '../sections/EncryptionSection.svelte';
@@ -14,6 +15,7 @@
   const tabs = [
     { id: 'network', label: '网络与访问' },
     { id: 'account', label: '控制台登录' },
+    { id: 'notifications', label: '通知' },
     { id: 'encryption', label: '加密 DNS' },
     { id: 'logging', label: '日志' },
     { id: 'maintenance', label: '维护' }
@@ -32,6 +34,8 @@
     <ListenSection config={store.draft} />
     <WebTlsSection config={store.draft} />
     <AccessSection config={store.draft} />
+  {:else if router.tab === 'notifications'}
+    <NotificationsSection config={store.draft} />
   {:else if router.tab === 'encryption'}
     <EncryptionSection config={store.draft} />
   {:else}

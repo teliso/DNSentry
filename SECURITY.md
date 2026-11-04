@@ -16,6 +16,7 @@ Please report vulnerabilities privately through GitHub's **Security → Report a
 - Forgotten password: stop the service, delete `auth.json`, start it again (the console is then loopback-only until a new password is set).
 - The token is compared in constant time, is never stored in the configuration file or returned by the API, and ten failed attempts within a minute block that client for the rest of the minute.
 - The token holder is an administrator. Paths that the service reads or writes (rules file, query log, certificates, trust anchor file) can only be changed through the API to relative paths inside the working directory; use the configuration file for anything else.
+- Notification webhooks are chosen by an administrator and are called by the server without following redirects. Their URLs often contain secrets; they are stored in the configuration file, and therefore appear in exports and history versions.
 - Rule-source and upstream-test features make outgoing requests to addresses chosen by an administrator (this includes internal addresses). Do not give the API token to people you would not trust with network access from the server.
 
 **DNS service**

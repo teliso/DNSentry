@@ -105,6 +105,12 @@ logging:
   file: "data/querylog"      # [restart] prefix: data/querylog-YYYY-MM-DD.jsonl
   retention_days: 7          # [restart]
 
+# Notifications about upstream and rule source problems (webhooks).
+notifications:
+  events: []                 # upstream | rule_source; empty = all
+  webhooks: []
+  #  - { name: phone, url: "https://ntfy.sh/my-dnsentry", format: plain, enabled: true }
+
 # [restart] Inbound encrypted DNS. Certificate and key can be given as paths or
 # pasted PEM (certificate_pem / private_key_pem).
 encryption:

@@ -169,6 +169,8 @@ func run(ctx context.Context, stop context.CancelFunc, static fs.FS) error {
 	updater := rules.NewUpdater(ruleStore, ruleCacheDir(config.RulesFile), config.RuleSources)
 	api := newAPI(ctx, apiToken, server, updater, services.dnscrypt)
 	api.auth = loginStore
+	notifier := newNotifier(func() NotificationsConfig { return server.configSnapshot().Notifications }, collectProblems(server, updater))
+	go notifier.Run(ctx)
 	httpServer := newHTTPServer(api, static, dnsService.Ready)
 	scheme := "http"
 	if config.WebTLS.Enabled {

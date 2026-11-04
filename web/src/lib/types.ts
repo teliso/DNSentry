@@ -166,6 +166,11 @@ export type RouteStatus = { name?: string; domains: string[]; upstreams: Upstrea
 export type UpstreamMode = 'load_balance' | 'parallel' | 'fastest_addr';
 export type BlockingMode = 'nxdomain' | 'null_ip' | 'custom_ip' | 'refused';
 
+export type WebhookFormat = 'json' | 'plain';
+export type Webhook = { name: string; url: string; format: WebhookFormat; enabled: boolean };
+export type NotificationEvent = 'upstream' | 'rule_source';
+export type NotificationsConfig = { webhooks: Webhook[]; events: NotificationEvent[] };
+
 export type WebTlsSource = 'auto' | 'encryption' | 'custom';
 export type WebTlsConfig = { enabled: boolean; source: WebTlsSource; certificate: string; private_key: string; server_name: string };
 /** The certificate the console is serving right now (Status.web_tls). */
@@ -185,6 +190,7 @@ export type Config = {
   dns_listens: string[];
   http_listen: string;
   web_tls: WebTlsConfig;
+  notifications: NotificationsConfig;
   upstreams: string[];
   fallback_upstreams: string[];
   upstream_mode: UpstreamMode;

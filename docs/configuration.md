@@ -117,6 +117,9 @@ logging:
   enabled: false                   # [restart] 是否写 JSONL 文件
   file: data/querylog              # [restart] 文件前缀：data/querylog-YYYY-MM-DD.jsonl
   retention_days: 7                # [restart] 1–365
+notifications:                     # 通知，见 docs/deployment.md#通知
+  events: []                       # upstream | rule_source，留空 = 全部
+  webhooks: []                     # [{name, url, format: json|plain, enabled}]
 encryption:                        # [restart] 整个加密 DNS 服务
   enabled: false
   certificate: ""

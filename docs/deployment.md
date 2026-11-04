@@ -98,6 +98,30 @@ DNSENTRY_API_TOKEN=$(openssl rand -hex 24) docker compose -f deploy/compose.yaml
 
 **这个目录含有密钥，请只让运行服务的用户读取**（配置和历史文件权限已是 0600）。
 
+## 通知
+
+控制台“设置 → 通知”里添加 Webhook 后，DNSentry 会在下面这些情况主动发消息，不用一直开着控制台：
+
+| 事件 | 触发条件 |
+| --- | --- |
+| 上游故障 | 所有默认上游都没有响应；或某条域名分流的上游全部没有响应 |
+| 规则源更新失败 | 规则源超过一天（或两个更新周期，取较长者）没有更新成功 |
+
+- 问题要**持续约 1 分钟**（连续两次检查，每 30 秒一次）才会通知，瞬时的抖动不会打扰你；问题消失后再发一条“已恢复”。同一个问题不会重复通知。
+- 发送失败会重试 3 次（2 秒、4 秒间隔），仍失败只在日志里记一条警告，不影响服务。
+- **消息格式**：
+  - `json`（默认）：`{"event","id","title","message","time","instance","version"}`，并额外带有 `text`（Slack、Mattermost）、`content`（Discord）、`title`/`message`（Gotify），这些服务可以直接填它们的 Webhook 地址。
+  - `plain`（纯文本，适合 [ntfy](https://ntfy.sh)）：请求体是消息正文，标题放在 `Title` 头里，`Tags` 头标记类型。
+- 服务器**主动访问**你填的地址（和规则源、上游测试一样），不会跟随重定向。地址里通常带密钥，请像密码一样保管；它保存在配置文件里，也会出现在配置导出和历史版本中。
+- 配置文件里的写法：
+
+  ```yaml
+  notifications:
+    events: [upstream, rule_source]   # 留空 = 全部
+    webhooks:
+      - { name: 手机, url: "https://ntfy.sh/my-dnsentry", format: plain, enabled: true }
+  ```
+
 ## 监控
 
 - **健康检查**（无需令牌）：`GET /healthz`（进程存活）、`GET /readyz`（至少一个 DNS 监听已就绪）。

@@ -75,6 +75,7 @@ var apiRoutes = []apiRoute{
 	{http.MethodPost, "/cache/clear", (*API).clearCache},
 	{http.MethodGet, "/stats", (*API).getStats},
 	{http.MethodGet, "/services", (*API).listServices},
+	{http.MethodPost, "/notifications/test", (*API).testNotification},
 	{http.MethodPut, "/auth", (*API).setAuth},
 	{http.MethodDelete, "/auth", (*API).deleteAuth},
 	{http.MethodPost, "/protection", (*API).setProtection},

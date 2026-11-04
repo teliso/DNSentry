@@ -187,6 +187,9 @@ func validateConfig(config *Config) (*Config, error) {
 	if err := validateEncryptionConfig(config.Encryption); err != nil {
 		return nil, err
 	}
+	if err := validateNotifications(&config.Notifications); err != nil {
+		return nil, err
+	}
 	normalizeWebTLS(&config.WebTLS)
 	if err := validateWebTLS(config.WebTLS, config.Encryption); err != nil {
 		return nil, err

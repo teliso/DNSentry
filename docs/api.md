@@ -35,6 +35,7 @@ curl -H "Authorization: Bearer $TOKEN" http://192.168.1.2:18080/api/status
 | `POST /upstreams/test` | 测试上游 `{"upstreams": [...], "domain": "example.com"}` |
 | `PUT /auth` | 设置或修改控制台密码：`{"username","password","current_password"}`（已有密码时必须提供当前密码；成功后其他浏览器的登录失效） |
 | `DELETE /auth` | 关闭控制台密码：`{"current_password"}` |
+| `POST /notifications/test` | 向一个 Webhook 发测试消息：`{"url","format","name"}`，成功返回 `{"status":"sent"}`，对方不可达或拒绝时 502 |
 | `GET /services` | 可整体屏蔽的服务目录：`[{"id","name","group","domains"}]`，配置里的 `blocked_services` 填其中的 `id` |
 | `GET /stats?range=` | 长周期统计，`range` 为 `24h`（按小时）、`7d`、`30d`、`90d`（按天），默认 `24h`；返回 `[{"time","queries","blocked"}]`，重启后保留 |
 | `GET /logs?date=YYYY-MM-DD` | 同 `GET /logs`，但读取磁盘上保存的那一天（需要开启“保存日志到磁盘”，否则 404） |

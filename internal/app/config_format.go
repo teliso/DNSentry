@@ -52,9 +52,10 @@ type yamlConfig struct {
 		LocalFile string         `yaml:"local_file"`
 		Sources   []rules.Source `yaml:"sources,omitempty"`
 	} `yaml:"rules"`
-	Access     access.Config    `yaml:"access"`
-	Encryption EncryptionConfig `yaml:"encryption"`
-	Logging    struct {
+	Access        access.Config       `yaml:"access"`
+	Encryption    EncryptionConfig    `yaml:"encryption"`
+	Notifications NotificationsConfig `yaml:"notifications,omitempty"`
+	Logging       struct {
 		QueryLogSize          int    `yaml:"query_log_size"`
 		QueryLogEnabled       bool   `yaml:"enabled"`
 		QueryLogFile          string `yaml:"file"`
@@ -124,6 +125,7 @@ func (f yamlConfig) toConfig() *Config {
 		RuleSources:           f.Rules.Sources,
 		Access:                f.Access,
 		Encryption:            f.Encryption,
+		Notifications:         f.Notifications,
 	}
 }
 
@@ -168,6 +170,7 @@ func newYAMLConfig(config *Config) yamlConfig {
 	fileConfig.Logging.QueryLogFile = config.QueryLogFile
 	fileConfig.Logging.QueryLogRetentionDays = config.QueryLogRetentionDays
 	fileConfig.Encryption = config.Encryption
+	fileConfig.Notifications = config.Notifications
 	return fileConfig
 }
 
