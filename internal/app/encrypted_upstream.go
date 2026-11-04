@@ -54,7 +54,11 @@ func (s *DNSServer) exchangeUpstream(request *dns.Msg, upstream string) (*dns.Ms
 		response, err = s.exchangeDoQ(request, upstream)
 	default:
 		client := s.clientSnapshot()
-		response, _, err = client.Exchange(request, upstream)
+		if client.Net == "" || client.Net == "udp" {
+			response, err = s.exchangeUDP(client, request, upstream)
+		} else {
+			response, _, err = client.Exchange(request, upstream)
+		}
 		if err == nil && response.Truncated {
 			client.Net = "tcp"
 			response, _, err = client.Exchange(request, upstream)
