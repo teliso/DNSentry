@@ -4,8 +4,8 @@ github.com/0xERR0R/blocky v0.35.0 h1:xDkaRU0GYWfZZJKzjm5YWGOL56m1Yk7Puin5UA1MnzM
 github.com/0xERR0R/blocky v0.35.0/go.mod h1:OMeOGm/wpwd4HrILESDIQTg6LRjPBB1hoOPtSsgexIA=
 github.com/0xERR0R/expiration-cache v0.2.0 h1:x6TGJI3lh+LaRUB1A0xMjaQ9qYRTrQfzuKrIbT04Chg=
 github.com/0xERR0R/expiration-cache v0.2.0/go.mod h1:dMZtuoO/1DZ9tIeN5FBLdd82npkmNxVaGezjjtbxaq8=
-github.com/AdguardTeam/dnscrypt v0.0.2 h1:kIFCyjYofKHug7RwPGOjVga81P0/zOQdbUN+7p+I95M=
-github.com/AdguardTeam/dnscrypt v0.0.2/go.mod h1:qCFs51rLfNzEDZqb6nz1tocVLnEearJ1zng6O3I6ecA=
+github.com/AdguardTeam/dnscrypt v0.0.3 h1:o2Zg+/CRCPS2lPobMzYs59aE3RNdMKfOBk34bPbbUbg=
+github.com/AdguardTeam/dnscrypt v0.0.3/go.mod h1:qCFs51rLfNzEDZqb6nz1tocVLnEearJ1zng6O3I6ecA=
 github.com/AdguardTeam/golibs v0.35.13 h1:sflm5/sWhiGwUXNAZObiqVMkdg8HeYVFK2A0oJ27hbU=
 github.com/AdguardTeam/golibs v0.35.13/go.mod h1:8EEGG4auTDd8HV3tBETXLkuxDH9lk9vvFbJn+wbmypg=
 github.com/Masterminds/semver/v3 v3.4.0 h1:Zog+i5UMtVoCU8oKka5P7i9q9HgrJeGzI9SA1Xbatp0=
