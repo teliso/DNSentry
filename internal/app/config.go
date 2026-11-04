@@ -17,6 +17,8 @@ type Config struct {
 	UpstreamRoutes        []UpstreamRoute  `json:"upstream_routes"`
 	PrivateReverse        bool             `json:"private_reverse"`
 	BlockAAAA             bool             `json:"block_aaaa"`
+	BlockedServices       []string         `json:"blocked_services"`
+	SafeSearch            bool             `json:"safe_search"`
 	BootstrapDNS          []string         `json:"bootstrap_dns"`
 	UpstreamTimeout       int              `json:"upstream_timeout_seconds"`
 	BlockingMode          string           `json:"blocking_mode"`

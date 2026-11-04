@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/teliso/DNSentry/internal/dnssec"
+	"github.com/teliso/DNSentry/internal/services"
 
 	"github.com/teliso/DNSentry/internal/access"
 
@@ -169,6 +170,11 @@ func validateConfig(config *Config) (*Config, error) {
 	} else if err := normalizeDNSCryptListeners(&config.Encryption.DNSCrypt); err != nil {
 		return nil, err
 	}
+	known, unknown := services.Normalize(config.BlockedServices)
+	if len(unknown) > 0 {
+		return nil, fmt.Errorf("unknown blocked service %q", unknown[0])
+	}
+	config.BlockedServices = known
 	if err := validateLocalRecords(config.LocalRecords); err != nil {
 		return nil, err
 	}

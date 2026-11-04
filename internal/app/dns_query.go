@@ -76,10 +76,18 @@ func (s *DNSServer) ServeDNS(writer dns.ResponseWriter, request *dns.Msg) {
 	started := time.Now()
 	clientIP := queryClientIP(writer)
 	var rule rules.Entry // filter rule that decided the query, if any
+	var ruleText string  // set instead of rule when a blocked service or safe search decided
+	if config.SafeSearch {
+		if target, ok := safeSearchTarget(domain); ok {
+			ruleText = "安全搜索 → " + target
+		}
+	}
 	logQuery := func(action, upstream string) {
 		entry := querylog.Entry{Time: time.Now().Format(time.RFC3339), Client: clientIP, Domain: domain, Type: queryType, Action: action, Upstream: upstream, Duration: time.Since(started).Milliseconds()}
 		if rule.Domain != "" {
 			entry.Rule, entry.RuleSource = rule.Text(), rule.Source
+		} else if ruleText != "" {
+			entry.Rule = ruleText
 		}
 		s.logs.Add(entry)
 	}
@@ -107,6 +115,16 @@ func (s *DNSServer) ServeDNS(writer dns.ResponseWriter, request *dns.Msg) {
 	defer s.releaseQuerySlot()
 	if s.protectionStatus().Enabled {
 		rule, _ = s.rules.Match(domain)
+		// A blocked service applies unless the user's own allow rule says otherwise.
+		if rule.Action != rules.ActionAllow {
+			if service, ok := s.blockedServices.Load().Match(domain); ok {
+				response := blockedResponse(request, question, &config)
+				_ = writer.WriteMsg(filterUpstreamResponse(response, request))
+				ruleText = "服务：" + service.Name
+				logQuery(string(rules.ActionBlock), "")
+				return
+			}
+		}
 	}
 	if rule.Action == rules.ActionBlock {
 		response := blockedResponse(request, question, &config)
@@ -135,7 +153,7 @@ func (s *DNSServer) ServeDNS(writer dns.ResponseWriter, request *dns.Msg) {
 			validated := config.DNSSECValidate && s.cachedDNSSECIsSecure(cacheKey)
 			rebindingPolicy := s.accessPolicySnapshot()
 			rebindingBlocked := false
-			if s.routeFor(request) == nil { // explicitly routed names are trusted
+			if !s.trustedName(&config, request) { // redirected names are trusted
 				response, rebindingBlocked = access.FilterRebinding(response, question, rebindingPolicy)
 			}
 			validated = validated && !rebindingBlocked
@@ -170,7 +188,7 @@ func (s *DNSServer) ServeDNS(writer dns.ResponseWriter, request *dns.Msg) {
 		}
 		rebindingPolicy := s.accessPolicySnapshot()
 		rebindingBlocked := false
-		routed := s.routeFor(request) != nil // explicitly routed names are trusted
+		routed := s.trustedName(&config, request) // redirected names are trusted
 		if !routed {
 			response, rebindingBlocked = access.FilterRebinding(response, question, rebindingPolicy)
 		}
@@ -262,7 +280,7 @@ func (s *DNSServer) refreshInBackground(request *dns.Msg, key string) bool {
 		}
 		rebindingPolicy := s.accessPolicySnapshot()
 		rebindingBlocked := false
-		routed := s.routeFor(request) != nil
+		routed := s.trustedName(&config, request)
 		if !routed {
 			response, rebindingBlocked = access.FilterRebinding(response, request.Question[0], rebindingPolicy)
 		}

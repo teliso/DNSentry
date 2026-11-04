@@ -11,6 +11,8 @@ const LABELS: Record<string, string> = {
   'dns.local_records': '本地记录',
   'dns.private_reverse': '私网反向解析',
   'dns.block_aaaa': '禁用 AAAA',
+  'dns.blocked_services': '屏蔽的服务',
+  'dns.safe_search': '安全搜索',
   'dns.blocking_mode': '拦截模式',
   'dns.blocking_ipv4': '拦截响应 IPv4',
   'dns.blocking_ipv6': '拦截响应 IPv6',

@@ -1,4 +1,4 @@
-import type { Config, MetricPoint, ConfigVersion, LocalSummary, LogPage, LogQuery, Rule, RuleAction, RuleCheck, Protection, RulePage, RuleQuery, RuleSource, Status, UpstreamTest } from './types';
+import type { Config, ServiceInfo, MetricPoint, ConfigVersion, LocalSummary, LogPage, LogQuery, Rule, RuleAction, RuleCheck, Protection, RulePage, RuleQuery, RuleSource, Status, UpstreamTest } from './types';
 
 const TOKEN_KEY = 'dnsentry_api_token';
 
@@ -109,6 +109,7 @@ export const api = {
   saveConfig: (config: Config) => request<Config>('/config', 'PUT', config),
   configHistory: () => request<ConfigVersion[]>('/config/history'),
   restoreConfig: (id?: string) => request<Config>('/config/restore', 'POST', id ? { id } : undefined),
+  services: () => request<ServiceInfo[]>('/services'),
   stats: (range: string) => request<MetricPoint[]>(`/stats?range=${range}`),
   exportLogs: (format: 'csv' | 'json', query: { search?: string; action?: string }) => download(`/logs/export?${toParams({ ...query, format })}`, `dnsentry-logs.${format}`),
   exportConfig: () => download('/config/export', 'dnsentry-config.yaml'),

@@ -65,6 +65,7 @@ export function normalizeConfig(raw: Config): Config {
     dns_listens: cleanList(raw.dns_listens),
     upstreams: cleanList(raw.upstreams),
     fallback_upstreams: cleanList(raw.fallback_upstreams),
+    blocked_services: cleanList(raw.blocked_services),
     bootstrap_dns: cleanList(raw.bootstrap_dns),
     dnssec_trust_anchors: cleanList(raw.dnssec_trust_anchors),
     local_records: raw.local_records ?? [],
@@ -85,6 +86,7 @@ export function serializeConfig(config: Config): Config {
   const copy = JSON.parse(JSON.stringify(config)) as Config; // also unwraps Svelte proxies
   copy.upstreams = cleanList(copy.upstreams);
   copy.fallback_upstreams = cleanList(copy.fallback_upstreams);
+  copy.blocked_services = [...new Set(cleanList(copy.blocked_services))].sort();
   copy.bootstrap_dns = cleanList(copy.bootstrap_dns);
   copy.dnssec_trust_anchors = cleanList(copy.dnssec_trust_anchors);
   copy.upstream_routes = (copy.upstream_routes ?? [])

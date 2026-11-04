@@ -20,6 +20,8 @@ type yamlConfig struct {
 		UpstreamRoutes        []UpstreamRoute `yaml:"upstream_routes,omitempty"`
 		PrivateReverse        *bool           `yaml:"private_reverse"`
 		BlockAAAA             bool            `yaml:"block_aaaa"`
+		BlockedServices       []string        `yaml:"blocked_services,omitempty"`
+		SafeSearch            bool            `yaml:"safe_search"`
 		BootstrapDNS          []string        `yaml:"bootstrap_dns"`
 		UpstreamTimeout       int             `yaml:"upstream_timeout_seconds"`
 		BlockingMode          string          `yaml:"blocking_mode"`
@@ -91,6 +93,8 @@ func (f yamlConfig) toConfig() *Config {
 		UpstreamRoutes:        append([]UpstreamRoute(nil), f.DNS.UpstreamRoutes...),
 		PrivateReverse:        privateReverse,
 		BlockAAAA:             f.DNS.BlockAAAA,
+		BlockedServices:       append([]string(nil), f.DNS.BlockedServices...),
+		SafeSearch:            f.DNS.SafeSearch,
 		CachePrefetch:         f.Cache.Prefetch,
 		BootstrapDNS:          f.DNS.BootstrapDNS,
 		UpstreamTimeout:       f.DNS.UpstreamTimeout,
@@ -131,6 +135,8 @@ func newYAMLConfig(config *Config) yamlConfig {
 	fileConfig.DNS.UpstreamRoutes = append([]UpstreamRoute(nil), config.UpstreamRoutes...)
 	fileConfig.DNS.PrivateReverse = boolPtr(config.PrivateReverse)
 	fileConfig.DNS.BlockAAAA = config.BlockAAAA
+	fileConfig.DNS.BlockedServices = append([]string(nil), config.BlockedServices...)
+	fileConfig.DNS.SafeSearch = config.SafeSearch
 	fileConfig.Cache.Prefetch = config.CachePrefetch
 	fileConfig.DNS.BootstrapDNS = config.BootstrapDNS
 	fileConfig.DNS.UpstreamTimeout = config.UpstreamTimeout

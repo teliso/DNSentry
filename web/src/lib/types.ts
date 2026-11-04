@@ -1,5 +1,8 @@
 // Shapes of the DNSentry JSON API (see internal/app/api*.go).
 
+/** A service that can be blocked as a whole (GET /api/services). */
+export type ServiceInfo = { id: string; name: string; group: string; domains: string[] };
+
 export type RuleAction = 'block' | 'allow';
 /** A filter rule; `source` is empty for the local rules file, else the list URL. */
 export type Rule = { domain: string; action: RuleAction; ip?: string; source?: string };
@@ -168,6 +171,8 @@ export type Config = {
   upstream_routes: UpstreamRoute[];
   private_reverse: boolean;
   block_aaaa: boolean;
+  blocked_services: string[];
+  safe_search: boolean;
   access: AccessConfig;
   bootstrap_dns: string[];
   upstream_timeout_seconds: number;

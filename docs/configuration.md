@@ -70,6 +70,8 @@ dns:
   upstream_routes: []              # 域名分流，见 docs/dns.md
   private_reverse: true            # 私网反向解析由本机应答
   block_aaaa: false                # AAAA 查询返回空应答
+  blocked_services: []             # 整体屏蔽的服务 ID，如 [tiktok, youtube]；可选值见控制台“过滤 → 服务屏蔽”或 GET /api/services
+  safe_search: false               # 强制安全搜索
   blocking_mode: nxdomain          # nxdomain | null_ip | custom_ip | refused
   blocking_ipv4: 0.0.0.0           # 仅 custom_ip
   blocking_ipv6: "::"              # 仅 custom_ip

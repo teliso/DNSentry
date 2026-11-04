@@ -48,6 +48,10 @@ dns:
   private_reverse: true
   # Answer AAAA queries with an empty response (for networks without IPv6).
   block_aaaa: false
+  # Block whole services by id (see GET /api/services), e.g. [tiktok, youtube].
+  blocked_services: []
+  # Redirect Google, Bing, DuckDuckGo, YouTube and Pixabay to their safe-search hosts.
+  safe_search: false
   # Answered locally before cache and upstreams (filter rules still apply first).
   local_records: []
   #  - { domain: nas.home.arpa, type: A, value: 192.168.1.10, ttl: 300 }

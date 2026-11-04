@@ -7,6 +7,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/teliso/DNSentry/internal/services"
 	"github.com/teliso/DNSentry/internal/upstream"
 
 	"github.com/teliso/DNSentry/internal/buildinfo"
@@ -67,6 +68,7 @@ var apiRoutes = []apiRoute{
 	{http.MethodGet, "/metrics", (*API).writeMetrics},
 	{http.MethodPost, "/cache/clear", (*API).clearCache},
 	{http.MethodGet, "/stats", (*API).getStats},
+	{http.MethodGet, "/services", (*API).listServices},
 	{http.MethodPost, "/protection", (*API).setProtection},
 	{http.MethodPost, "/upstreams/test", (*API).testUpstreams},
 	{http.MethodGet, "/rules", (*API).listRules},
@@ -182,6 +184,11 @@ func (a *API) getStatus(writer http.ResponseWriter, _ *http.Request) {
 func (a *API) clearCache(writer http.ResponseWriter, _ *http.Request) {
 	a.resolver.clearCache()
 	writeJSON(writer, http.StatusOK, map[string]string{"status": "cleared"})
+}
+
+// listServices serves GET /services: the catalogue of blockable services.
+func (a *API) listServices(writer http.ResponseWriter, _ *http.Request) {
+	writeJSON(writer, http.StatusOK, services.Catalog)
 }
 
 // getStats serves GET /stats?range=24h|7d|30d|90d: queries and blocked counts

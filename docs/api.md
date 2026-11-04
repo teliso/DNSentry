@@ -31,6 +31,7 @@ curl -H "Authorization: Bearer $TOKEN" http://192.168.1.2:18080/api/status
 | `POST /cache/clear` | 清空 DNS 缓存 |
 | `POST /protection` | 暂停 / 恢复过滤，见下 |
 | `POST /upstreams/test` | 测试上游 `{"upstreams": [...], "domain": "example.com"}` |
+| `GET /services` | 可整体屏蔽的服务目录：`[{"id","name","group","domains"}]`，配置里的 `blocked_services` 填其中的 `id` |
 | `GET /stats?range=` | 长周期统计，`range` 为 `24h`（按小时）、`7d`、`30d`、`90d`（按天），默认 `24h`；返回 `[{"time","queries","blocked"}]`，重启后保留 |
 | `GET /logs/export` | 导出内存日志（`format=csv`（默认）或 `json`，可带 `search`、`action` 过滤），作为下载文件返回 |
 | `GET /logs/export` | 导出内存日志（`format=csv`（默认）或 `json`，可带 `search`、`action` 过滤），作为下载文件返回 |
