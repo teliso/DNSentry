@@ -108,6 +108,9 @@ func run(ctx context.Context, stop context.CancelFunc, static fs.FS) error {
 	if err != nil {
 		return err
 	}
+	if err := importConfigPassword(loginStore); err != nil {
+		return err
+	}
 	if err := checkWebExposure(config, apiToken); err != nil {
 		return err
 	}

@@ -243,3 +243,44 @@ func (s *Sessions) RevokeAll() {
 	clear(s.expiries)
 	s.mu.Unlock()
 }
+
+// Import sets the credentials from the configuration file. Unlike Set it
+// accepts short passwords (the operator chose them by editing the file) and
+// accepts an existing bcrypt hash in place of a plain password.
+func (s *Store) Import(username, password string) error {
+	username = strings.TrimSpace(username)
+	if username == "" || utf8.RuneCountInString(username) > maxUsernameLength {
+		return errors.New("username must be 1 to 64 characters")
+	}
+	for _, r := range username {
+		if unicode.IsControl(r) || unicode.IsSpace(r) {
+			return errors.New("username must not contain spaces or control characters")
+		}
+	}
+	if password == "" {
+		return errors.New("password must not be empty")
+	}
+	var hash []byte
+	if _, err := bcrypt.Cost([]byte(password)); err == nil {
+		hash = []byte(password) // already a bcrypt hash
+	} else {
+		if len(password) > maxPasswordBytes {
+			return errors.New("password must be at most 72 bytes")
+		}
+		hash, err = bcrypt.GenerateFromPassword([]byte(password), Cost)
+		if err != nil {
+			return err
+		}
+	}
+	data, err := json.Marshal(file{Username: username, Hash: string(hash)})
+	if err != nil {
+		return err
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if err := fsutil.WriteFileAtomic(s.path, data, 0600); err != nil {
+		return err
+	}
+	s.username, s.hash = username, hash
+	return nil
+}
