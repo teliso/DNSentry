@@ -201,3 +201,20 @@ func TestClearForgetsEntriesButKeepsCounters(t *testing.T) {
 		t.Fatalf("the log must keep working after Clear: %v", list)
 	}
 }
+
+func TestSetRecordingOffKeepsCountersButNoEntries(t *testing.T) {
+	logger := New(10)
+	logger.SetRecording(false)
+	logger.Add(Entry{Domain: "a.test", Action: "forwarded"})
+	if len(logger.List()) != 0 {
+		t.Fatal("entries must not be stored while recording is off")
+	}
+	if logger.total.Load() != 1 {
+		t.Fatal("counters should still count")
+	}
+	logger.SetRecording(true)
+	logger.Add(Entry{Domain: "b.test", Action: "forwarded"})
+	if len(logger.List()) != 1 {
+		t.Fatal("recording should resume")
+	}
+}

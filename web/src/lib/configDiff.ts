@@ -49,6 +49,8 @@ const LABELS: Record<string, string> = {
   cache_optimistic_answer_ttl: '乐观应答 TTL',
   cache_optimistic_max_age: '乐观缓存最大寿命',
   query_log_size: '内存日志条数',
+  query_log_disabled: '关闭查询日志',
+  program_log_level: '程序日志级别',
   query_log_enabled: '保存日志到磁盘',
   query_log_file: '日志文件前缀',
   query_log_retention_days: '日志保留天数',

@@ -1,7 +1,7 @@
 /** Pages and their tabs. The first tab of a page is its default. */
 export const PAGES = {
   overview: [],
-  logs: [],
+  logs: ['queries', 'program'],
   filters: ['rules', 'sources', 'services', 'schedule', 'blocking'],
   dns: ['upstreams', 'routes', 'records', 'cache', 'advanced'],
   settings: ['network', 'account', 'notifications', 'encryption', 'logging', 'maintenance']

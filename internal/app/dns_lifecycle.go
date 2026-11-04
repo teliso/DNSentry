@@ -2,6 +2,7 @@ package app
 
 import (
 	"crypto/tls"
+	"github.com/teliso/DNSentry/internal/applog"
 	"slices"
 	"sync"
 	"sync/atomic"
@@ -132,6 +133,7 @@ func (s *DNSServer) applyConfig(config Config) error {
 		}
 	}
 	s.updateConfig(config)
+	s.applyLogSettings(config)
 	s.configureAccess(config.Access)
 	s.setLocalRecords(config.LocalRecords)
 	s.blockedServices.Store(services.NewMatcher(config.BlockedServices))
@@ -162,4 +164,30 @@ func (s *DNSServer) Close() error {
 	s.closeEncryptedClients()
 	s.closeDNSSECValidator()
 	return nil
+}
+
+// programLog is the program's own log, set by SetProgramLog at start.
+var programLog *applog.Log
+
+// SetProgramLog gives the service the program log it should show and tune.
+func SetProgramLog(log *applog.Log, startupLevel string) {
+	programLog, startupLogLevel = log, startupLevel
+}
+
+var startupLogLevel = "info"
+
+// applyLogSettings applies the log settings that need no restart.
+func (s *DNSServer) applyLogSettings(config Config) {
+	if s.logs != nil {
+		s.logs.SetRecording(!config.QueryLogDisabled)
+	}
+	if programLog != nil {
+		text := config.ProgramLogLevel
+		if text == "" {
+			text = startupLogLevel
+		}
+		if level, err := applog.ParseLevel(text); err == nil {
+			programLog.SetLevel(level)
+		}
+	}
 }

@@ -130,6 +130,7 @@ func run(ctx context.Context, stop context.CancelFunc, static fs.FS) error {
 	if err != nil {
 		return fmt.Errorf("initialize query logger: %w", err)
 	}
+	logs.SetRecording(!config.QueryLogDisabled)
 	// Counters only (no domains or clients), so this is always on.
 	if err := logs.EnableStats(filepath.Join(filepath.Dir(configPath()), "stats.json")); err != nil {
 		slog.Warn("statistics", "error", err)
@@ -172,6 +173,7 @@ func run(ctx context.Context, stop context.CancelFunc, static fs.FS) error {
 	}
 
 	updater := rules.NewUpdater(ruleStore, ruleCacheDir(config.RulesFile), config.RuleSources)
+	server.applyLogSettings(*config)
 	api := newAPI(ctx, apiToken, server, updater, services.dnscrypt)
 	api.auth = loginStore
 	notifier := newNotifier(func() NotificationsConfig { return server.configSnapshot().Notifications }, collectProblems(server, updater))

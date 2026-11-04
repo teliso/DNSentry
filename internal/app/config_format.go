@@ -58,6 +58,8 @@ type yamlConfig struct {
 	Notifications NotificationsConfig `yaml:"notifications,omitempty"`
 	Schedule      schedule.Config     `yaml:"schedule,omitempty"`
 	Logging       struct {
+		QueryLogRecording     *bool  `yaml:"recording"`
+		ProgramLogLevel       string `yaml:"level,omitempty"`
 		QueryLogSize          int    `yaml:"query_log_size"`
 		QueryLogEnabled       bool   `yaml:"enabled"`
 		QueryLogFile          string `yaml:"file"`
@@ -115,6 +117,8 @@ func (f yamlConfig) toConfig() *Config {
 		RulesFile:             f.Rules.LocalFile,
 		CacheEnabled:          enabled,
 		CacheSize:             f.Cache.Size,
+		QueryLogDisabled:      f.Logging.QueryLogRecording != nil && !*f.Logging.QueryLogRecording,
+		ProgramLogLevel:       f.Logging.ProgramLogLevel,
 		QueryLogSize:          f.Logging.QueryLogSize,
 		QueryLogEnabled:       f.Logging.QueryLogEnabled,
 		QueryLogFile:          queryLogFile,
@@ -168,6 +172,8 @@ func newYAMLConfig(config *Config) yamlConfig {
 	fileConfig.Rules.LocalFile = config.RulesFile
 	fileConfig.Rules.Sources = config.RuleSources
 	fileConfig.Access = config.Access
+	fileConfig.Logging.QueryLogRecording = boolPtr(!config.QueryLogDisabled)
+	fileConfig.Logging.ProgramLogLevel = config.ProgramLogLevel
 	fileConfig.Logging.QueryLogSize = config.QueryLogSize
 	fileConfig.Logging.QueryLogEnabled = config.QueryLogEnabled
 	fileConfig.Logging.QueryLogFile = config.QueryLogFile
