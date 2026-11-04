@@ -1,6 +1,7 @@
 package app
 
 import (
+	"gopkg.in/yaml.v3"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -106,5 +107,39 @@ func TestConfigHistoryIsPrunedAndBaselinedForOldInstallations(t *testing.T) {
 	}
 	if got := len(configVersionIDs()); got != maxConfigVersions {
 		t.Fatalf("history holds %d versions, want %d", got, maxConfigVersions)
+	}
+}
+
+func TestConfigChangesIgnoreMaterializedDefaults(t *testing.T) {
+	t.Chdir(t.TempDir())
+	// An older file that lacks keys newer versions write out explicitly.
+	older := []byte("version: 1\ndns:\n  listens: [\":15353\"]\n  upstreams: [\"1.1.1.1:53\"]\nweb:\n  listen: 127.0.0.1:18080\n")
+	validated, err := validateConfig(testConfig())
+	if err != nil {
+		t.Fatal(err)
+	}
+	validated.Upstreams = []string{"1.1.1.1:53"}
+	validated.DNSListens = []string{":15353"}
+	validated.HTTPListen = "127.0.0.1:18080"
+	validated.CacheEnabled = true
+	validated.OptimisticCache = false
+	validated.BlockingMode = "nxdomain"
+	validated.CacheSize = 4 << 20
+	validated.QueryLogRetentionDays = 7
+	validated.UpstreamMode = "load_balance"
+	validated.BootstrapDNS = []string{"1.1.1.1:53", "8.8.8.8:53"}
+	validated.PrivateReverse = true
+	validated.Encryption.DNSCrypt = DNSCryptConfig{ProviderName: "dnsentry", CertificateTTLHours: 24}
+	newer, err := yaml.Marshal(newYAMLConfig(validated))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if changes := configChanges(newer, older); len(changes) != 0 {
+		t.Fatalf("defaults written by a newer version were reported as changes: %v", changes)
+	}
+	validated.BlockAAAA = true
+	changed, _ := yaml.Marshal(newYAMLConfig(validated))
+	if changes := configChanges(changed, older); len(changes) != 1 || changes[0] != "dns.block_aaaa" {
+		t.Fatalf("changes = %v", changes)
 	}
 }

@@ -25,7 +25,22 @@ const LABELS: Record<string, string> = {
   'access.denied_clients': '拒绝的客户端',
   'access.client_rate_limit_qps': '客户端限速',
   'access.rebinding_protection': 'Rebinding 防护',
-  'access.rebinding_allow_domains': 'Rebinding 例外域名'
+  'access.rebinding_allow_domains': 'Rebinding 例外域名',
+  'encryption.enabled': '加密 DNS 开关',
+  'encryption.certificate': '证书文件',
+  'encryption.private_key': '私钥文件',
+  'encryption.certificate_pem': '证书（PEM）',
+  'encryption.private_key_pem': '私钥（PEM）',
+  'encryption.dot_listens': 'DoT 监听地址',
+  'encryption.doh_listens': 'DoH 监听地址',
+  'encryption.doh3_listens': 'DoH3 监听地址',
+  'encryption.doq_listens': 'DoQ 监听地址',
+  'encryption.dnscrypt.enabled': 'DNSCrypt 开关',
+  'encryption.dnscrypt.listens': 'DNSCrypt 监听地址',
+  'encryption.dnscrypt.provider_name': 'DNSCrypt Provider 名称',
+  'encryption.dnscrypt.private_key': 'DNSCrypt 密钥',
+  'encryption.dnscrypt.resolver_secret': 'DNSCrypt 解析器密钥',
+  'encryption.dnscrypt.certificate_ttl_hours': 'DNSCrypt 证书有效期'
 };
 
 export function settingLabel(key: string): string {
