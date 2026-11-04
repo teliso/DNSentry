@@ -24,7 +24,7 @@
       <Switch bind:checked={config.cache_optimistic} label="乐观缓存" description="先返回过期响应，再在后台刷新。" disabled={!config.cache_enabled} />
     </div>
     <div class="form-grid">
-      <Field label="缓存大小" hint="字节，建议至少 4194304（4 MB）">
+      <Field label="缓存大小" hint="字节，含每条记录约 200 字节的索引开销；建议至少 8388608（8 MB）">
         <input type="number" min="0" bind:value={config.cache_size} disabled={!config.cache_enabled} />
       </Field>
       <Field label="TTL 下限" hint="秒，0 表示不限制">

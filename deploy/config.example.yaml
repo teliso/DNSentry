@@ -74,7 +74,7 @@ web:
 
 cache:
   enabled: true
-  size: 4194304              # bytes
+  size: 8388608              # bytes, including about 200 bytes of overhead per entry
   ttl_min: 0                 # seconds, 0 = no limit
   ttl_max: 0
   prefetch: false            # refresh popular entries in the last 20% of their TTL
