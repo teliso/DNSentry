@@ -7,7 +7,7 @@ require (
 	github.com/AdguardTeam/dnscrypt v0.0.2
 	github.com/ameshkov/dnsstamps v1.0.3
 	github.com/miekg/dns v1.1.73
-	github.com/quic-go/quic-go v0.62.0
+	github.com/quic-go/quic-go v0.64.1
 	github.com/sirupsen/logrus v1.10.2
 	golang.org/x/crypto v0.55.0
 	golang.org/x/sync v0.22.0
