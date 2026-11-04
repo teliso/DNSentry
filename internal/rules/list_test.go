@@ -2,6 +2,7 @@ package rules
 
 import (
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 )
@@ -91,5 +92,23 @@ func BenchmarkMatch400k(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		store.Match("www.h12345.ads12345.example.org") // miss, several parents
 		store.Match(hits[i%len(hits)])                 // hit
+	}
+}
+
+func TestParseLocalReaderMatchesLineSemantics(t *testing.T) {
+	long := strings.Repeat("x", 200000) // a line far longer than the read buffer
+	text := "||a.test^\n# comment\n" + long + " junk\n@@b.test\r\n0.0.0.0 c.test d.test\nlast.test"
+	list, summary, err := parseLocalReader(strings.NewReader(text))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if list.len() != 5 || summary.Rules != 5 || summary.Ignored != 1 || len(summary.IgnoredLines) != 1 || summary.IgnoredLines[0] != 3 {
+		t.Fatalf("list %d rules, summary %+v", list.len(), summary)
+	}
+	if got := list.entry(1); got.Domain != "b.test" || got.Action != ActionAllow {
+		t.Errorf("entry 1 = %+v", got)
+	}
+	if got := list.entry(4); got.Domain != "last.test" {
+		t.Errorf("a final line without a newline was lost: %+v", got)
 	}
 }
