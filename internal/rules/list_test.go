@@ -82,7 +82,7 @@ func BenchmarkMatch400k(b *testing.B) {
 	store.SetRemote("https://big", entries)
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		store.Match("www.h12345.ads12345.example.org")      // miss, several parents
+		store.Match("www.h12345.ads12345.example.org")                               // miss, several parents
 		store.Match(fmt.Sprintf("h%d.ads%d.example.test", i%400000, (i%400000)%997)) // hit
 	}
 }
