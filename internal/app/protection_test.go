@@ -8,6 +8,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/teliso/DNSentry/internal/upstream"
+
 	"github.com/miekg/dns"
 	"github.com/teliso/DNSentry/internal/cache"
 	"github.com/teliso/DNSentry/internal/querylog"
@@ -24,11 +26,11 @@ func TestPausedProtectionSkipsFilterRules(t *testing.T) {
 	if err := store.Reload(); err != nil {
 		t.Fatal(err)
 	}
-	upstream, _ := startAnswerServer(t, net.IPv4(203, 0, 113, 7))
-	config := &Config{Upstreams: []string{upstream}, BlockingMode: "nxdomain", CacheSize: 1 << 20}
+	upstreamServer, _ := startAnswerServer(t, net.IPv4(203, 0, 113, 7))
+	config := &Config{Upstreams: []string{upstreamServer}, BlockingMode: "nxdomain", CacheSize: 1 << 20}
 	server := &DNSServer{
 		config: config, rules: store, cache: cache.New(config.CacheSize, false), logs: querylog.New(10),
-		client: &dns.Client{Net: "udp", Timeout: time.Second}, pool: NewUpstreamPool(config.Upstreams),
+		client: &dns.Client{Net: "udp", Timeout: time.Second}, pool: upstream.NewPool(config.Upstreams),
 	}
 	query := func() *dns.Msg {
 		writer := new(captureResponseWriter)

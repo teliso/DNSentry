@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"github.com/teliso/DNSentry/internal/upstream"
 	"net/http"
 	"strconv"
 	"strings"
@@ -139,7 +140,7 @@ func (a *API) getStatus(writer http.ResponseWriter, _ *http.Request) {
 	if a.dnscrypt != nil {
 		dnscryptStatus = a.dnscrypt.Status()
 	}
-	fallbackHealth := []UpstreamHealth{}
+	fallbackHealth := []upstream.Health{}
 	if a.resolver.fallbackPool != nil {
 		fallbackHealth = a.resolver.fallbackPool.Health()
 	}

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/teliso/DNSentry/internal/upstream"
 	"io/fs"
 	"log/slog"
 	"net"
@@ -135,8 +136,8 @@ func run(ctx context.Context, stop context.CancelFunc, static fs.FS) error {
 		cache:         cache.New(config.CacheSize, config.CacheEnabled),
 		logs:          logs,
 		client:        &dns.Client{Net: "udp", Timeout: upstreamTimeout(config.UpstreamTimeout)},
-		pool:          NewUpstreamPool(config.Upstreams),
-		fallbackPool:  NewUpstreamPool(config.FallbackUpstreams),
+		pool:          upstream.NewPool(config.Upstreams),
+		fallbackPool:  upstream.NewPool(config.FallbackUpstreams),
 		dnssecCacheOK: make(map[string]struct{}),
 	}
 	server.configureAccess(config.Access)

@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/teliso/DNSentry/internal/upstream"
+
 	"github.com/miekg/dns"
 	"github.com/teliso/DNSentry/internal/cache"
 	"github.com/teliso/DNSentry/internal/querylog"
@@ -45,7 +47,7 @@ func TestLocalRecordsAreValidatedAndServedBeforeUpstream(t *testing.T) {
 		cache:  cache.New(config.CacheSize, true),
 		logs:   querylog.New(10),
 		client: &dns.Client{Net: "udp"},
-		pool:   NewUpstreamPool(config.Upstreams),
+		pool:   upstream.NewPool(config.Upstreams),
 	}
 	server.setLocalRecords(config.LocalRecords)
 

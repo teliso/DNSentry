@@ -10,6 +10,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/teliso/DNSentry/internal/upstream"
+
 	"github.com/miekg/dns"
 
 	"github.com/teliso/DNSentry/internal/cache"
@@ -37,8 +39,8 @@ func newConfigTestAPI(t *testing.T) *API {
 		cache:         cache.New(validated.CacheSize, validated.CacheEnabled),
 		logs:          querylog.New(10),
 		client:        &dns.Client{Net: "udp", Timeout: upstreamTimeout(validated.UpstreamTimeout)},
-		pool:          NewUpstreamPool(validated.Upstreams),
-		fallbackPool:  NewUpstreamPool(validated.FallbackUpstreams),
+		pool:          upstream.NewPool(validated.Upstreams),
+		fallbackPool:  upstream.NewPool(validated.FallbackUpstreams),
 		dnssecCacheOK: make(map[string]struct{}),
 	}
 	server.configureAccess(validated.Access)

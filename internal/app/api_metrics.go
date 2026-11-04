@@ -2,6 +2,7 @@ package app
 
 import (
 	"fmt"
+	"github.com/teliso/DNSentry/internal/upstream"
 	"io"
 	"net/http"
 	"strings"
@@ -46,7 +47,7 @@ func (a *API) writeMetrics(writer http.ResponseWriter, _ *http.Request) {
 	writeUpstreamPoolMetrics(writer, "fallback", a.resolver.fallbackPool)
 }
 
-func writeUpstreamPoolMetrics(writer io.Writer, role string, pool *UpstreamPool) {
+func writeUpstreamPoolMetrics(writer io.Writer, role string, pool *upstream.Pool) {
 	if pool == nil {
 		return
 	}

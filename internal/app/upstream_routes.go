@@ -3,6 +3,7 @@ package app
 import (
 	"errors"
 	"fmt"
+	"github.com/teliso/DNSentry/internal/upstream"
 	"reflect"
 	"strings"
 
@@ -73,7 +74,7 @@ func upstreamRoutesEqual(left, right []UpstreamRoute) bool {
 
 type activeRoute struct {
 	config UpstreamRoute
-	pool   *UpstreamPool
+	pool   *upstream.Pool
 }
 
 // routeTable resolves a query name to the most specific route.
@@ -97,7 +98,7 @@ func (t *routeTable) lookup(name string) *activeRoute {
 // buildRouteTable compiles routes, reusing the upstream pools (and so their
 // health state) of routes that did not change.
 func buildRouteTable(routes []UpstreamRoute, previous *routeTable) *routeTable {
-	reusable := make(map[string]*UpstreamPool)
+	reusable := make(map[string]*upstream.Pool)
 	if previous != nil {
 		for _, route := range previous.routes {
 			reusable[strings.Join(route.config.Upstreams, "\n")] = route.pool
@@ -108,7 +109,7 @@ func buildRouteTable(routes []UpstreamRoute, previous *routeTable) *routeTable {
 		key := strings.Join(config.Upstreams, "\n")
 		pool, ok := reusable[key]
 		if !ok {
-			pool = NewUpstreamPool(config.Upstreams)
+			pool = upstream.NewPool(config.Upstreams)
 		}
 		route := &activeRoute{config: config, pool: pool}
 		table.routes = append(table.routes, route)
@@ -121,9 +122,9 @@ func buildRouteTable(routes []UpstreamRoute, previous *routeTable) *routeTable {
 
 // RouteStatus is the API view of a route and the health of its upstreams.
 type RouteStatus struct {
-	Name      string           `json:"name,omitempty"`
-	Domains   []string         `json:"domains"`
-	Upstreams []UpstreamHealth `json:"upstreams"`
+	Name      string            `json:"name,omitempty"`
+	Domains   []string          `json:"domains"`
+	Upstreams []upstream.Health `json:"upstreams"`
 }
 
 func (s *DNSServer) routeStatus() []RouteStatus {

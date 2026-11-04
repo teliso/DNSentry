@@ -2,6 +2,7 @@ package app
 
 import (
 	"crypto/tls"
+	"github.com/teliso/DNSentry/internal/upstream"
 	"slices"
 	"sync"
 	"sync/atomic"
@@ -27,8 +28,8 @@ type DNSServer struct {
 	cache                 *cache.Cache
 	logs                  *querylog.Logger
 	client                *dns.Client
-	pool                  *UpstreamPool
-	fallbackPool          *UpstreamPool
+	pool                  *upstream.Pool
+	fallbackPool          *upstream.Pool
 	accessMu              sync.RWMutex
 	accessPolicy          *clientAccessPolicy
 	clientLimiter         *clientRateLimiter
@@ -135,7 +136,7 @@ func (s *DNSServer) applyConfig(config Config) error {
 	s.setUpstreamTimeout(upstreamTimeout(config.UpstreamTimeout))
 	s.pool.Set(config.Upstreams)
 	if s.fallbackPool == nil {
-		s.fallbackPool = NewUpstreamPool(config.FallbackUpstreams)
+		s.fallbackPool = upstream.NewPool(config.FallbackUpstreams)
 	} else {
 		s.fallbackPool.Set(config.FallbackUpstreams)
 	}

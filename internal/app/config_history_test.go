@@ -1,12 +1,13 @@
 package app
 
 import (
-	"gopkg.in/yaml.v3"
 	"net/http"
 	"os"
 	"path/filepath"
 	"testing"
 	"time"
+
+	"gopkg.in/yaml.v3"
 )
 
 func TestConfigHistoryRecordsVersionsAndChanges(t *testing.T) {
