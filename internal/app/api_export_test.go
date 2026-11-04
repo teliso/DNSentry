@@ -94,3 +94,14 @@ func TestSavedLogEndpointsWithoutPersistence(t *testing.T) {
 		t.Fatalf("exporting a saved day without persistence = %d", code)
 	}
 }
+
+func TestClearLogsEndpoint(t *testing.T) {
+	api := newConfigTestAPI(t)
+	api.logs.Add(querylog.Entry{Domain: "a.test", Action: "forwarded"})
+	if response := callAPI(t, api, http.MethodPost, "/api/logs/clear", nil); response.Code != http.StatusOK {
+		t.Fatalf("clear = %d", response.Code)
+	}
+	if len(api.logs.List()) != 0 {
+		t.Fatal("the in-memory log was not emptied")
+	}
+}

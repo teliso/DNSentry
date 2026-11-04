@@ -40,6 +40,14 @@
     if (confirm(`用“${file.name}”替换当前配置？当前配置会保留在历史中，可以再恢复回来。`)) await store.importConfig(await file.text());
   }
 
+  function clearCache() {
+    if (confirm('清空 DNS 缓存？之后的查询会重新向上游请求，短时间内可能变慢。')) void store.clearCache();
+  }
+
+  function clearLogs() {
+    if (confirm('清空内存中的查询日志？这不能撤销（已保存到磁盘的日志不受影响）。')) void store.clearLogs();
+  }
+
   function restore(version: ConfigVersion) {
     if (confirm(`恢复到 ${new Date(version.time).toLocaleString('zh-CN', { hour12: false })} 保存的配置？当前配置会保留在历史中，可以再恢复回来。`)) {
       void store.restoreConfig(version.id);
@@ -93,12 +101,22 @@
         <input bind:this={picker} type="file" accept=".yaml,.yml,text/yaml,application/yaml" hidden onchange={importFile} />
       </div>
     </div>
-    <div class="row">
-      <div>
-        <strong>清空 DNS 缓存</strong>
-        <p class="muted">上游记录变更后需要立即生效时使用。</p>
+    <div class="cleanup">
+      <strong>数据清理</strong>
+      <div class="row">
+        <div>
+          <span>清空 DNS 缓存</span>
+          <p class="muted">上游记录变更后需要立即生效时使用；缓存会随新查询重新建立。</p>
+        </div>
+        <button class="btn danger" type="button" disabled={store.busy} onclick={clearCache}>清空缓存</button>
       </div>
-      <button class="btn" type="button" disabled={store.busy} onclick={() => store.clearCache()}>清空</button>
+      <div class="row">
+        <div>
+          <span>清空内存中的查询日志</span>
+          <p class="muted">清除日志页的最近记录和概览里据此统计的排行；累计数字、趋势图和已保存到磁盘的日志不受影响。</p>
+        </div>
+        <button class="btn danger" type="button" disabled={store.busy} onclick={clearLogs}>清空日志</button>
+      </div>
     </div>
     <dl class="about">
       <div><dt>版本</dt><dd class="mono">{status?.version ?? '—'}</dd></div>
@@ -115,6 +133,8 @@
   .when .badge { margin-left: 6px; }
   .chips { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
   .end { text-align: right; }
+  .cleanup { border-top: 1px solid var(--line); padding-top: 14px; display: flex; flex-direction: column; }
+  .cleanup .row { border-top: 0; padding: 8px 0 0; }
   .row { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 14px 0; border-top: 1px solid var(--line); }
   .row p { font-size: 13px; }
   .buttons { display: flex; gap: 8px; flex: none; }

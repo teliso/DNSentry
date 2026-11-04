@@ -211,6 +211,14 @@ class ConsoleStore {
     }, '清空缓存失败');
   }
 
+  async clearLogs() {
+    await this.act(async () => {
+      await api.clearLogs();
+      toasts.success('内存中的查询日志已清空');
+      await this.refreshLive();
+    }, '清空日志失败');
+  }
+
   async testUpstreams(addresses: string[]): Promise<UpstreamTest[] | null> {
     let result: UpstreamTest[] | null = null;
     await this.act(async () => {

@@ -74,6 +74,7 @@ var apiRoutes = []apiRoute{
 	{http.MethodPost, "/config/import", (*API).importConfig},
 	{http.MethodGet, "/metrics", (*API).writeMetrics},
 	{http.MethodPost, "/cache/clear", (*API).clearCache},
+	{http.MethodPost, "/logs/clear", (*API).clearLogs},
 	{http.MethodGet, "/stats", (*API).getStats},
 	{http.MethodGet, "/services", (*API).listServices},
 	{http.MethodPost, "/notifications/test", (*API).testNotification},
@@ -258,6 +259,12 @@ func (a *API) getStats(writer http.ResponseWriter, request *http.Request) {
 		return
 	}
 	writeJSON(writer, http.StatusOK, a.logs.History(window))
+}
+
+// clearLogs serves POST /logs/clear: empties the in-memory query log.
+func (a *API) clearLogs(writer http.ResponseWriter, _ *http.Request) {
+	a.logs.Clear()
+	writeJSON(writer, http.StatusOK, map[string]string{"status": "cleared"})
 }
 
 // listLogs serves GET /logs?search=&action=&offset=&limit= (the recent

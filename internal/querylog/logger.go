@@ -322,6 +322,15 @@ type Filter struct {
 	Limit  int
 }
 
+// Clear forgets the entries kept in memory (the recent-queries list and the
+// rankings built from it). Counters, the traffic charts and files saved on disk
+// are left alone.
+func (l *Logger) Clear() {
+	l.mu.Lock()
+	l.ring, l.next, l.count = nil, 0, 0
+	l.mu.Unlock()
+}
+
 // Export returns every in-memory entry matching filter (Offset and Limit are
 // ignored), newest first.
 func (l *Logger) Export(filter Filter) []Entry {

@@ -81,16 +81,17 @@
     backdrop-filter: saturate(1.5) blur(10px);
     border-bottom: 1px solid var(--line);
   }
-  .bar { display: flex; align-items: center; gap: 28px; max-width: var(--page-width); height: var(--topbar-height); margin: 0 auto; padding: 0 var(--gutter); }
-  .brand { display: flex; align-items: center; gap: 10px; color: var(--ink); text-decoration: none; flex: none; }
+  /* brand | navigation (centred) | tools */
+  .bar { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 20px; max-width: var(--page-width); height: var(--topbar-height); margin: 0 auto; padding: 0 var(--gutter); }
+  .brand { display: flex; align-items: center; gap: 10px; color: var(--ink); text-decoration: none; justify-self: start; }
   .brand strong { font-size: 16px; letter-spacing: -0.01em; }
   .mark {
     display: grid; place-items: center; width: 30px; height: 30px; border-radius: 9px;
-    background: linear-gradient(135deg, var(--accent), color-mix(in srgb, var(--accent) 55%, #7c3aed));
+    background: linear-gradient(135deg, var(--accent), color-mix(in srgb, var(--accent) 55%, #0ea5a4));
     color: var(--accent-ink); box-shadow: 0 2px 8px color-mix(in srgb, var(--accent) 35%, transparent);
   }
 
-  nav { display: flex; align-items: center; gap: 4px; flex: 1; min-width: 0; }
+  nav { display: flex; align-items: center; justify-content: center; gap: 4px; min-width: 0; }
   nav a {
     display: flex; align-items: center; gap: 8px; padding: 7px 13px; border-radius: 8px;
     color: var(--ink-2); font-weight: 500; text-decoration: none; white-space: nowrap;
@@ -101,7 +102,7 @@
   nav a.active { background: var(--accent-soft); color: var(--accent); }
   nav a.active :global(svg) { color: var(--accent); }
 
-  .tools { display: flex; align-items: center; gap: 8px; flex: none; margin-left: auto; }
+  .tools { display: flex; align-items: center; gap: 8px; justify-self: end; }
   .conn { display: flex; align-items: center; gap: 7px; color: var(--ink-2); font-size: 13px; }
   .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--ok); box-shadow: 0 0 0 3px var(--ok-soft); }
   .dot.off { background: var(--danger); box-shadow: 0 0 0 3px var(--danger-soft); }
@@ -111,6 +112,8 @@
   @media (max-width: 900px) {
     /* backdrop-filter would make the header the containing block of the fixed tab bar */
     .topbar { backdrop-filter: none; background: var(--surface); }
+    .bar { display: flex; }
+    .tools { margin-left: auto; }
     nav {
       position: fixed; z-index: 50; left: 0; right: 0; bottom: 0; gap: 0;
       padding: 0 4px env(safe-area-inset-bottom);

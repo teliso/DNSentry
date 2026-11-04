@@ -3,7 +3,7 @@
   import Card from '../components/Card.svelte';
   import EmptyState from '../components/EmptyState.svelte';
   import Icon from '../components/Icon.svelte';
-  import PageHeader from '../components/PageHeader.svelte';
+  import PageActions from '../components/PageActions.svelte';
   import Pager from '../components/Pager.svelte';
   import Switch from '../components/Switch.svelte';
   import { api } from '../lib/api';
@@ -91,19 +91,17 @@
   }
 </script>
 
-<PageHeader title="查询日志" description={browsing ? `${day} 保存在磁盘上的查询日志。` : `最近的 DNS 请求及其处理结果（内存中保留最近 ${formatNumber(store.saved?.query_log_size ?? 0)} 条${days.length > 0 ? '；更早的在右上角按天查看' : ''}）。`}>
-  {#snippet actions()}
-    {#if days.length > 0}
-      <select aria-label="查看哪一天的日志" bind:value={day}>
-        <option value="">最近（内存）</option>
-        {#each days as value (value)}<option {value}>{value}</option>{/each}
-      </select>
-    {/if}
-    {#if !browsing}<Switch bind:checked={live} label="实时刷新" />{/if}
-    <button class="btn" type="button" onclick={load}><Icon name="refresh" />刷新</button>
-    <button class="btn" type="button" onclick={exportLogs} title="导出当前筛选条件下的全部内存日志（CSV，可用 Excel 打开）"><Icon name="download" />导出</button>
-  {/snippet}
-</PageHeader>
+<PageActions>
+  {#if days.length > 0}
+    <select class="day" aria-label="查看哪一天的日志" bind:value={day}>
+      <option value="">最近（内存）</option>
+      {#each days as value (value)}<option {value}>{value}</option>{/each}
+    </select>
+  {/if}
+  {#if !browsing}<Switch bind:checked={live} label="实时刷新" />{/if}
+  <button class="btn icon" type="button" onclick={load} aria-label="刷新" title="刷新"><Icon name="refresh" /></button>
+  <button class="btn icon" type="button" onclick={exportLogs} aria-label="导出 CSV" title="导出当前筛选条件下的全部日志（CSV，可用 Excel 打开）"><Icon name="download" /></button>
+</PageActions>
 
 {#if result?.truncated}
   <p class="warning">这一天的匹配记录太多，只显示最新的 20 万条。可以用搜索或结果筛选缩小范围。</p>
@@ -167,6 +165,7 @@
 </Card>
 
 <style>
+  .day { width: auto; }
   .warning { padding: 9px 12px; border-radius: var(--radius-sm); background: var(--warn-soft); color: var(--ink-2); }
   .toolbar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 0 16px 12px; }
   .search { position: relative; flex: 1 1 240px; }

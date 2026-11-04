@@ -183,3 +183,21 @@ func TestRingKeepsNewestEntriesInOrder(t *testing.T) {
 		t.Fatalf("page = %#v", page)
 	}
 }
+
+func TestClearForgetsEntriesButKeepsCounters(t *testing.T) {
+	logger := New(3)
+	for i := 0; i < 5; i++ {
+		logger.Add(Entry{Domain: "a.test", Action: "block"})
+	}
+	logger.Clear()
+	if len(logger.List()) != 0 || logger.Query(Filter{}).Total != 0 {
+		t.Fatal("entries survived Clear")
+	}
+	if total, blocked := logger.Stats(); total != 5 || blocked != 5 {
+		t.Fatalf("counters must survive: %d/%d", total, blocked)
+	}
+	logger.Add(Entry{Domain: "b.test"})
+	if list := logger.List(); len(list) != 1 || list[0].Domain != "b.test" {
+		t.Fatalf("the log must keep working after Clear: %v", list)
+	}
+}

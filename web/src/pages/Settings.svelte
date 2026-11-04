@@ -1,5 +1,4 @@
 <script lang="ts">
-  import PageHeader from '../components/PageHeader.svelte';
   import Tabs from '../components/Tabs.svelte';
   import { router } from '../lib/router.svelte';
   import { store } from '../lib/store.svelte';
@@ -22,7 +21,6 @@
   ];
 </script>
 
-<PageHeader title="设置" description="服务对外提供的方式、谁可以使用它，以及日志与维护。监听、加密和日志存储的改动需要重启服务。" />
 <Tabs page="settings" {tabs} />
 
 {#if router.tab === 'maintenance'}
