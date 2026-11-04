@@ -21,13 +21,13 @@ dnsentry -config /path/to/config.yaml -check
 | --- | --- |
 | DNS 监听 | `:15353`（UDP + TCP） |
 | 控制台监听 | `127.0.0.1:18080` |
-| 上游 | `1.1.1.1:53`、`8.8.8.8:53`，负载均衡，超时 4 秒 |
+| 上游 | `1.1.1.1:53`、`8.8.8.8:53`，负载均衡 |
 | Bootstrap DNS | `1.1.1.1:53`、`8.8.8.8:53` |
-| 拦截响应 | NXDOMAIN，TTL 10 秒 |
-| 缓存 | 开启，4 MB，预取与乐观缓存关闭 |
+| 拦截响应 | NXDOMAIN |
+| 缓存 | 开启，4 MB，热门条目自动预取，乐观缓存关闭 |
 | 私网反向解析 | 开启 |
-| 查询日志 | 内存 1000 条，不持久化，持久化时保留 7 天 |
-| 访问控制 | 不限制客户端，不限速，最大并发 2048 |
+| 查询日志 | 控制台保留最近 1000 条，不写磁盘；写磁盘时保留 7 天 |
+| 访问控制 | 不限制客户端，不限速 |
 | 加密 DNS | 关闭 |
 
 ## 命令行参数
@@ -54,6 +54,10 @@ dnsentry -healthcheck URL   请求 URL，返回 200 则退出码为 0（用于�
 | `DNSENTRY_LOG_LEVEL` / `DNSENTRY_LOG_FORMAT` | 对应 `-log-level` / `-log-format`；命令行参数优先。 |
 | `DNSENTRY_DNS_LISTEN` / `DNSENTRY_WEB_LISTEN` | 只在**首次生成默认配置**时使用的监听地址，方便容器和服务部署；已有配置文件时不起作用。 |
 
+## 刻意没有的配置
+
+上游超时（4 秒）、拦截应答 TTL（10 秒）、并发上限（2048）、缓存预取和乐观缓存的细节参数、DNSSEC 信任锚（内置 IANA 根锚，含 KSK-2024）都是固定值：它们对绝大多数部署只有一个合理取值，做成配置只会增加出错的机会。旧配置文件里这些键会被忽略。
+
 ## 配置项说明
 
 以下按配置文件的结构列出，完整注释见 `deploy/config.example.yaml`。
@@ -66,45 +70,30 @@ dns:
   fallback_upstreams: []           # 备用上游
   upstream_mode: load_balance      # load_balance | parallel | fastest_addr
   bootstrap_dns: ["1.1.1.1:53"]    # 解析加密上游域名用的普通 DNS
-  upstream_timeout_seconds: 4
   upstream_routes: []              # 域名分流，见 docs/dns.md
   private_reverse: true            # 私网反向解析由本机应答
   block_aaaa: false                # AAAA 查询返回空应答
-  blocking_mode: nxdomain          # default | nxdomain | null_ip | custom_ip | refused
-  blocking_ipv4: 0.0.0.0           # 仅 custom_ip
-  blocking_ipv6: "::"              # 仅 custom_ip
-  blocked_response_ttl: 10
-  enable_dnssec: false
-  dnssec_validate: false
-  dnssec_trust_anchors: []
-  dnssec_trust_anchor_file: ""
-  dnssec_auto_update: false
+  blocking_mode: nxdomain          # nxdomain | null_ip | refused
+  dnssec_validate: false          # 验证 DNSSEC 签名（内置 IANA 根信任锚）
   local_records: []                # 也可在控制台“本地记录”页维护
 web:
   listen: 127.0.0.1:18080          # [restart]
 cache:
   enabled: true
-  size: 4194304                    # 字节
-  ttl_min: 0                       # 秒，0 = 不限制
-  ttl_max: 0
-  prefetch: false
-  optimistic: false
-  optimistic_answer_ttl: 30
-  optimistic_max_age: 43200
+  size: 4194304                    # 字节，控制台里以 MB 编辑
+  optimistic: false                # 先返回刚过期的答案，同时后台刷新
 rules:
-  local_file: data/rules.txt       # [restart] 本地规则文件；规则源缓存放在同目录 remote/
+  # local_file: data/rules.txt     # [restart] 默认就在配置文件同目录；仅需要改位置时才写。规则源缓存放在同目录 remote/
   sources: []                      # 规则源：url、name、enabled、interval_minutes
 access:
   allowed_clients: []              # IP / CIDR，空 = 所有客户端
   denied_clients: []
   client_rate_limit_qps: 0         # 0 = 不限
-  max_concurrent_queries: 2048
   rebinding_protection: false
   rebinding_allow_domains: []
 logging:
-  query_log_size: 1000             # [restart] 内存中保留的条数
   enabled: false                   # [restart] 是否写 JSONL 文件
-  file: data/querylog              # [restart] 文件前缀：data/querylog-YYYY-MM-DD.jsonl
+  # file: data/querylog            # [restart] 默认就在配置文件同目录：querylog-YYYY-MM-DD.jsonl
   retention_days: 7                # [restart] 1–365
 encryption:                        # [restart] 整个加密 DNS 服务
   enabled: false
@@ -127,4 +116,4 @@ encryption:                        # [restart] 整个加密 DNS 服务
 
 ## 通过 API 修改路径的限制
 
-规则文件、查询日志、DNSSEC 信任锚文件、证书和私钥这些路径，通过控制台 / API 修改时只能是**工作目录内的相对路径**（服务会用自己的权限读写这些文件）。需要绝对路径时请直接编辑配置文件。已有的路径值不受影响。
+规则文件、查询日志、证书和私钥这些路径，通过控制台 / API 修改时只能是**工作目录内的相对路径**（服务会用自己的权限读写这些文件）。需要绝对路径时请直接编辑配置文件。已有的路径值不受影响。

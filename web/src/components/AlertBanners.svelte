@@ -5,15 +5,28 @@
   import { store } from '../lib/store.svelte';
 
   const alerts = $derived(computeAlerts(store.status));
+  const paused = $derived(store.status && store.status.protection?.enabled === false ? store.status.protection : null);
+  const here = $derived(`${router.current}/${router.tab}`);
+
+  function resumeTime(iso?: string) {
+    return iso ? new Date(iso).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }) : '';
+  }
 </script>
 
-{#if alerts.length > 0}
+{#if paused || alerts.length > 0}
   <div class="alerts" role="region" aria-label="需要注意的问题">
+    {#if paused}
+      <div class="alert warn" role="status">
+        <Icon name="pause" />
+        <span>过滤已暂停：广告和恶意域名目前不会被拦截{paused.resume_at ? `，将在 ${resumeTime(paused.resume_at)} 自动恢复` : '，需要手动恢复'}。</span>
+        <button class="btn sm" type="button" disabled={store.busy} onclick={() => store.setProtection(true)}>立即恢复</button>
+      </div>
+    {/if}
     {#each alerts as alert (alert.id)}
       <div class="alert {alert.tone}" role={alert.tone === 'danger' ? 'alert' : 'status'}>
         <Icon name="alert" />
         <span>{alert.text}</span>
-        {#if alert.route && router.current !== alert.route}
+        {#if alert.route && !`${alert.route}/`.startsWith(`${here}/`)}
           <button class="btn sm" type="button" onclick={() => router.go(alert.route!)}>{alert.action}</button>
         {/if}
       </div>

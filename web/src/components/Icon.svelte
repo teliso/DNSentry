@@ -19,6 +19,11 @@
     activity: 'M22 12h-4l-3 9L9 3l-3 9H2',
     chevron: 'M9 6l6 6-6 6',
     'chevron-left': 'M15 6l-6 6 6 6',
+    pause: 'M6 4h4v16H6z M14 4h4v16h-4z',
+    play: 'M5 3l14 9-14 9V3z',
+    copy: 'M20 9h-9a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h9a2 2 0 0 0 2-2v-9a2 2 0 0 0-2-2z M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1',
+    info: 'M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20z M12 16v-4 M12 8h.01',
+    'chevron-down': 'M6 9l6 6 6-6',
     globe: 'M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20z M2 12h20 M12 2a15 15 0 0 1 0 20 15 15 0 0 1 0-20z'
   } as const;
 

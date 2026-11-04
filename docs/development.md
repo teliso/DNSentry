@@ -26,7 +26,7 @@ internal/
   fsutil/            原子写文件等文件工具
   buildinfo/         版本号（构建时通过 ldflags 注入）
 web/
-  src/               Svelte 5 控制台源码（pages/ 页面，components/ 通用组件，lib/ 状态与工具）
+  src/               Svelte 5 控制台源码（pages/ 五个页面，panels/ 与 sections/ 页内的功能块，components/ 通用组件，lib/ 状态与工具）
   dist/              构建产物，已提交并通过 embed.FS 打进二进制
 deploy/              systemd 单元、Compose 文件、示例配置
 docs/                本文档目录

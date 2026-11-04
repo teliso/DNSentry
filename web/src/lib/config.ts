@@ -28,7 +28,6 @@ const defaultAccess: AccessConfig = {
   allowed_clients: [],
   denied_clients: [],
   client_rate_limit_qps: 0,
-  max_concurrent_queries: 2048,
   rebinding_protection: false,
   rebinding_allow_domains: []
 };
@@ -66,7 +65,6 @@ export function normalizeConfig(raw: Config): Config {
     upstreams: cleanList(raw.upstreams),
     fallback_upstreams: cleanList(raw.fallback_upstreams),
     bootstrap_dns: cleanList(raw.bootstrap_dns),
-    dnssec_trust_anchors: cleanList(raw.dnssec_trust_anchors),
     local_records: raw.local_records ?? [],
     upstream_routes: (raw.upstream_routes ?? []).map((route) => ({ ...route, domains: [...route.domains], upstreams: [...route.upstreams] })),
     access: {
@@ -86,7 +84,6 @@ export function serializeConfig(config: Config): Config {
   copy.upstreams = cleanList(copy.upstreams);
   copy.fallback_upstreams = cleanList(copy.fallback_upstreams);
   copy.bootstrap_dns = cleanList(copy.bootstrap_dns);
-  copy.dnssec_trust_anchors = cleanList(copy.dnssec_trust_anchors);
   copy.upstream_routes = (copy.upstream_routes ?? [])
     .map((route) => ({ ...route, name: route.name?.trim() || undefined, domains: cleanList(route.domains), upstreams: cleanList(route.upstreams) }))
     .filter((route) => route.domains.length > 0 || route.upstreams.length > 0);

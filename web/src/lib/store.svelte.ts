@@ -141,6 +141,15 @@ class ConsoleStore {
     }, '保存本地记录失败');
   }
 
+  /** Pauses filtering for `minutes` (0 = until resumed) or turns it back on. */
+  async setProtection(enabled: boolean, minutes = 0) {
+    await this.act(async () => {
+      await api.setProtection(enabled, minutes);
+      await this.refreshLive();
+      toasts.success(enabled ? '过滤已恢复' : minutes ? `过滤已暂停 ${minutes >= 60 ? `${minutes / 60} 小时` : `${minutes} 分钟`}` : '过滤已暂停');
+    }, '切换过滤失败');
+  }
+
   async clearCache() {
     await this.act(async () => {
       await api.clearCache();

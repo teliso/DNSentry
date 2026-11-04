@@ -25,7 +25,8 @@
   --series-total: #3358d4;
   --series-blocked: #e8590c;
 
-  --page-width: 1280px;
+  --page-width: 1240px;
+  --gutter: 32px;
   --topbar-height: 56px;
   --radius: 10px;
   --radius-sm: 7px;
@@ -162,7 +163,9 @@ table.data .cell-domain { font-family: var(--font-mono); font-size: 13px; word-b
 /* Cards that are targets of in-page section links stop below the sticky bars. */
 [id] { scroll-margin-top: calc(var(--topbar-height) + 64px); }
 .unit { position: relative; }
+.unit.narrow { max-width: 220px; }
 .unit input { padding-right: 44px; }
 .unit > span { position: absolute; right: 11px; top: 7px; color: var(--muted); pointer-events: none; }
+@media (max-width: 900px) { :root { --gutter: 16px; } }
 @media (max-width: 860px) { .form-grid.three { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 640px) { .form-grid.two, .form-grid.three { grid-template-columns: 1fr; } }

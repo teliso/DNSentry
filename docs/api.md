@@ -25,6 +25,7 @@ curl -H "Authorization: Bearer $TOKEN" http://192.168.1.2:18080/api/status
 | `GET /config/history` | 配置版本列表（新的在前） |
 | `POST /config/restore` | 恢复配置，可选 `{"id": "…"}`，默认恢复上一个版本 |
 | `POST /cache/clear` | 清空 DNS 缓存 |
+| `POST /protection` | 暂停 / 恢复过滤，见下 |
 | `POST /upstreams/test` | 测试上游 `{"upstreams": [...], "domain": "example.com"}` |
 | `GET /logs` | 查询日志（分页） |
 | `GET /rules` | 规则（分页） |
@@ -36,11 +37,20 @@ curl -H "Authorization: Bearer $TOKEN" http://192.168.1.2:18080/api/status
 | `GET /sources`、`PUT /sources` | 规则源列表 / 整体替换 |
 | `POST /sources/refresh` | 立即更新规则源 `{"url": "…"}`，空则更新全部 |
 
+### 暂停过滤
+
+```http
+POST /api/protection
+{"enabled": false, "duration_minutes": 30}
+```
+
+`enabled` 为 `false` 时暂停过滤，`duration_minutes` 为 1–1440，`0` 表示直到手动恢复；`enabled` 为 `true` 时立即恢复。返回 `{"enabled": false, "resume_at": "2026-…Z"}`。暂停只保存在内存里，重启服务会恢复过滤。
+
 ## 常用接口详解
 
 ### `GET /status`
 
-返回一个大的对象，主要字段：`version`、`restart_required`、`config_path`、`rules_file`、`total_queries`、`blocked_queries`、`rules`、`local_rules`、`cache`（命中率、条目、字节数、预取次数等）、`dnssec`、`security`（被拒绝 / 限速 / 过载 / Rebinding 的计数）、`dnscrypt`（运行状态与 stamp）、`series`（最近 30 分钟每分钟的查询和拦截数）、`dashboard`（排行）、`upstream_health`（每个上游的健康状态和 30 分钟 `history`）、`upstream_routes`（分流及其上游健康）、`fallback_upstream_health`、`rule_sources`（规则源及运行状态）。
+返回一个大的对象，主要字段：`version`、`restart_required`、`protection`（过滤是否开启及自动恢复时间）、`config_path`、`rules_file`、`total_queries`、`blocked_queries`、`rules`、`local_rules`、`cache`（命中率、条目、字节数、预取次数等）、`dnssec`、`security`（被拒绝 / 限速 / 过载 / Rebinding 的计数）、`dnscrypt`（运行状态与 stamp）、`series`（最近 30 分钟每分钟的查询和拦截数）、`dashboard`（排行）、`upstream_health`（每个上游的健康状态和 30 分钟 `history`）、`upstream_routes`（分流及其上游健康）、`fallback_upstream_health`、`rule_sources`（规则源及运行状态）。
 
 ### `GET /config` / `PUT /config`
 
@@ -49,7 +59,7 @@ curl -H "Authorization: Bearer $TOKEN" http://192.168.1.2:18080/api/status
 - 私钥类字段（`private_key_pem`、DNSCrypt 的 `private_key` 和 `resolver_secret`）**不会返回**；`PUT` 时留空表示保持现有值。
 - `rule_sources` 不由 `PUT /config` 修改（用 `PUT /sources`），请求里的值会被忽略。
 - 成功返回 200 和保存后的配置。监听地址、控制台地址、规则文件、日志存储、加密 DNS 这类启动时设置会被保存，但要重启才生效——重启后才生效的情况可以从 `GET /status` 的 `restart_required` 得知。
-- 规则文件、日志、信任锚文件、证书、私钥这些路径，改动时只能是工作目录内的相对路径（否则 400）。
+- 规则文件、日志、证书、私钥这些路径，改动时只能是工作目录内的相对路径（否则 400）。
 
 ### `GET /logs`
 

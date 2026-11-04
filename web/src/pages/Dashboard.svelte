@@ -2,9 +2,11 @@
   import BarList from '../components/BarList.svelte';
   import Card from '../components/Card.svelte';
   import Icon from '../components/Icon.svelte';
-  import PageHeader from '../components/PageHeader.svelte';
-  import Stat from '../components/Stat.svelte';
   import LatencySpark from '../components/LatencySpark.svelte';
+  import PageHeader from '../components/PageHeader.svelte';
+  import ProtectionControl from '../components/ProtectionControl.svelte';
+  import SetupGuide from '../components/SetupGuide.svelte';
+  import Stat from '../components/Stat.svelte';
   import TrafficChart from '../components/TrafficChart.svelte';
   import { formatBytes, formatCompact, formatDuration, formatNumber, formatPercent, formatRelative } from '../lib/format';
   import { store } from '../lib/store.svelte';
@@ -14,66 +16,40 @@
   const health = $derived([...(status?.upstream_health ?? []), ...(status?.fallback_upstream_health ?? []).map((item) => ({ ...item, fallback: true }))]);
   const security = $derived(status?.security);
   const dnssec = $derived(status?.dnssec);
+  const series = $derived(status?.series ?? []);
+  let guide = $state(false);
+  /** Ranking cards stay compact; the log page has the full picture. */
+  const top = <T,>(items: T[] | undefined, count = 6) => (items ?? []).slice(0, count);
 </script>
 
-<PageHeader title="仪表盘" description="DNS 请求、过滤与上游服务的实时概览。">
+<PageHeader title="概览" description="DNS 请求、过滤与上游服务的实时状态。">
   {#snippet actions()}
-    <button class="btn" type="button" onclick={() => store.refreshLive()}><Icon name="refresh" />刷新</button>
+    <button class="btn" type="button" onclick={() => (guide = true)}><Icon name="info" />接入指引</button>
+    <ProtectionControl />
+    <button class="btn icon" type="button" onclick={() => store.refreshLive()} aria-label="刷新" title="刷新"><Icon name="refresh" /></button>
   {/snippet}
 </PageHeader>
 
+{#if status && status.total_queries === 0}
+  <div class="callout">
+    <Icon name="info" />
+    <span>还没有收到任何查询。把设备的 DNS 指向 DNSentry 后，这里就会开始显示数据。</span>
+    <button class="btn sm" type="button" onclick={() => (guide = true)}>查看接入指引</button>
+  </div>
+{/if}
+
 <section class="stats" aria-label="服务概览">
-  <Stat label="累计查询" value={formatCompact(status?.total_queries ?? 0)} sub="本次启动以来" />
-  <Stat label="已拦截" value={formatCompact(status?.blocked_queries ?? 0)} sub="{formatPercent(blockedRatio)} 的请求被过滤" tone="danger" />
-  <Stat label="活动规则" value={formatCompact(status?.rules ?? 0)} sub="本地 {formatNumber(status?.local_rules ?? 0)} 条 · 规则源 {store.sources.filter((source) => source.enabled).length} 个" tone="ok" />
-  <Stat label="平均处理时间" value={formatDuration(status?.dashboard?.average_processing_ms ?? 0)} sub="DNS 请求端到端耗时" tone="neutral" />
+  <Stat icon="activity" label="查询总数" value={formatCompact(status?.total_queries ?? 0)} sub="本次启动以来" spark={series.map((point) => point.queries)} />
+  <Stat icon="shield" label="已拦截" tone="danger" value={formatCompact(status?.blocked_queries ?? 0)} sub="{formatPercent(blockedRatio)} 的请求被过滤" spark={series.map((point) => point.blocked)} />
+  <Stat icon="check" label="缓存命中率" tone="ok" value={formatPercent(status?.cache?.hit_rate ?? 0)} sub="{formatNumber(status?.cache?.entries ?? 0)} 条 · {formatBytes(status?.cache?.used_bytes ?? 0)}" />
+  <Stat icon="download" label="生效规则" tone="neutral" value={formatCompact(status?.rules ?? 0)} sub="本地 {formatNumber(status?.local_rules ?? 0)} 条 · 订阅 {store.sources.filter((source) => source.enabled).length} 个" />
 </section>
 
-<Card title="请求趋势" description="最近 30 分钟每分钟的查询数与拦截数。">
-  <TrafficChart points={status?.series ?? []} />
-</Card>
-
-<section class="ranks">
-  <div class="col">
-  <Card title="请求域名" description="被查询最多的域名">
-    <BarList items={status?.dashboard?.domains ?? []} />
+<section class="trend">
+  <Card title="请求趋势" description="最近 30 分钟每分钟的查询数与拦截数；平均处理时间 {formatDuration(status?.dashboard?.average_processing_ms ?? 0)}。">
+    <TrafficChart points={series} />
   </Card>
-  <Card title="被拦截域名" description="命中过滤规则最多的域名">
-    <BarList items={status?.dashboard?.blocked_domains ?? []} tone="danger" empty="尚无拦截记录" />
-  </Card>
-  <Card title="上游服务器" description="请求数与平均响应时间">
-    <BarList items={(status?.dashboard?.upstreams ?? []).map((item) => ({ name: item.address, count: item.count, note: formatDuration(item.average_duration_ms) }))} />
-  </Card>
-  </div>
-  <div class="col">
-  <Card title="响应最慢的域名" description="上游解析的平均耗时（最近日志）">
-    <BarList items={(status?.dashboard?.slow_domains ?? []).map((item) => ({ name: item.name, count: item.average_duration_ms, note: `${item.count} 次` }))} unit="ms" empty="暂无上游解析记录" />
-  </Card>
-  <Card title="客户端" description="按请求数排序（最近日志）">
-    <BarList items={status?.dashboard?.client_ips ?? []} />
-  </Card>
-  <Card title="解析失败的域名" description="上游无响应或返回错误">
-    <BarList items={status?.dashboard?.failed_domains ?? []} tone="danger" empty="没有解析失败的请求" />
-  </Card>
-  </div>
-</section>
-
-<section class="ops">
-  <Card title="缓存">
-    {#snippet actions()}
-      <button class="btn sm" type="button" disabled={store.busy} onclick={() => store.clearCache()}>清空缓存</button>
-    {/snippet}
-    <dl class="kv">
-      <div><dt>命中率</dt><dd>{formatPercent(status?.cache?.hit_rate ?? 0)}</dd></div>
-      <div><dt>条目</dt><dd>{formatNumber(status?.cache?.entries ?? 0)}</dd></div>
-      <div><dt>已用空间</dt><dd>{formatBytes(status?.cache?.used_bytes ?? 0)} / {formatBytes(status?.cache?.max_bytes ?? 0)}</dd></div>
-      <div><dt>命中 / 未命中</dt><dd>{formatNumber(status?.cache?.hits ?? 0)} / {formatNumber(status?.cache?.misses ?? 0)}</dd></div>
-      <div><dt>过期命中 / 预取</dt><dd>{formatNumber(status?.cache?.stale_hits ?? 0)} / {formatNumber(status?.cache?.prefetches ?? 0)}</dd></div>
-      <div><dt>淘汰 / 绕过</dt><dd>{formatNumber(status?.cache?.evictions ?? 0)} / {formatNumber(status?.cache?.bypasses ?? 0)}</dd></div>
-    </dl>
-  </Card>
-
-  <Card title="上游健康" description="最近 30 分钟的响应延迟；红色竖线表示该分钟有失败">
+  <Card title="上游健康" description="最近 30 分钟的延迟；红线表示该分钟有失败">
     {#if health.length === 0}
       <p class="muted">尚未配置上游。</p>
     {:else}
@@ -92,6 +68,41 @@
       {/if}
     {/if}
   </Card>
+</section>
+
+<section class="ranks">
+  <Card title="请求域名" description="被查询最多的域名">
+    <BarList items={top(status?.dashboard?.domains)} />
+  </Card>
+  <Card title="被拦截域名" description="命中过滤规则最多的域名">
+    <BarList items={top(status?.dashboard?.blocked_domains)} tone="danger" empty="尚无拦截记录" />
+  </Card>
+  <Card title="客户端" description="按请求数排序（最近日志）">
+    <BarList items={top(status?.dashboard?.client_ips)} />
+  </Card>
+  <Card title="上游服务器" description="请求数与平均响应时间">
+    <BarList items={(status?.dashboard?.upstreams ?? []).map((item) => ({ name: item.address, count: item.count, note: formatDuration(item.average_duration_ms) }))} />
+  </Card>
+  <Card title="响应最慢的域名" description="上游解析的平均耗时（最近日志）">
+    <BarList items={top(status?.dashboard?.slow_domains).map((item) => ({ name: item.name, count: item.average_duration_ms, note: `${item.count} 次` }))} unit="ms" empty="暂无上游解析记录" />
+  </Card>
+  <Card title="解析失败的域名" description="上游无响应或返回错误">
+    <BarList items={top(status?.dashboard?.failed_domains)} tone="danger" empty="没有解析失败的请求" />
+  </Card>
+</section>
+
+<section class="ops">
+  <Card title="缓存">
+    {#snippet actions()}
+      <button class="btn sm" type="button" disabled={store.busy} onclick={() => store.clearCache()}>清空缓存</button>
+    {/snippet}
+    <dl class="kv">
+      <div><dt>命中 / 未命中</dt><dd>{formatNumber(status?.cache?.hits ?? 0)} / {formatNumber(status?.cache?.misses ?? 0)}</dd></div>
+      <div><dt>已用空间</dt><dd>{formatBytes(status?.cache?.used_bytes ?? 0)} / {formatBytes(status?.cache?.max_bytes ?? 0)}</dd></div>
+      <div><dt>过期命中 / 预取</dt><dd>{formatNumber(status?.cache?.stale_hits ?? 0)} / {formatNumber(status?.cache?.prefetches ?? 0)}</dd></div>
+      <div><dt>淘汰 / 绕过</dt><dd>{formatNumber(status?.cache?.evictions ?? 0)} / {formatNumber(status?.cache?.bypasses ?? 0)}</dd></div>
+    </dl>
+  </Card>
 
   <Card title="安全与 DNSSEC">
     <dl class="kv">
@@ -99,18 +110,27 @@
       <div><dt>被限速</dt><dd>{formatNumber(security?.rate_limited ?? 0)}</dd></div>
       <div><dt>过载丢弃</dt><dd>{formatNumber(security?.overloaded ?? 0)}</dd></div>
       <div><dt>Rebinding 拦截</dt><dd>{formatNumber(security?.rebinding_blocked ?? 0)}</dd></div>
-      <div><dt>DNSSEC Secure</dt><dd>{formatNumber(dnssec?.secure ?? 0)}</dd></div>
-      <div><dt>DNSSEC Bogus</dt><dd>{formatNumber(dnssec?.bogus ?? 0)}</dd></div>
+      <div><dt>DNSSEC 已验证</dt><dd>{formatNumber(dnssec?.secure ?? 0)}</dd></div>
+      <div><dt>DNSSEC 验证失败</dt><dd>{formatNumber(dnssec?.bogus ?? 0)}</dd></div>
     </dl>
   </Card>
 </section>
 
+{#if guide}<SetupGuide onclose={() => (guide = false)} />{/if}
+
 <style>
   .stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; }
-  /* Independent columns: a tall card never stretches its neighbour. */
-  .ranks { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; align-items: start; }
-  .col { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
-  .ops { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; align-items: start; }
+  .trend { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); gap: 16px; align-items: start; }
+  /* Cards size to their own content: a tall one never stretches its neighbour. */
+  .ranks { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; align-items: start; }
+  .ops { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; align-items: start; }
+
+  .callout {
+    display: flex; align-items: center; gap: 10px; padding: 11px 14px; border-radius: var(--radius);
+    background: var(--accent-soft); color: var(--ink-2);
+  }
+  .callout :global(svg) { flex: none; color: var(--accent); }
+  .callout span { flex: 1; min-width: 0; }
 
   .kv { display: grid; grid-template-columns: 1fr 1fr; gap: 14px 16px; margin: 0; }
   .kv dt { color: var(--muted); font-size: 12px; }
@@ -125,9 +145,13 @@
 
   @media (max-width: 1080px) {
     .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-    .ops { grid-template-columns: 1fr; }
+    .trend { grid-template-columns: 1fr; }
+    .ranks { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   }
   @media (max-width: 720px) {
-    .ranks { grid-template-columns: 1fr; }
+    .ranks, .ops { grid-template-columns: 1fr; }
+  }
+  @media (max-width: 420px) {
+    .stats { gap: 10px; }
   }
 </style>

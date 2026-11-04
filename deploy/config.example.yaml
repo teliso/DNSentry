@@ -25,17 +25,9 @@ dns:
   bootstrap_dns:
     - "1.1.1.1:53"
     - "8.8.8.8:53"
-  upstream_timeout_seconds: 4
-  # Answer for blocked names: default (0.0.0.0/::) | nxdomain | null_ip | custom_ip | refused
+  # Answer for blocked names: nxdomain | null_ip (0.0.0.0/::) | refused
   blocking_mode: "nxdomain"
-  blocking_ipv4: "0.0.0.0" # custom_ip only
-  blocking_ipv6: "::"      # custom_ip only
-  blocked_response_ttl: 10
-  enable_dnssec: false            # request DNSSEC records upstream
-  dnssec_validate: false          # validate signatures locally
-  dnssec_trust_anchors: []        # custom DNSKEY lines; empty = built-in root anchor
-  dnssec_trust_anchor_file: ""
-  dnssec_auto_update: false
+  dnssec_validate: false          # validate DNSSEC signatures (built-in root trust anchors)
   # Send domains (and their subdomains) to dedicated upstreams. The most
   # specific domain wins. Routed names never fall back to the default or
   # fallback upstreams, so internal names are not leaked.
@@ -60,16 +52,12 @@ web:
 cache:
   enabled: true
   size: 4194304              # bytes
-  ttl_min: 0                 # seconds, 0 = no limit
-  ttl_max: 0
-  prefetch: false            # refresh popular entries in the last 20% of their TTL
   optimistic: false          # serve expired answers while refreshing them
-  optimistic_answer_ttl: 30
-  optimistic_max_age: 43200
 
 rules:
-  # [restart] Local rules file. Downloaded lists are cached in remote/ next to it.
-  local_file: "data/rules.txt"
+  # Optional [restart] override of the rules file location (default: next to this
+  # file). Downloaded lists are cached in remote/ next to it.
+  # local_file: "data/rules.txt"
   sources: []
   #  - url: https://adguardteam.github.io/HostlistsRegistry/assets/filter_1.txt
   #    name: AdGuard DNS filter
@@ -80,14 +68,12 @@ access:
   allowed_clients: []        # IPs/CIDRs; empty = everyone
   denied_clients: []
   client_rate_limit_qps: 0   # 0 = unlimited
-  max_concurrent_queries: 2048
   rebinding_protection: false
   rebinding_allow_domains: []
 
 logging:
-  query_log_size: 1000       # [restart] entries kept in memory
   enabled: false             # [restart] also write daily JSONL files
-  file: "data/querylog"      # [restart] prefix: data/querylog-YYYY-MM-DD.jsonl
+  # file: "data/querylog"   # optional [restart] override; default: next to this file
   retention_days: 7          # [restart]
 
 # [restart] Inbound encrypted DNS. Certificate and key can be given as paths or

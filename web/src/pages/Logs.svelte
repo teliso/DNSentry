@@ -68,7 +68,7 @@
   }
 </script>
 
-<PageHeader title="查询日志" description="最近的 DNS 请求及其处理结果（内存中保留最近 {formatNumber(store.saved?.query_log_size ?? 0)} 条）。">
+<PageHeader title="查询日志" description="最近的 DNS 请求及其处理结果（保留最近 1000 条）。">
   {#snippet actions()}
     <Switch bind:checked={live} label="实时刷新" />
     <button class="btn" type="button" onclick={load}><Icon name="refresh" />刷新</button>

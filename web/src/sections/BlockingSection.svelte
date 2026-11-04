@@ -1,36 +1,39 @@
 <script lang="ts">
   import Card from '../components/Card.svelte';
-  import Field from '../components/Field.svelte';
   import type { BlockingMode, Config } from '../lib/types';
 
   let { config }: { config: Config } = $props();
 
-  const HINTS: Record<BlockingMode, string> = {
-    default: '返回 0.0.0.0 或 ::。',
-    null_ip: '返回 0.0.0.0 或 ::。',
-    nxdomain: '返回 NXDOMAIN，并附带负缓存 SOA。',
-    refused: '返回 REFUSED，客户端通常不会缓存。',
-    custom_ip: '返回下方自定义的地址。'
-  };
+  const MODES: { value: BlockingMode; title: string; text: string }[] = [
+    { value: 'nxdomain', title: 'NXDOMAIN', text: '告诉客户端域名不存在，最干净，推荐。' },
+    { value: 'null_ip', title: '空 IP', text: '返回 0.0.0.0 或 ::，客户端会立刻连接失败。' },
+    { value: 'refused', title: 'REFUSED', text: '拒绝查询，部分客户端会改问别的 DNS 服务器。' }
+  ];
 </script>
 
-<Card id="sec-blocking" title="拦截响应" description="命中过滤规则时返回给客户端的内容。">
-  <div class="form-grid">
-    <Field label="拦截模式" hint={HINTS[config.blocking_mode]}>
-      <select bind:value={config.blocking_mode}>
-        <option value="default">默认（空 IP）</option>
-        <option value="nxdomain">NXDOMAIN</option>
-        <option value="null_ip">空 IP</option>
-        <option value="custom_ip">自定义 IP</option>
-        <option value="refused">REFUSED</option>
-      </select>
-    </Field>
-    <Field label="拦截响应 TTL" hint="客户端缓存拦截结果的秒数">
-      <div class="unit"><input type="number" min="0" bind:value={config.blocked_response_ttl} /><span>秒</span></div>
-    </Field>
-    {#if config.blocking_mode === 'custom_ip'}
-      <Field label="IPv4 响应地址"><input bind:value={config.blocking_ipv4} placeholder="0.0.0.0" class="mono" /></Field>
-      <Field label="IPv6 响应地址"><input bind:value={config.blocking_ipv6} placeholder="::" class="mono" /></Field>
-    {/if}
+<Card title="拦截响应" description="命中过滤规则时返回给客户端的内容。">
+  <div class="modes" role="radiogroup" aria-label="拦截响应方式">
+    {#each MODES as mode (mode.value)}
+      <label class="mode" class:selected={config.blocking_mode === mode.value}>
+        <input type="radio" name="blocking_mode" value={mode.value} bind:group={config.blocking_mode} />
+        <strong>{mode.title}</strong>
+        <small>{mode.text}</small>
+      </label>
+    {/each}
   </div>
 </Card>
+
+<style>
+  .modes { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+  .mode {
+    display: flex; flex-direction: column; gap: 2px; padding: 12px 14px; cursor: pointer;
+    border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--surface);
+    transition: border-color 0.12s, background 0.12s;
+  }
+  .mode:hover { border-color: var(--line-strong); }
+  .mode.selected { border-color: var(--accent); background: var(--accent-soft); }
+  .mode input { position: absolute; opacity: 0; pointer-events: none; }
+  .mode:focus-within { box-shadow: var(--focus); }
+  small { color: var(--muted); }
+  @media (max-width: 720px) { .modes { grid-template-columns: 1fr; } }
+</style>

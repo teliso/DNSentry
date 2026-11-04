@@ -91,7 +91,7 @@ table inet dnsentry_drop {
 2. **让浏览器关掉自动 DoH（“金丝雀域名”）**：
    - Firefox 会先查询 `use-application-dns.net`，如果解析失败（NXDOMAIN），就不会启用它的 DoH。
    - Apple 设备会查询 `mask.icloud.com` 和 `mask-h2.icloud.com` 判断能否使用“iCloud 专用代理”，返回 NXDOMAIN 会让它在此网络上自动关闭。
-   - 在“过滤规则”里添加（并把“DNS 设置 → 拦截响应”的拦截模式设为 **NXDOMAIN**，其他模式返回的是假地址，不一定触发关闭）：
+   - 在“过滤规则”里添加（并把“过滤 → 拦截响应”的拦截模式设为 **NXDOMAIN**，其他模式返回的是假地址，不一定触发关闭）：
      ```text
      ||use-application-dns.net^
      ||mask.icloud.com^

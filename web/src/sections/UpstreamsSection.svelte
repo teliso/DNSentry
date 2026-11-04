@@ -56,12 +56,6 @@
         {/each}
       </div>
     </div>
-
-    <div class="form-grid">
-      <Field label="单个上游超时" hint="连接与查询的最大等待时间">
-        <div class="unit"><input type="number" min="1" bind:value={config.upstream_timeout_seconds} /><span>秒</span></div>
-      </Field>
-    </div>
   </div>
 </Card>
 

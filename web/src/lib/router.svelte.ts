@@ -1,30 +1,55 @@
-export const ROUTES = ['overview', 'logs', 'filters', 'sources', 'records', 'dns', 'settings'] as const;
-export type Route = (typeof ROUTES)[number];
+/** Pages and their tabs. The first tab of a page is its default. */
+export const PAGES = {
+  overview: [],
+  logs: [],
+  filters: ['sources', 'rules', 'blocking'],
+  dns: ['upstreams', 'routes', 'records', 'cache', 'advanced'],
+  settings: ['network', 'encryption', 'logging', 'maintenance']
+} as const;
 
-/** Old hash names keep working for bookmarks. */
-const LEGACY: Record<string, Route> = { rules: 'filters', upstreams: 'dns' };
+export type Page = keyof typeof PAGES;
+/** `page` or `page/tab`, as written after `#` in the address bar. */
+export type Target = Page | `${Page}/${string}`;
 
-function parse(hash: string): Route {
-  const name = hash.replace(/^#\/?/, '').split('/')[0];
-  const route = LEGACY[name] ?? name;
-  return (ROUTES as readonly string[]).includes(route) ? (route as Route) : 'overview';
+/** Names from earlier versions keep working for bookmarks. */
+const LEGACY: Record<string, string> = {
+  sources: 'filters/sources',
+  rules: 'filters/rules',
+  records: 'dns/records',
+  upstreams: 'dns/upstreams'
+};
+
+function parse(hash: string): { page: Page; tab: string } {
+  const [first = '', second = ''] = hash.replace(/^#\/?/, '').split('/');
+  const [name, tab] = (LEGACY[first] ?? `${first}/${second}`).split('/');
+  const page = (name in PAGES ? name : 'overview') as Page;
+  const tabs = PAGES[page] as readonly string[];
+  return { page, tab: tabs.includes(tab) ? tab : (tabs[0] ?? '') };
 }
 
 class Router {
-  current = $state<Route>(parse(window.location.hash));
+  current = $state<Page>('overview');
+  tab = $state('');
 
   constructor() {
-    window.addEventListener('hashchange', () => {
-      const next = parse(window.location.hash);
-      if (next !== this.current) {
-        this.current = next;
-        window.scrollTo({ top: 0 });
-      }
-    });
+    this.sync();
+    window.addEventListener('hashchange', () => this.sync());
   }
 
-  go(route: Route) {
-    if (window.location.hash !== `#${route}`) window.location.hash = route;
+  private sync() {
+    const next = parse(window.location.hash);
+    const pageChanged = next.page !== this.current;
+    this.current = next.page;
+    this.tab = next.tab;
+    if (pageChanged) window.scrollTo({ top: 0 });
+  }
+
+  href(target: Target) {
+    return `#${target}`;
+  }
+
+  go(target: Target) {
+    if (window.location.hash !== `#${target}`) window.location.hash = target;
   }
 }
 
