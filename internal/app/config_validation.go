@@ -52,7 +52,7 @@ func validateConfig(config *Config) (*Config, error) {
 		return nil, errors.New("cache_size must not be negative")
 	}
 	if config.CacheSize == 0 {
-		config.CacheSize = 8 << 20
+		config.CacheSize = 4 << 20
 	}
 	config.ProgramLogLevel = strings.ToLower(strings.TrimSpace(config.ProgramLogLevel))
 	if config.ProgramLogLevel != "" {
