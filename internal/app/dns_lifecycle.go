@@ -7,6 +7,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/teliso/DNSentry/internal/dnssec"
+
 	"github.com/teliso/DNSentry/internal/access"
 	"github.com/teliso/DNSentry/internal/upstream"
 
@@ -51,7 +53,7 @@ type DNSServer struct {
 	refreshing            sync.Map
 	inflight              singleflight.Group
 	dnssecMu              sync.RWMutex
-	dnssec                *DNSSECValidator
+	dnssec                *dnssec.Validator
 	dnssecCacheMu         sync.Mutex
 	dnssecCacheOK         map[string]struct{}
 	localRecords          atomic.Pointer[localRecordSnapshot]

@@ -8,6 +8,8 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/teliso/DNSentry/internal/dnssec"
+
 	"github.com/teliso/DNSentry/internal/access"
 
 	"github.com/teliso/DNSentry/internal/cache"
@@ -110,7 +112,7 @@ func validateConfig(config *Config) (*Config, error) {
 	if config.DNSSECAutoUpdate && !config.DNSSECValidate {
 		return nil, errors.New("dnssec_auto_update requires dnssec_validate")
 	}
-	if err := validateDNSSECTrustAnchors(config.DNSSECTrustAnchors); err != nil {
+	if err := dnssec.ValidateAnchors(config.DNSSECTrustAnchors); err != nil {
 		return nil, err
 	}
 	if len(config.Upstreams) == 0 {
