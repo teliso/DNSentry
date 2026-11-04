@@ -38,13 +38,8 @@ type listenerService interface {
 	Close() error
 }
 
-// SetConfigPath selects the YAML configuration file. Call it before Run or
-// CheckConfig.
-func SetConfigPath(path string) {
-	if path != "" {
-		configFile = path
-	}
-}
+// ConfigPath is the configuration file in use.
+func ConfigPath() string { return configPath() }
 
 // CheckConfig validates the configuration file and the environment it needs
 // without starting any listener.

@@ -16,7 +16,7 @@ func TestDNSSECAutoUpdateUsesManagedTrustAnchorFile(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if validated.DNSSECTrustAnchorFile != defaultDNSSECTrustAnchorFile || len(validated.DNSSECTrustAnchors) != 0 {
+	if validated.DNSSECTrustAnchorFile != defaultDNSSECTrustAnchorFile() || len(validated.DNSSECTrustAnchors) != 0 {
 		t.Fatalf("unexpected automatic trust anchor configuration: %#v", validated)
 	}
 	if _, err := effectiveDNSSECTrustAnchors(*validated); err != nil {

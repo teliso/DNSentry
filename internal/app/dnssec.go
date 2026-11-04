@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 	"time"
@@ -17,7 +18,10 @@ import (
 	"github.com/miekg/dns"
 )
 
-const defaultDNSSECTrustAnchorFile = "data/dnssec/root-auto.key"
+// defaultDNSSECTrustAnchorFile is the managed anchor file, next to the configuration.
+func defaultDNSSECTrustAnchorFile() string {
+	return filepath.Join(filepath.Dir(configPath()), "dnssec", "root-auto.key")
+}
 
 func effectiveDNSSECTrustAnchors(config Config) ([]string, error) {
 	if strings.TrimSpace(config.DNSSECTrustAnchorFile) == "" {
@@ -113,7 +117,7 @@ func (s *DNSServer) refreshDNSSECTrustAnchors(config Config) error {
 	sort.Strings(anchors)
 	path := strings.TrimSpace(config.DNSSECTrustAnchorFile)
 	if path == "" {
-		path = defaultDNSSECTrustAnchorFile
+		path = defaultDNSSECTrustAnchorFile()
 	}
 	current, err := dnssec.LoadAnchorsFromFile(path)
 	if err == nil && strings.Join(current, "\n") == strings.Join(anchors, "\n") {

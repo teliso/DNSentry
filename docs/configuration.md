@@ -2,7 +2,7 @@
 
 ## 配置文件
 
-配置保存在一个 YAML 文件里（默认 `data/config.yaml`，用 `-config` 指定其他路径）。**首次启动如果不存在会自动创建默认配置**，规则文件、日志等数据文件默认放在同一目录。控制台里的所有设置最终都写进这个文件，你也可以直接编辑（保存后需要重启服务，或通过控制台修改以便即时生效）。
+配置保存在一个 YAML 文件里。位置由**数据目录**决定：用 `-data-dir`（或环境变量 `DNSENTRY_DATA_DIR`）指定一个目录，配置就是其中的 `config.yaml`；不指定时用当前目录下的 `data/config.yaml`；也可以用 `-config` 直接指定文件。**首次启动如果不存在会自动创建默认配置**，规则文件、日志等数据文件默认放在同一目录。控制台里的所有设置最终都写进这个文件，你也可以直接编辑（保存后需要重启服务，或通过控制台修改以便即时生效）。
 
 带完整注释的参考文件：[`deploy/config.example.yaml`](../deploy/config.example.yaml)，可以用下面的命令校验：
 
@@ -10,7 +10,8 @@
 dnsentry -config /path/to/config.yaml -check
 ```
 
-- **相对路径**以服务的**工作目录**为基准。
+- **数据目录**：指定 `-data-dir` 后，程序启动时会（必要时创建并）切换到该目录，配置、规则、日志、统计、证书、登录信息等全部文件都放在里面，不再受“从哪个目录启动”的影响；配置里的**相对路径**以它为基准。推荐给服务和容器使用（systemd 单元和 Docker 镜像已经这样设置）。
+- 没有 `-data-dir` 时，相对路径以启动时的当前目录为基准——换个目录启动就会读到另一份配置，这是不推荐长期这样用的原因。
 - **改动生效方式**：大多数设置保存后立即生效；标注 `[restart]` 的（监听地址、控制台地址、规则文件路径、查询日志存储、加密 DNS）需要重启，控制台会提示。
 - 配置里不包含访问令牌；令牌只从环境变量读取。
 - 每次保存都会在配置文件旁的 `history/` 目录记录一个版本（最多 30 个，权限 0600），可以在控制台恢复。
@@ -33,7 +34,7 @@ dnsentry -config /path/to/config.yaml -check
 ## 命令行参数
 
 ```text
-dnsentry [-config data/config.yaml] [-log-level info] [-log-format text]
+dnsentry [-data-dir DIR] [-config FILE] [-log-level info] [-log-format text]
 dnsentry -check         校验配置（含控制台访问的安全要求）后退出
 dnsentry -version       输出版本号
 dnsentry -healthcheck URL   请求 URL，返回 200 则退出码为 0（用于容器健康检查）
@@ -41,7 +42,8 @@ dnsentry -healthcheck URL   请求 URL，返回 200 则退出码为 0（用于�
 
 | 参数 | 说明 |
 | --- | --- |
-| `-config` | 配置文件路径，不存在时按默认值创建 |
+| `-data-dir` | 数据目录（环境变量 `DNSENTRY_DATA_DIR`），不存在会创建，并成为工作目录；配置默认是其中的 `config.yaml` |
+| `-config` | 配置文件路径，不存在时按默认值创建；相对路径相对于启动时的目录。与 `-data-dir` 同用时，配置文件可以放在数据目录之外 |
 | `-log-level` | `debug` / `info` / `warn` / `error`，默认 `info` |
 | `-log-format` | `text`（默认）或 `json` |
 
@@ -51,6 +53,7 @@ dnsentry -healthcheck URL   请求 URL，返回 200 则退出码为 0（用于�
 | --- | --- |
 | `DNSENTRY_API_TOKEN` | 控制台 / API 访问令牌。设置后所有 API 请求都需要 `Authorization: Bearer <token>`。不会写入配置文件，也不会通过 API 返回。 |
 | `DNSENTRY_ALLOW_PUBLIC_WEB` | 设为 `1` 才允许控制台监听非回环地址（同时必须设置令牌，否则拒绝启动）。 |
+| `DNSENTRY_DATA_DIR` | 对应 `-data-dir`；命令行参数优先。 |
 | `DNSENTRY_LOG_LEVEL` / `DNSENTRY_LOG_FORMAT` | 对应 `-log-level` / `-log-format`；命令行参数优先。 |
 | `DNSENTRY_DNS_LISTEN` / `DNSENTRY_WEB_LISTEN` | 只在**首次生成默认配置**时使用的监听地址，方便容器和服务部署；已有配置文件时不起作用。 |
 

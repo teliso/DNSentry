@@ -104,7 +104,7 @@ func validateConfig(config *Config) (*Config, error) {
 			return nil, errors.New("dnssec_auto_update cannot be used with dnssec_trust_anchors")
 		}
 		if config.DNSSECTrustAnchorFile == "" {
-			config.DNSSECTrustAnchorFile = defaultDNSSECTrustAnchorFile
+			config.DNSSECTrustAnchorFile = defaultDNSSECTrustAnchorFile()
 		}
 	}
 	if config.DNSSECTrustAnchorFile != "" && len(config.DNSSECTrustAnchors) > 0 {

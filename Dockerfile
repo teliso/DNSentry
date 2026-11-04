@@ -39,4 +39,4 @@ VOLUME /var/lib/dnsentry
 EXPOSE 53/udp 53/tcp 18080/tcp
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s \
     CMD ["/usr/local/bin/dnsentry", "-healthcheck", "http://127.0.0.1:18080/readyz"]
-ENTRYPOINT ["/usr/local/bin/dnsentry", "-config", "/var/lib/dnsentry/config.yaml"]
+ENTRYPOINT ["/usr/local/bin/dnsentry", "-data-dir", "/var/lib/dnsentry"]

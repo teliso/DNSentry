@@ -25,6 +25,7 @@ pnpm install && pnpm start
 
 ```sh
 ./dnsentry            # 在当前目录使用 data/config.yaml
+./dnsentry -data-dir ~/dnsentry-data   # 或者指定一个固定的数据目录（推荐长期使用）
 ```
 
 首次运行会自动创建：

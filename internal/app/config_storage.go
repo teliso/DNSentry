@@ -26,8 +26,42 @@ const (
 // the configuration file.
 func defaultQueryLogFile() string { return filepath.Join(filepath.Dir(configPath()), "querylog") }
 
-// configFile is the YAML configuration path; Run may override it once at startup.
+// configFile is the YAML configuration path; SetupPaths may override it once at startup.
 var configFile = filepath.Join("data", "config.yaml")
+
+// SetupPaths decides where DNSentry keeps its files; call it before Run or
+// CheckConfig. dataDir, when given, becomes the working directory (created if
+// needed), so every relative path in the configuration lives inside it, and
+// the configuration defaults to <dataDir>/config.yaml. configPath, when given,
+// names the configuration file explicitly (relative to the directory the
+// program was started in). With neither, the configuration is data/config.yaml
+// under the current directory.
+func SetupPaths(configPath, dataDir string) error {
+	if configPath != "" {
+		absolute, err := filepath.Abs(configPath)
+		if err != nil {
+			return err
+		}
+		configFile = absolute
+	}
+	if dataDir == "" {
+		return nil
+	}
+	absolute, err := filepath.Abs(dataDir)
+	if err != nil {
+		return err
+	}
+	if err := os.MkdirAll(absolute, 0700); err != nil {
+		return fmt.Errorf("create data directory: %w", err)
+	}
+	if err := os.Chdir(absolute); err != nil {
+		return fmt.Errorf("use data directory: %w", err)
+	}
+	if configPath == "" {
+		configFile = filepath.Join(absolute, "config.yaml")
+	}
+	return nil
+}
 
 func configPath() string { return configFile }
 

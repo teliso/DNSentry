@@ -17,7 +17,8 @@ import (
 )
 
 func main() {
-	configPath := flag.String("config", "data/config.yaml", "path to the YAML configuration file (created with defaults if missing)")
+	configPath := flag.String("config", "", "path to the YAML configuration file, created with defaults if missing (default: <data-dir>/config.yaml, else data/config.yaml)")
+	dataDir := flag.String("data-dir", os.Getenv("DNSENTRY_DATA_DIR"), "working directory for all data: configuration, rules, logs, certificates (env DNSENTRY_DATA_DIR); created if missing")
 	check := flag.Bool("check", false, "validate the configuration and exit")
 	version := flag.Bool("version", false, "print the version and exit")
 	healthcheck := flag.String("healthcheck", "", "GET the given URL (e.g. http://127.0.0.1:18080/readyz), exit 0 on HTTP 200; for container health checks")
@@ -36,13 +37,16 @@ func main() {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(2)
 	}
-	app.SetConfigPath(*configPath)
+	if err := app.SetupPaths(*configPath, *dataDir); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(2)
+	}
 	if *check {
 		if err := app.CheckConfig(); err != nil {
 			fmt.Fprintln(os.Stderr, "configuration error:", err)
 			os.Exit(1)
 		}
-		fmt.Println("configuration OK:", *configPath)
+		fmt.Println("configuration OK:", app.ConfigPath())
 		return
 	}
 	if err := app.Run(web.Console()); err != nil {
