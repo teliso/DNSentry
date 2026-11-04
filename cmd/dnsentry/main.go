@@ -13,6 +13,7 @@ import (
 	_ "time/tzdata" // time zone names work even where the system has no zoneinfo (containers)
 
 	"github.com/teliso/DNSentry/internal/app"
+	"github.com/teliso/DNSentry/internal/applog"
 	"github.com/teliso/DNSentry/internal/buildinfo"
 	"github.com/teliso/DNSentry/web"
 )
@@ -93,11 +94,11 @@ func envOr(key, fallback string) string {
 }
 
 func setupLogging(level, format string) error {
-	var slogLevel slog.Level
-	if err := slogLevel.UnmarshalText([]byte(level)); err != nil {
+	slogLevel, err := applog.ParseLevel(level)
+	if err != nil {
 		return fmt.Errorf("invalid -log-level %q", level)
 	}
-	options := &slog.HandlerOptions{Level: slogLevel}
+	options := &slog.HandlerOptions{Level: slog.LevelDebug} // filtering is done by applog
 	var handler slog.Handler
 	switch strings.ToLower(format) {
 	case "text":
@@ -107,6 +108,8 @@ func setupLogging(level, format string) error {
 	default:
 		return fmt.Errorf("invalid -log-format %q", format)
 	}
-	slog.SetDefault(slog.New(handler))
+	programLog := applog.New(handler, slogLevel)
+	slog.SetDefault(slog.New(programLog.Handler()))
+	app.SetProgramLog(programLog, level)
 	return nil
 }

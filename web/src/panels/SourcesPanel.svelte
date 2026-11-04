@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { ask } from '../lib/i18n/index.svelte';
   import Card from '../components/Card.svelte';
   import EmptyState from '../components/EmptyState.svelte';
   import Field from '../components/Field.svelte';
@@ -20,12 +21,6 @@
     { minutes: 10080, label: '每周' }
   ];
 
-  const PRESETS = [
-    { name: 'AdGuard DNS 过滤器', url: 'https://adguardteam.github.io/HostlistsRegistry/assets/filter_1.txt', text: '广告与跟踪，综合性强，误拦较少' },
-    { name: 'AdAway', url: 'https://adaway.org/hosts.txt', text: '移动端广告域名，hosts 格式' },
-    { name: 'StevenBlack hosts', url: 'https://raw.githubusercontent.com/StevenBlack/hosts/master/hosts', text: '广告与恶意域名合集，hosts 格式' }
-  ];
-
   let url = $state('');
   let name = $state('');
   let interval = $state(360);
@@ -34,12 +29,6 @@
   const enabledCount = $derived(store.sources.filter((source) => source.enabled).length);
   const totalRules = $derived(store.sources.reduce((sum, source) => sum + (source.rule_count ?? 0), 0));
   const anyUpdating = $derived(store.sources.some((source) => source.updating));
-
-  const suggestions = $derived(PRESETS.filter((preset) => !store.sources.some((source) => source.url === preset.url)));
-
-  function addPreset(preset: (typeof PRESETS)[number]) {
-    void store.saveSources([...store.sources, { url: preset.url, name: preset.name, enabled: true, interval_minutes: 1440 }], `已订阅 ${preset.name}，正在下载`);
-  }
 
   function intervalLabel(minutes: number) {
     return INTERVALS.find((item) => item.minutes === minutes)?.label ?? `每 ${minutes} 分钟`;
@@ -63,7 +52,7 @@
     store.saveSources(store.sources.map((source) => (source.url === target ? { ...source, ...change } : source)), done);
 
   function remove(source: RuleSource) {
-    if (confirm(`删除规则源“${source.name || hostOf(source.url)}”？它的 ${source.rule_count ?? 0} 条规则和本地缓存会一并移除。`)) {
+    if (ask(`删除规则源“${source.name || hostOf(source.url)}”？它的 ${source.rule_count ?? 0} 条规则和本地缓存会一并移除。`)) {
       void store.saveSources(store.sources.filter((item) => item.url !== source.url), '规则源已删除');
     }
   }
@@ -96,20 +85,12 @@
     </Field>
     <button class="btn primary" type="submit" disabled={store.busy || !url.trim()}><Icon name="plus" />添加</button>
   </form>
-  {#if suggestions.length > 0}
-    <div class="presets">
-      <span class="muted">推荐：</span>
-      {#each suggestions as preset (preset.url)}
-        <button class="chip" type="button" disabled={store.busy} onclick={() => addPreset(preset)} title={preset.text}><Icon name="plus" size={13} />{preset.name}</button>
-      {/each}
-    </div>
-  {/if}
 </Card>
 
 <Card title="已订阅" description="{store.sources.length} 个规则源，{enabledCount} 个启用，共 {formatNumber(totalRules)} 条规则生效。" flush>
   {#snippet actions()}
-    <button class="btn sm" type="button" disabled={store.busy || anyUpdating || enabledCount === 0} onclick={() => store.refreshSources()}>
-      <Icon name="refresh" />全部更新
+    <button class="btn sm icon" type="button" aria-label="全部更新" title="全部更新" disabled={store.busy || anyUpdating || enabledCount === 0} onclick={() => store.refreshSources()}>
+      <Icon name="refresh" />
     </button>
   {/snippet}
   {#if store.sources.length === 0}
@@ -142,16 +123,16 @@
           </div>
           <div class="actions">
             <button class="btn ghost sm" type="button" disabled={!source.enabled || source.updating || store.busy} onclick={() => store.refreshSources(source.url)} title="立即更新">
-              <Icon name="refresh" /><span class="label">更新</span>
+              <Icon name="refresh" />
             </button>
             <button class="btn ghost sm" type="button" disabled={!source.enabled || !source.rule_count} onclick={() => viewRules(source)} title="查看规则">
-              <Icon name="list" /><span class="label">规则</span>
+              <Icon name="list" />
             </button>
             <button class="btn ghost sm" type="button" disabled={store.busy} onclick={() => (editing = { ...source })} title="编辑">
-              <Icon name="settings" /><span class="label">编辑</span>
+              <Icon name="settings" />
             </button>
             <button class="btn ghost sm danger" type="button" disabled={store.busy} onclick={() => remove(source)} title="删除">
-              <Icon name="trash" /><span class="label">删除</span>
+              <Icon name="trash" />
             </button>
           </div>
         </li>
@@ -178,13 +159,6 @@
 
 <style>
   .add { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) 140px auto; gap: 12px; align-items: end; }
-  .presets { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 14px; }
-  .chip {
-    display: inline-flex; align-items: center; gap: 4px; padding: 3px 11px 3px 8px; cursor: pointer;
-    border: 1px solid var(--line-strong); border-radius: 999px; background: var(--surface); color: var(--ink-2); font-size: 13px;
-  }
-  .chip:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
-  .chip:disabled { opacity: 0.5; cursor: not-allowed; }
   .sources { list-style: none; margin: 0; padding: 0; }
   .sources li { display: flex; align-items: center; gap: 18px; padding: 14px 20px; border-top: 1px solid var(--line); }
   .sources li:first-child { border-top: 0; }
@@ -203,6 +177,5 @@
     .sources li { flex-wrap: wrap; gap: 10px 14px; padding: 14px 16px; }
     .main { flex-basis: 100%; order: 3; }
     .actions { margin-left: auto; }
-    .label { display: none; }
-  }
+      }
 </style>

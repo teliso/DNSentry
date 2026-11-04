@@ -7,11 +7,12 @@
     description,
     flush = false,
     actions,
+    scroll = false,
     children
-  }: { id?: string; title?: string; description?: string; flush?: boolean; actions?: Snippet; children: Snippet } = $props();
+  }: { id?: string; title?: string; description?: string; flush?: boolean; scroll?: boolean; actions?: Snippet; children: Snippet } = $props();
 </script>
 
-<section class="card" {id}>
+<section class="card" class:fill={scroll} {id}>
   {#if title || actions}
     <header>
       <div class="heading">
@@ -21,7 +22,7 @@
       {#if actions}<div class="actions">{@render actions()}</div>{/if}
     </header>
   {/if}
-  <div class="body" class:flush>{@render children()}</div>
+  <div class="body" class:flush class:scroll>{@render children()}</div>
 </section>
 
 <style>
@@ -39,6 +40,9 @@
   .heading p { margin-top: 2px; color: var(--muted); font-size: 13px; max-width: 70ch; }
   .actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
   .body { padding: 16px 20px 20px; }
+  /* A card that takes the height of its row and scrolls its content instead of growing it. */
+  .card.fill { display: flex; flex-direction: column; }
+  .body.scroll { flex: 1 1 0; min-height: 0; overflow: auto; }
   .body.flush { padding: 12px 0 0; }
   @media (max-width: 640px) {
     header { padding: 14px 16px 0; flex-wrap: wrap; }

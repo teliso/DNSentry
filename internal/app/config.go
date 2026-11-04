@@ -35,6 +35,8 @@ type Config struct {
 	RulesFile             string              `json:"rules_file"`
 	CacheEnabled          bool                `json:"cache_enabled"`
 	CacheSize             int                 `json:"cache_size"`
+	QueryLogDisabled      bool                `json:"query_log_disabled"`
+	ProgramLogLevel       string              `json:"program_log_level"`
 	QueryLogSize          int                 `json:"query_log_size"`
 	QueryLogEnabled       bool                `json:"query_log_enabled"`
 	QueryLogFile          string              `json:"query_log_file"`

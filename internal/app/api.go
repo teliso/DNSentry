@@ -1,8 +1,11 @@
 package app
 
 import (
+	"log/slog"
+
 	"context"
 	"errors"
+	"github.com/teliso/DNSentry/internal/applog"
 	"net/http"
 	"strconv"
 	"strings"
@@ -74,6 +77,8 @@ var apiRoutes = []apiRoute{
 	{http.MethodPost, "/config/import", (*API).importConfig},
 	{http.MethodGet, "/metrics", (*API).writeMetrics},
 	{http.MethodPost, "/cache/clear", (*API).clearCache},
+	{http.MethodPost, "/logs/clear", (*API).clearLogs},
+	{http.MethodGet, "/logs/program", (*API).programLogs},
 	{http.MethodGet, "/stats", (*API).getStats},
 	{http.MethodGet, "/services", (*API).listServices},
 	{http.MethodPost, "/notifications/test", (*API).testNotification},
@@ -258,6 +263,38 @@ func (a *API) getStats(writer http.ResponseWriter, request *http.Request) {
 		return
 	}
 	writeJSON(writer, http.StatusOK, a.logs.History(window))
+}
+
+// clearLogs serves POST /logs/clear: empties the in-memory query log.
+func (a *API) clearLogs(writer http.ResponseWriter, _ *http.Request) {
+	a.logs.Clear()
+	if programLog != nil {
+		programLog.Clear()
+	}
+	writeJSON(writer, http.StatusOK, map[string]string{"status": "cleared"})
+}
+
+// programLogs serves GET /logs/program?level=&search=&limit=: the program's own
+// log, newest first, with the level it is recorded at.
+func (a *API) programLogs(writer http.ResponseWriter, request *http.Request) {
+	query := request.URL.Query()
+	limit, _ := strconv.Atoi(query.Get("limit"))
+	if limit <= 0 || limit > 1000 {
+		limit = 500
+	}
+	response := struct {
+		Level   string         `json:"level"`
+		Entries []applog.Entry `json:"entries"`
+	}{Level: "off", Entries: []applog.Entry{}}
+	if programLog != nil {
+		minLevel, err := applog.ParseLevel(query.Get("level"))
+		if err != nil {
+			minLevel = slog.LevelDebug
+		}
+		response.Level = programLog.Level()
+		response.Entries = programLog.Entries(minLevel, query.Get("search"), limit)
+	}
+	writeJSON(writer, http.StatusOK, response)
 }
 
 // listLogs serves GET /logs?search=&action=&offset=&limit= (the recent

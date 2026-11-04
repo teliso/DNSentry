@@ -99,6 +99,7 @@ type Logger struct {
 	overloaded    atomic.Uint64
 	rebinding     atomic.Uint64
 	persistence   *persistence
+	paused        atomic.Bool // true: record counters only, keep no entries
 }
 
 // New returns an in-memory logger that keeps the newest max entries.
@@ -108,6 +109,13 @@ func New(max int) *Logger {
 	}
 	return &Logger{max: max, metrics: make(map[int64]MetricPoint), hours: make(map[int64]hourBucket)}
 }
+
+// SetRecording turns the storing of entries (in memory and on disk) on or off.
+// Counters and statistics, which hold no domains or clients, are kept either way.
+func (l *Logger) SetRecording(on bool) { l.paused.Store(!on) }
+
+// Recording reports whether entries are being stored.
+func (l *Logger) Recording() bool { return !l.paused.Load() }
 
 func (l *Logger) Add(entry Entry) {
 	l.total.Add(1)
@@ -129,7 +137,9 @@ func (l *Logger) Add(entry Entry) {
 	}
 	now := time.Now().Truncate(time.Minute)
 	l.mu.Lock()
-	l.pushLocked(entry)
+	if !l.paused.Load() {
+		l.pushLocked(entry)
+	}
 	bucket, exists := l.metrics[now.Unix()]
 	if !exists {
 		// A new minute started: drop buckets older than the retained window.
@@ -148,7 +158,9 @@ func (l *Logger) Add(entry Entry) {
 	l.metrics[now.Unix()] = bucket
 	l.recordHourLocked(now, entry.Action == string(rules.ActionBlock))
 	l.mu.Unlock()
-	l.enqueuePersistence(entry)
+	if !l.paused.Load() {
+		l.enqueuePersistence(entry)
+	}
 }
 
 // pushLocked stores entry as the newest one, overwriting the oldest when full.
@@ -320,6 +332,15 @@ type Filter struct {
 	Action string // exact action, empty for any
 	Offset int
 	Limit  int
+}
+
+// Clear forgets the entries kept in memory (the recent-queries list and the
+// rankings built from it). Counters, the traffic charts and files saved on disk
+// are left alone.
+func (l *Logger) Clear() {
+	l.mu.Lock()
+	l.ring, l.next, l.count = nil, 0, 0
+	l.mu.Unlock()
 }
 
 // Export returns every in-memory entry matching filter (Offset and Limit are

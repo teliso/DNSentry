@@ -1,4 +1,4 @@
-import type { Webhook, LogDays, AuthStatus, Config, ServiceInfo, MetricPoint, ConfigVersion, LocalSummary, LogPage, LogQuery, Rule, RuleAction, RuleCheck, Protection, RulePage, RuleQuery, RuleSource, Status, UpstreamTest } from './types';
+import type { Webhook, LogDays, AuthStatus, Config, ServiceInfo, MetricPoint, ConfigVersion, LocalSummary, LogPage, LogQuery, ProgramLogs, Rule, RuleAction, RuleCheck, Protection, RulePage, RuleQuery, RuleSource, Status, UpstreamTest } from './types';
 
 const TOKEN_KEY = 'dnsentry_api_token';
 
@@ -123,6 +123,8 @@ export const api = {
   exportConfig: () => download('/config/export', 'dnsentry-config.yaml'),
   importConfig: (yaml: string) => request<Config>('/config/import', 'POST', yaml),
   setProtection: (enabled: boolean, durationMinutes = 0) => request<Protection>('/protection', 'POST', { enabled, duration_minutes: durationMinutes }),
+  programLogs: (query: { level: string; search: string }) => request<ProgramLogs>(`/logs/program?${toParams(query)}`),
+  clearLogs: () => request<{ status: string }>('/logs/clear', 'POST'),
   clearCache: () => request<{ status: string }>('/cache/clear', 'POST'),
   testUpstreams: (upstreams: string[]) => request<UpstreamTest[]>('/upstreams/test', 'POST', { upstreams }),
   rules: (query: RuleQuery) => request<RulePage>(`/rules?${toParams(query)}`),

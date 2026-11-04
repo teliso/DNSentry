@@ -113,6 +113,8 @@ access:
   rebinding_protection: false
   rebinding_allow_domains: []
 logging:
+  recording: true                  # false = 完全不记录查询日志（计数与趋势仍保留）
+  level: info                      # 程序日志级别：debug | info | warn | error | off；留空 = 跟随 -log-level
   query_log_size: 1000             # [restart] 内存中保留的条数
   enabled: false                   # [restart] 是否写 JSONL 文件
   file: data/querylog              # [restart] 文件前缀：data/querylog-YYYY-MM-DD.jsonl

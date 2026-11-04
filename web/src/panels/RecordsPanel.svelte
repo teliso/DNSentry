@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { ask } from '../lib/i18n/index.svelte';
   import Card from '../components/Card.svelte';
   import EmptyState from '../components/EmptyState.svelte';
   import Field from '../components/Field.svelte';
@@ -66,7 +67,7 @@
 
   function remove(index: number) {
     const record = records[index];
-    if (confirm(`删除 ${record.domain} 的 ${record.type} 记录？`)) {
+    if (ask(`删除 ${record.domain} 的 ${record.type} 记录？`)) {
       void store.saveLocalRecords(records.filter((_, current) => current !== index), '记录已删除');
     }
   }

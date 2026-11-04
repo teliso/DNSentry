@@ -86,6 +86,7 @@ func defaultConfig() *Config {
 		RulesFile:             filepath.Join(dir, "rules.txt"),
 		CacheEnabled:          true,
 		CacheSize:             4 << 20,
+		ProgramLogLevel:       "info",
 		QueryLogSize:          defaultQueryLogSize,
 		QueryLogFile:          defaultQueryLogFile(),
 		QueryLogRetentionDays: 7,

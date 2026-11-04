@@ -4,11 +4,14 @@ import (
 	"bytes"
 	"encoding/csv"
 	"encoding/json"
+	"io"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 
+	"github.com/teliso/DNSentry/internal/applog"
 	"github.com/teliso/DNSentry/internal/querylog"
 )
 
@@ -92,5 +95,36 @@ func TestSavedLogEndpointsWithoutPersistence(t *testing.T) {
 	}
 	if code := callAPI(t, api, http.MethodGet, "/api/logs/export?date=2026-01-01", nil).Code; code != http.StatusNotFound {
 		t.Fatalf("exporting a saved day without persistence = %d", code)
+	}
+}
+
+func TestClearLogsEndpoint(t *testing.T) {
+	api := newConfigTestAPI(t)
+	api.logs.Add(querylog.Entry{Domain: "a.test", Action: "forwarded"})
+	if response := callAPI(t, api, http.MethodPost, "/api/logs/clear", nil); response.Code != http.StatusOK {
+		t.Fatalf("clear = %d", response.Code)
+	}
+	if len(api.logs.List()) != 0 {
+		t.Fatal("the in-memory log was not emptied")
+	}
+}
+
+func TestProgramLogsEndpoint(t *testing.T) {
+	log := applog.New(slog.NewTextHandler(io.Discard, nil), slog.LevelInfo)
+	SetProgramLog(log, "info")
+	t.Cleanup(func() { SetProgramLog(nil, "info") })
+	slog.New(log.Handler()).Warn("disk almost full", "free", "1MB")
+	api := &API{logs: querylog.New(10)}
+	recorder := httptest.NewRecorder()
+	api.programLogs(recorder, httptest.NewRequest(http.MethodGet, "/api/logs/program?level=warn&search=disk", nil))
+	var body struct {
+		Level   string         `json:"level"`
+		Entries []applog.Entry `json:"entries"`
+	}
+	if err := json.Unmarshal(recorder.Body.Bytes(), &body); err != nil {
+		t.Fatal(err)
+	}
+	if body.Level != "info" || len(body.Entries) != 1 || body.Entries[0].Message != "disk almost full" {
+		t.Fatalf("body = %s", recorder.Body.String())
 	}
 }

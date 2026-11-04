@@ -1,6 +1,6 @@
 module github.com/teliso/DNSentry
 
-go 1.26.10
+go 1.27.3
 
 require (
 	github.com/0xERR0R/blocky v0.35.0

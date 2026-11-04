@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { ask } from '../lib/i18n/index.svelte';
   import Card from '../components/Card.svelte';
   import Field from '../components/Field.svelte';
   import { store } from '../lib/store.svelte';
@@ -23,7 +24,7 @@
 
   async function remove() {
     if (current === '') return;
-    if (confirm('关闭控制台登录后，只有本机（或持有 API Token 的人）可以访问控制台。确定关闭？') && (await store.changeLogin({ remove: true, current }))) current = '';
+    if (ask('关闭控制台登录后，只有本机（或持有 API Token 的人）可以访问控制台。确定关闭？') && (await store.changeLogin({ remove: true, current }))) current = '';
   }
 </script>
 

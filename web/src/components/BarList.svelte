@@ -33,5 +33,5 @@
   .bar { height: 4px; margin-top: 5px; border-radius: 2px; background: var(--surface-2); overflow: hidden; }
   .bar span { display: block; height: 100%; border-radius: 2px; background: var(--series-total); }
   .bar span.danger { background: var(--series-blocked); }
-  .empty { color: var(--muted); padding: 18px 0; text-align: center; }
+  .empty { display: grid; place-items: center; min-height: 150px; color: var(--muted); text-align: center; }
 </style>

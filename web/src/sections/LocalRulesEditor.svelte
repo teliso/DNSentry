@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { ask } from '../lib/i18n/index.svelte';
   import { onMount } from 'svelte';
   import Card from '../components/Card.svelte';
   import { api } from '../lib/api';
@@ -34,7 +35,7 @@
   }
 
   function close() {
-    if (!dirty || confirm('放弃未保存的修改？')) onclose();
+    if (!dirty || ask('放弃未保存的修改？')) onclose();
   }
 
   function onkeydown(event: KeyboardEvent) {

@@ -2,6 +2,8 @@
 
 自托管的 DNS 过滤与解析服务，带 Web 管理控制台。在本地拦截广告、跟踪和恶意域名，其余请求转发到你选择的上游（支持加密 DNS），并可以对外提供 DoT / DoH / DoH3 / DoQ / DNSCrypt 服务。
 
+[English](README.en.md)
+
 ![概览](docs/images/dashboard.png)
 
 ## 特点
@@ -16,7 +18,7 @@
 
 ## 快速开始
 
-需要 Go 1.26+；从源码运行控制台还需要 Node 22 与 pnpm。
+需要 Go 1.27+；从源码运行控制台还需要 Node 22 与 pnpm。
 
 ```sh
 git clone https://github.com/teliso/DNSentry.git

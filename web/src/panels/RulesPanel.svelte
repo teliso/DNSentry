@@ -81,8 +81,8 @@
 
   <Card title="全部规则" description="本地规则优先于规则源；同一来源内放行优先于拦截，并覆盖其子域名。" flush>
     {#snippet actions()}
-      <button class="btn sm" type="button" disabled={store.busy} onclick={() => store.reloadRules()} title="rules.txt 在外部被修改后使用">
-        <Icon name="refresh" />重新载入
+      <button class="btn sm icon" type="button" disabled={store.busy} onclick={() => store.reloadRules()} aria-label="重新载入" title="重新载入：rules.txt 在外部被修改后使用">
+        <Icon name="refresh" />
       </button>
       <button class="btn sm" type="button" onclick={() => (editing = true)}><Icon name="settings" />编辑 rules.txt</button>
     {/snippet}

@@ -1,5 +1,4 @@
 <script lang="ts">
-  import PageHeader from '../components/PageHeader.svelte';
   import Tabs from '../components/Tabs.svelte';
   import { router } from '../lib/router.svelte';
   import { store } from '../lib/store.svelte';
@@ -19,7 +18,6 @@
   ]);
 </script>
 
-<PageHeader title="DNS" description="请求怎样被解析：用哪些上游、哪些域名走专属服务器、本地应答、缓存与 DNSSEC。保存后立即生效。" />
 <Tabs page="dns" {tabs} />
 
 {#if router.tab === 'records'}

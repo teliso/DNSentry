@@ -124,6 +124,8 @@ export type LogEntry = {
 };
 
 export type LogQuery = { search?: string; action?: string; offset?: number; limit?: number; date?: string };
+export type ProgramLogEntry = { time: string; level: 'debug' | 'info' | 'warn' | 'error'; message: string; attrs?: string };
+export type ProgramLogs = { level: string; entries: ProgramLogEntry[] };
 export type LogPage = { total: number; items: LogEntry[]; actions: string[]; truncated?: boolean };
 export type LogDays = { enabled: boolean; days: string[] };
 
@@ -238,6 +240,8 @@ export type Config = {
   cache_optimistic: boolean;
   cache_optimistic_answer_ttl: number;
   cache_optimistic_max_age: number;
+  query_log_disabled: boolean;
+  program_log_level: string;
   query_log_size: number;
   query_log_enabled: boolean;
   query_log_file: string;

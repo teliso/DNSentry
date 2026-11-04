@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/teliso/DNSentry/internal/applog"
 	"github.com/teliso/DNSentry/internal/dnssec"
 	"github.com/teliso/DNSentry/internal/schedule"
 	"github.com/teliso/DNSentry/internal/services"
@@ -52,6 +53,12 @@ func validateConfig(config *Config) (*Config, error) {
 	}
 	if config.CacheSize == 0 {
 		config.CacheSize = 4 << 20
+	}
+	config.ProgramLogLevel = strings.ToLower(strings.TrimSpace(config.ProgramLogLevel))
+	if config.ProgramLogLevel != "" {
+		if _, err := applog.ParseLevel(config.ProgramLogLevel); err != nil {
+			return nil, errors.New("program_log_level must be debug, info, warn, error or off")
+		}
 	}
 	if config.QueryLogSize <= 0 {
 		config.QueryLogSize = defaultQueryLogSize

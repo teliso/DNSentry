@@ -3,6 +3,7 @@
   import Field from '../components/Field.svelte';
   import Icon from '../components/Icon.svelte';
   import Switch from '../components/Switch.svelte';
+  import TimezoneSelect from '../components/TimezoneSelect.svelte';
   import { api } from '../lib/api';
   import { store } from '../lib/store.svelte';
   import type { Config, ScheduleRule, ServiceInfo } from '../lib/types';
@@ -17,7 +18,6 @@
     { value: 1, label: '一' }, { value: 2, label: '二' }, { value: 3, label: '三' }, { value: 4, label: '四' },
     { value: 5, label: '五' }, { value: 6, label: '六' }, { value: 0, label: '日' }
   ];
-  const ZONES = ['Asia/Shanghai', 'Asia/Hong_Kong', 'Asia/Taipei', 'Asia/Tokyo', 'Asia/Singapore', 'Europe/London', 'Europe/Berlin', 'America/New_York', 'America/Los_Angeles', 'UTC'];
 
   function add() {
     config.schedule.rules = [...rules, { name: '', enabled: true, days: [], start: '22:00', end: '07:00', services: [], safe_search: false }];
@@ -52,9 +52,8 @@
 
   <div class="stack">
     <div class="tz">
-      <Field label="时区" hint={now ? `按这个时区计时，现在是 ${now}` : '留空 = 服务器的本地时间（容器里通常是 UTC）'}>
-        <input list="zones" bind:value={config.schedule.timezone} placeholder="留空 = 服务器本地时间，例如 Asia/Shanghai" spellcheck="false" autocapitalize="off" />
-        <datalist id="zones">{#each ZONES as zone (zone)}<option value={zone}></option>{/each}</datalist>
+      <Field label="时区" hint={now ? `按这个时区计时，现在是 ${now}` : '默认用服务器的本地时间（容器里通常是 UTC）；点右侧按钮可以直接用你浏览器的时区'}>
+        <TimezoneSelect bind:value={config.schedule.timezone} emptyLabel="服务器本地时间（默认）" />
       </Field>
     </div>
 
