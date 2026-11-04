@@ -115,6 +115,7 @@ rules:
   execFileSync('go', ['build', '-o', binary, './cmd/dnsentry'], { cwd: root, stdio: 'inherit' });
   const server = spawn(binary, ['-config', config], { stdio: 'ignore', env: { ...process.env, DNSENTRY_API_TOKEN: '' } });
   cleanups.push(() => server.kill());
+  process.on('exit', () => server.kill()); // also on an uncaught error
   const base = `http://127.0.0.1:${PORTS.web}`;
   await waitFor(`${base}/healthz`);
   await traffic();
