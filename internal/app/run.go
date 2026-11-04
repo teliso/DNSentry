@@ -177,7 +177,7 @@ func run(ctx context.Context, stop context.CancelFunc, static fs.FS) error {
 	httpServer := newHTTPServer(api, static, dnsService.Ready)
 	scheme := "http"
 	if config.WebTLS.Enabled {
-		certs, err := newWebCertificates(config.WebTLS, filepath.Dir(configPath()))
+		certs, err := newWebCertificates(config.WebTLS, config.Encryption, filepath.Dir(configPath()))
 		if err != nil {
 			services.closeAll()
 			return err

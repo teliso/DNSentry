@@ -24,7 +24,7 @@ const defaultEncryption: EncryptionConfig = {
   dnscrypt: defaultDNSCrypt
 };
 
-const defaultWebTls: WebTlsConfig = { enabled: false, certificate: '', private_key: '' };
+const defaultWebTls: WebTlsConfig = { enabled: false, source: 'auto', certificate: '', private_key: '', server_name: '' };
 
 const defaultAccess: AccessConfig = {
   allowed_clients: [],

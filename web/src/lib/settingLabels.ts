@@ -24,6 +24,8 @@ const LABELS: Record<string, string> = {
   'dns.dnssec_auto_update': 'DNSSEC 自动更新',
   'web.listen': '控制台监听地址',
   'web.tls.enabled': '控制台 HTTPS',
+  'web.tls.source': '控制台证书来源',
+  'web.tls.server_name': '控制台绑定域名',
   'web.tls.certificate': '控制台证书文件',
   'web.tls.private_key': '控制台私钥文件',
   'cache.enabled': '缓存开关',

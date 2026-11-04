@@ -165,9 +165,20 @@ export type RouteStatus = { name?: string; domains: string[]; upstreams: Upstrea
 export type UpstreamMode = 'load_balance' | 'parallel' | 'fastest_addr';
 export type BlockingMode = 'nxdomain' | 'null_ip' | 'custom_ip' | 'refused';
 
-export type WebTlsConfig = { enabled: boolean; certificate: string; private_key: string };
+export type WebTlsSource = 'auto' | 'encryption' | 'custom';
+export type WebTlsConfig = { enabled: boolean; source: WebTlsSource; certificate: string; private_key: string; server_name: string };
 /** The certificate the console is serving right now (Status.web_tls). */
-export type WebTlsInfo = { enabled: boolean; mode?: 'custom' | 'self-signed'; fingerprint?: string; not_after?: string };
+export type WebTlsInfo = {
+  enabled: boolean;
+  mode?: 'self-signed' | 'encryption' | 'custom';
+  fingerprint?: string;
+  not_after?: string;
+  /** Host names and addresses the certificate is valid for. */
+  names?: string[];
+  server_name?: string;
+  /** False when server_name is set but the certificate does not match it. */
+  covered: boolean;
+};
 
 export type Config = {
   dns_listens: string[];

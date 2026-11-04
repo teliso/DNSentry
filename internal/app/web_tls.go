@@ -24,39 +24,85 @@ import (
 	"github.com/teliso/DNSentry/internal/fsutil"
 )
 
-// WebTLSConfig turns the console into an HTTPS server. Without a certificate
-// and key it uses a self-signed certificate that it creates next to the
-// configuration file.
+// Where the console's certificate comes from.
+const (
+	webTLSAuto       = "auto"       // a self-signed certificate created next to the configuration file
+	webTLSEncryption = "encryption" // the certificate of the encrypted DNS service
+	webTLSCustom     = "custom"     // certificate and key files given here
+)
+
+// WebTLSConfig turns the console into an HTTPS server.
 type WebTLSConfig struct {
-	Enabled     bool   `json:"enabled" yaml:"enabled"`
-	Certificate string `json:"certificate" yaml:"certificate,omitempty"` // path of a PEM certificate chain
-	PrivateKey  string `json:"private_key" yaml:"private_key,omitempty"` // path of the PEM private key
+	Enabled bool `json:"enabled" yaml:"enabled"`
+	// Source is "auto", "encryption" or "custom"; empty means custom when
+	// Certificate is set and auto otherwise (the layout of earlier versions).
+	Source      string `json:"source" yaml:"source,omitempty"`
+	Certificate string `json:"certificate" yaml:"certificate,omitempty"` // custom: path of a PEM certificate chain
+	PrivateKey  string `json:"private_key" yaml:"private_key,omitempty"` // custom: path of the PEM private key
+	// ServerName is the host name the console is opened with (for example the
+	// name of the DoH/DoT certificate). A self-signed certificate is issued for
+	// it, and the console warns if the certificate in use does not cover it.
+	ServerName string `json:"server_name" yaml:"server_name,omitempty"`
 }
 
-func (c WebTLSConfig) custom() bool {
-	return strings.TrimSpace(c.Certificate) != "" || strings.TrimSpace(c.PrivateKey) != ""
-}
-
-// validateWebTLS checks the settings, including that a given certificate and key load.
-func validateWebTLS(config WebTLSConfig) error {
-	certificate, key := strings.TrimSpace(config.Certificate), strings.TrimSpace(config.PrivateKey)
-	if (certificate == "") != (key == "") {
-		return errors.New("web tls: certificate and private_key must be given together (or both left empty for a self-signed certificate)")
-	}
-	if config.Enabled && certificate != "" {
-		if _, err := tls.LoadX509KeyPair(certificate, key); err != nil {
-			return fmt.Errorf("web tls: cannot load the certificate and key: %w", err)
+// normalizeWebTLS fills in Source and tidies ServerName.
+func normalizeWebTLS(config *WebTLSConfig) {
+	config.Source = strings.ToLower(strings.TrimSpace(config.Source))
+	if config.Source == "" {
+		config.Source = webTLSAuto
+		if strings.TrimSpace(config.Certificate) != "" || strings.TrimSpace(config.PrivateKey) != "" {
+			config.Source = webTLSCustom
 		}
+	}
+	config.ServerName = strings.ToLower(strings.TrimSuffix(strings.TrimSpace(config.ServerName), "."))
+}
+
+// validateWebTLS checks the settings, including that the certificate loads.
+// config must have been through normalizeWebTLS.
+func validateWebTLS(config WebTLSConfig, encryption EncryptionConfig) error {
+	if config.ServerName != "" && (net.ParseIP(config.ServerName) != nil || !validHost(config.ServerName)) {
+		return errors.New("web tls: server_name must be a host name such as dns.example.com")
+	}
+	certificate, key := strings.TrimSpace(config.Certificate), strings.TrimSpace(config.PrivateKey)
+	switch config.Source {
+	case webTLSAuto:
+	case webTLSEncryption:
+		if config.Enabled {
+			if certificateSourceEmpty(encryption) || privateKeySourceEmpty(encryption) {
+				return errors.New("web tls: the encrypted DNS certificate and private key are not configured (Settings → Encrypted DNS)")
+			}
+			if _, err := loadServerCertificate(encryption); err != nil {
+				return fmt.Errorf("web tls: cannot load the encrypted DNS certificate: %w", err)
+			}
+		}
+	case webTLSCustom:
+		if (certificate == "") != (key == "") {
+			return errors.New("web tls: certificate and private_key must be given together")
+		}
+		if config.Enabled {
+			if certificate == "" {
+				return errors.New("web tls: give a certificate and private key, or choose another certificate source")
+			}
+			if _, err := tls.LoadX509KeyPair(certificate, key); err != nil {
+				return fmt.Errorf("web tls: cannot load the certificate and key: %w", err)
+			}
+		}
+	default:
+		return errors.New("web tls: source must be auto, encryption or custom")
 	}
 	return nil
 }
 
 // WebTLSInfo describes the certificate the console is serving, for the UI.
 type WebTLSInfo struct {
-	Enabled     bool   `json:"enabled"`
-	Mode        string `json:"mode,omitempty"`        // "custom" or "self-signed"
-	Fingerprint string `json:"fingerprint,omitempty"` // SHA-256 of the certificate, upper-case hex
-	NotAfter    string `json:"not_after,omitempty"`
+	Enabled     bool     `json:"enabled"`
+	Mode        string   `json:"mode,omitempty"`        // "self-signed", "encryption" or "custom"
+	Fingerprint string   `json:"fingerprint,omitempty"` // SHA-256 of the certificate, upper-case hex
+	NotAfter    string   `json:"not_after,omitempty"`
+	Names       []string `json:"names,omitempty"` // host names and addresses the certificate is valid for
+	ServerName  string   `json:"server_name,omitempty"`
+	// Covered is false when ServerName is set but the certificate does not match it.
+	Covered bool `json:"covered"`
 }
 
 const (
@@ -68,30 +114,42 @@ const (
 // webCertificates supplies the console's certificate and picks up a renewed
 // one without a restart.
 type webCertificates struct {
-	config  WebTLSConfig
-	dir     string
-	checked time.Time
+	config     WebTLSConfig
+	encryption EncryptionConfig // the encrypted DNS settings, for Source "encryption"
+	dir        string
+	checked    time.Time
 
-	mu         sync.Mutex
-	cert       *tls.Certificate
-	leaf       *x509.Certificate
-	mtimes     [2]time.Time
-	selfSigned bool
+	mu     sync.Mutex
+	cert   *tls.Certificate
+	leaf   *x509.Certificate
+	mtimes [2]time.Time
 }
 
-func newWebCertificates(config WebTLSConfig, dir string) (*webCertificates, error) {
-	w := &webCertificates{config: config, dir: dir, selfSigned: !config.custom()}
+func newWebCertificates(config WebTLSConfig, encryption EncryptionConfig, dir string) (*webCertificates, error) {
+	normalizeWebTLS(&config)
+	w := &webCertificates{config: config, encryption: encryption, dir: dir}
 	if err := w.load(); err != nil {
 		return nil, err
 	}
 	return w, nil
 }
 
+func (w *webCertificates) selfSigned() bool { return w.config.Source == webTLSAuto }
+
+// files lists the certificate files, for change detection. Certificates given
+// as pasted PEM have none.
 func (w *webCertificates) files() (certPath, keyPath string) {
-	if w.selfSigned {
+	switch w.config.Source {
+	case webTLSAuto:
 		return filepath.Join(w.dir, "web-tls.crt"), filepath.Join(w.dir, "web-tls.key")
+	case webTLSEncryption:
+		if strings.TrimSpace(w.encryption.CertificatePEM) != "" || strings.TrimSpace(w.encryption.PrivateKeyPEM) != "" {
+			return "", ""
+		}
+		return strings.TrimSpace(w.encryption.Certificate), strings.TrimSpace(w.encryption.PrivateKey)
+	default:
+		return strings.TrimSpace(w.config.Certificate), strings.TrimSpace(w.config.PrivateKey)
 	}
-	return strings.TrimSpace(w.config.Certificate), strings.TrimSpace(w.config.PrivateKey)
 }
 
 func modTime(path string) time.Time {
@@ -101,26 +159,37 @@ func modTime(path string) time.Time {
 	return time.Time{}
 }
 
-// load reads the certificate files, creating or renewing the self-signed one.
+// read loads the configured certificate and key.
+func (w *webCertificates) read() (tls.Certificate, error) {
+	switch w.config.Source {
+	case webTLSEncryption:
+		return loadServerCertificate(w.encryption)
+	default:
+		certPath, keyPath := w.files()
+		return tls.LoadX509KeyPair(certPath, keyPath)
+	}
+}
+
+// load reads the certificate, creating or renewing the self-signed one.
 func (w *webCertificates) load() error {
-	certPath, keyPath := w.files()
-	pair, err := tls.LoadX509KeyPair(certPath, keyPath)
+	pair, err := w.read()
 	if err == nil {
 		if leaf, parseErr := x509.ParseCertificate(pair.Certificate[0]); parseErr == nil {
 			pair.Leaf = leaf
-			if !w.selfSigned || time.Until(leaf.NotAfter) > selfSignedRenewal {
-				w.store(&pair, leaf, certPath, keyPath)
+			if !w.selfSigned() || w.selfSignedUsable(leaf) {
+				w.store(&pair, leaf)
 				return nil
 			}
 		}
 	}
-	if !w.selfSigned {
-		return fmt.Errorf("web tls: cannot load %s and %s: %w", certPath, keyPath, err)
+	if !w.selfSigned() {
+		return fmt.Errorf("web tls: cannot load the certificate: %w", err)
 	}
-	if err := generateSelfSigned(certPath, keyPath); err != nil {
+	certPath, keyPath := w.files()
+	if err := generateSelfSigned(certPath, keyPath, w.config.ServerName); err != nil {
 		return fmt.Errorf("web tls: cannot create a self-signed certificate: %w", err)
 	}
-	pair, err = tls.LoadX509KeyPair(certPath, keyPath)
+	pair, err = w.read()
 	if err != nil {
 		return err
 	}
@@ -129,12 +198,22 @@ func (w *webCertificates) load() error {
 		return err
 	}
 	pair.Leaf = leaf
-	slog.Info("created a self-signed certificate for the console", "certificate", certPath, "sha256", fingerprint(leaf))
-	w.store(&pair, leaf, certPath, keyPath)
+	slog.Info("created a self-signed certificate for the console", "certificate", certPath, "server_name", w.config.ServerName, "sha256", fingerprint(leaf))
+	w.store(&pair, leaf)
 	return nil
 }
 
-func (w *webCertificates) store(pair *tls.Certificate, leaf *x509.Certificate, certPath, keyPath string) {
+// selfSignedUsable reports whether an existing self-signed certificate can
+// stay: not about to expire and valid for the configured server name.
+func (w *webCertificates) selfSignedUsable(leaf *x509.Certificate) bool {
+	if time.Until(leaf.NotAfter) <= selfSignedRenewal {
+		return false
+	}
+	return w.config.ServerName == "" || leaf.VerifyHostname(w.config.ServerName) == nil
+}
+
+func (w *webCertificates) store(pair *tls.Certificate, leaf *x509.Certificate) {
+	certPath, keyPath := w.files()
 	w.mu.Lock()
 	w.cert, w.leaf = pair, leaf
 	w.mtimes = [2]time.Time{modTime(certPath), modTime(keyPath)}
@@ -155,7 +234,7 @@ func (w *webCertificates) get(*tls.ClientHelloInfo) (*tls.Certificate, error) {
 	w.mu.Unlock()
 	if due {
 		certPath, keyPath := w.files()
-		if modTime(certPath) != mtimes[0] || modTime(keyPath) != mtimes[1] || (w.selfSigned && time.Until(w.leafNotAfter()) <= selfSignedRenewal) {
+		if modTime(certPath) != mtimes[0] || modTime(keyPath) != mtimes[1] || (w.selfSigned() && time.Until(w.leafNotAfter()) <= selfSignedRenewal) {
 			if err := w.load(); err != nil {
 				slog.Warn("keeping the previous console certificate", "error", err)
 			} else {
@@ -185,11 +264,19 @@ func (w *webCertificates) Info() WebTLSInfo {
 	}
 	w.mu.Lock()
 	defer w.mu.Unlock()
-	mode := "custom"
-	if w.selfSigned {
+	mode := w.config.Source
+	if w.selfSigned() {
 		mode = "self-signed"
 	}
-	return WebTLSInfo{Enabled: true, Mode: mode, Fingerprint: fingerprint(w.leaf), NotAfter: w.leaf.NotAfter.UTC().Format(time.RFC3339)}
+	names := append([]string(nil), w.leaf.DNSNames...)
+	for _, ip := range w.leaf.IPAddresses {
+		names = append(names, ip.String())
+	}
+	info := WebTLSInfo{Enabled: true, Mode: mode, Fingerprint: fingerprint(w.leaf), NotAfter: w.leaf.NotAfter.UTC().Format(time.RFC3339), Names: names, ServerName: w.config.ServerName, Covered: true}
+	if w.config.ServerName != "" {
+		info.Covered = w.leaf.VerifyHostname(w.config.ServerName) == nil
+	}
+	return info
 }
 
 func fingerprint(leaf *x509.Certificate) string {
@@ -203,8 +290,8 @@ func fingerprint(leaf *x509.Certificate) string {
 }
 
 // generateSelfSigned writes a certificate that covers this machine's host name
-// and addresses, plus localhost.
-func generateSelfSigned(certPath, keyPath string) error {
+// and addresses, localhost and, if given, serverName.
+func generateSelfSigned(certPath, keyPath, serverName string) error {
 	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	if err != nil {
 		return err
@@ -216,6 +303,9 @@ func generateSelfSigned(certPath, keyPath string) error {
 	names := []string{"localhost"}
 	if host, err := os.Hostname(); err == nil && host != "" && host != "localhost" {
 		names = append(names, host)
+	}
+	if serverName != "" && serverName != "localhost" {
+		names = append([]string{serverName}, names...)
 	}
 	ips := []net.IP{net.IPv4(127, 0, 0, 1), net.IPv6loopback}
 	if addresses, err := net.InterfaceAddrs(); err == nil {

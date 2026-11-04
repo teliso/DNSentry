@@ -86,8 +86,10 @@ web:
   listen: 127.0.0.1:18080          # [restart]
   tls:                             # [restart] 控制台 HTTPS，见 docs/deployment.md
     enabled: false
-    certificate: ""                # PEM 证书路径；留空 = 自动生成自签名证书
-    private_key: ""
+    source: auto                   # auto（自签名）| encryption（复用加密 DNS 的证书）| custom（下面两项）
+    certificate: ""                # custom：PEM 证书路径
+    private_key: ""                # custom：PEM 私钥路径
+    server_name: ""                # 可选：打开控制台用的域名，如 dns.example.com
 cache:
   enabled: true
   size: 4194304                    # 字节

@@ -36,9 +36,6 @@ func validateConfig(config *Config) (*Config, error) {
 	if err := validateListenAddress("web listen", config.HTTPListen); err != nil {
 		return nil, err
 	}
-	if err := validateWebTLS(config.WebTLS); err != nil {
-		return nil, err
-	}
 	if config.UpstreamTimeout <= 0 {
 		config.UpstreamTimeout = 4
 	}
@@ -188,6 +185,10 @@ func validateConfig(config *Config) (*Config, error) {
 		config.Access.MaxConcurrentQueries = 2048
 	}
 	if err := validateEncryptionConfig(config.Encryption); err != nil {
+		return nil, err
+	}
+	normalizeWebTLS(&config.WebTLS)
+	if err := validateWebTLS(config.WebTLS, config.Encryption); err != nil {
 		return nil, err
 	}
 	sources, err := rules.NormalizeSources(config.RuleSources)

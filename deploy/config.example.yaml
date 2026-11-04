@@ -60,12 +60,17 @@ web:
   # [restart] Console and API. A non-loopback address additionally requires
   # DNSENTRY_ALLOW_PUBLIC_WEB=1 and DNSENTRY_API_TOKEN in the environment.
   listen: "127.0.0.1:18080"
-  # [restart] Serve the console over HTTPS. Without certificate/private_key a
-  # self-signed certificate is created next to this file.
+  # [restart] Serve the console over HTTPS.
   tls:
     enabled: false
+    # auto: self-signed | encryption: reuse the certificate of the encrypted DNS
+    # service | custom: certificate/private_key below.
+    source: auto
     # certificate: /etc/ssl/dnsentry/fullchain.pem
     # private_key: /etc/ssl/dnsentry/privkey.pem
+    # Host name the console is opened with (e.g. the DoH/DoT name). A self-signed
+    # certificate is issued for it; other certificates are checked against it.
+    # server_name: dns.example.com
 
 cache:
   enabled: true
