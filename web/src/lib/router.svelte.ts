@@ -2,7 +2,7 @@
 export const PAGES = {
   overview: [],
   logs: [],
-  filters: ['sources', 'rules', 'services', 'blocking'],
+  filters: ['sources', 'rules', 'services', 'schedule', 'blocking'],
   dns: ['upstreams', 'routes', 'records', 'cache', 'advanced'],
   settings: ['network', 'account', 'notifications', 'encryption', 'logging', 'maintenance']
 } as const;

@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	"github.com/teliso/DNSentry/internal/access"
+	"github.com/teliso/DNSentry/internal/schedule"
 
 	"github.com/teliso/DNSentry/internal/rules"
 )
@@ -55,6 +56,7 @@ type yamlConfig struct {
 	Access        access.Config       `yaml:"access"`
 	Encryption    EncryptionConfig    `yaml:"encryption"`
 	Notifications NotificationsConfig `yaml:"notifications,omitempty"`
+	Schedule      schedule.Config     `yaml:"schedule,omitempty"`
 	Logging       struct {
 		QueryLogSize          int    `yaml:"query_log_size"`
 		QueryLogEnabled       bool   `yaml:"enabled"`
@@ -126,6 +128,7 @@ func (f yamlConfig) toConfig() *Config {
 		Access:                f.Access,
 		Encryption:            f.Encryption,
 		Notifications:         f.Notifications,
+		Schedule:              f.Schedule,
 	}
 }
 
@@ -171,6 +174,7 @@ func newYAMLConfig(config *Config) yamlConfig {
 	fileConfig.Logging.QueryLogRetentionDays = config.QueryLogRetentionDays
 	fileConfig.Encryption = config.Encryption
 	fileConfig.Notifications = config.Notifications
+	fileConfig.Schedule = config.Schedule
 	return fileConfig
 }
 

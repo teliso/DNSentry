@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/teliso/DNSentry/internal/auth"
+	"github.com/teliso/DNSentry/internal/schedule"
 	"github.com/teliso/DNSentry/internal/services"
 	"github.com/teliso/DNSentry/internal/upstream"
 
@@ -149,6 +150,7 @@ func run(ctx context.Context, stop context.CancelFunc, static fs.FS) error {
 	server.configureAccess(config.Access)
 	server.setLocalRecords(config.LocalRecords)
 	server.blockedServices.Store(services.NewMatcher(config.BlockedServices))
+	server.schedules.Store(schedule.Compile(config.Schedule))
 	server.setUpstreamRoutes(config.UpstreamRoutes)
 	if config.DNSSECValidate {
 		if err := server.rebuildDNSSECValidator(*config); err != nil {
@@ -171,6 +173,7 @@ func run(ctx context.Context, stop context.CancelFunc, static fs.FS) error {
 	api.auth = loginStore
 	notifier := newNotifier(func() NotificationsConfig { return server.configSnapshot().Notifications }, collectProblems(server, updater))
 	go notifier.Run(ctx)
+	go server.watchSchedule(ctx)
 	httpServer := newHTTPServer(api, static, dnsService.Ready)
 	scheme := "http"
 	if config.WebTLS.Enabled {

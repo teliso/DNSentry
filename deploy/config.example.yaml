@@ -105,6 +105,13 @@ logging:
   file: "data/querylog"      # [restart] prefix: data/querylog-YYYY-MM-DD.jsonl
   retention_days: 7          # [restart]
 
+# Block services / force safe search during weekly windows.
+schedule:
+  timezone: ""               # IANA name such as Asia/Shanghai; empty = server local time
+  rules: []
+  #  - { name: night, enabled: true, days: [], start: "22:00", end: "07:00", services: [steam, roblox], safe_search: false }
+  #    days: 0 = Sunday ... 6 = Saturday, empty = every day; an end before the start runs past midnight.
+
 # Notifications about upstream and rule source problems (webhooks).
 notifications:
   events: []                 # upstream | rule_source; empty = all

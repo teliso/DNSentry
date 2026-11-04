@@ -117,6 +117,9 @@ logging:
   enabled: false                   # [restart] 是否写 JSONL 文件
   file: data/querylog              # [restart] 文件前缀：data/querylog-YYYY-MM-DD.jsonl
   retention_days: 7                # [restart] 1–365
+schedule:                          # 计划任务，见 docs/filtering.md#计划任务
+  timezone: ""                     # IANA 时区名，留空 = 服务器本地时间
+  rules: []                        # [{name, enabled, days: [0-6, 0=周日], start: "22:00", end: "07:00", services: [...], safe_search}]
 notifications:                     # 通知，见 docs/deployment.md#通知
   events: []                       # upstream | rule_source，留空 = 全部
   webhooks: []                     # [{name, url, format: json|plain, enabled}]

@@ -3,6 +3,7 @@ package app
 import (
 	"github.com/teliso/DNSentry/internal/access"
 	"github.com/teliso/DNSentry/internal/rules"
+	"github.com/teliso/DNSentry/internal/schedule"
 )
 
 // Config is the effective service configuration. JSON tags describe the Web API
@@ -48,4 +49,5 @@ type Config struct {
 	Access                access.Config       `json:"access" yaml:"access"`
 	Encryption            EncryptionConfig    `json:"encryption" yaml:"encryption"`
 	Notifications         NotificationsConfig `json:"notifications" yaml:"notifications,omitempty"`
+	Schedule              schedule.Config     `json:"schedule" yaml:"schedule,omitempty"`
 }

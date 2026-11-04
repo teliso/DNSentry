@@ -8,7 +8,7 @@ import (
 
 func (s *DNSServer) exchange(request *dns.Msg) (*dns.Msg, string, error) {
 	config := s.configSnapshot()
-	if isSafeSearchQuery(&config, request) {
+	if s.isSafeSearchQuery(&config, request) {
 		return s.exchangeSafeSearch(request)
 	}
 	if route := s.routeFor(request); route != nil {

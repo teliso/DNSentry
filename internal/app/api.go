@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/teliso/DNSentry/internal/auth"
 	"github.com/teliso/DNSentry/internal/services"
@@ -203,6 +204,8 @@ func (a *API) getStatus(writer http.ResponseWriter, _ *http.Request) {
 		"rules_file":               config.RulesFile,
 		"restart_required":         pendingRestart,
 		"web_tls":                  a.webTLS.Info(),
+		"active_schedules":         activeSchedules(a.resolver),
+		"server_time":              time.Now().Format(time.RFC3339),
 		"protection":               a.resolver.protectionStatus(),
 		"dns_listens":              config.DNSListens,
 		"http_listen":              config.HTTPListen,
@@ -233,6 +236,14 @@ func (a *API) clearCache(writer http.ResponseWriter, _ *http.Request) {
 // listServices serves GET /services: the catalogue of blockable services.
 func (a *API) listServices(writer http.ResponseWriter, _ *http.Request) {
 	writeJSON(writer, http.StatusOK, services.Catalog)
+}
+
+// activeSchedules names the schedule windows that are open now (never null in JSON).
+func activeSchedules(server *DNSServer) []string {
+	if names := server.schedules.Load().Active(time.Now()); names != nil {
+		return names
+	}
+	return []string{}
 }
 
 // getStats serves GET /stats?range=24h|7d|30d|90d: queries and blocked counts

@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/teliso/DNSentry/internal/dnssec"
+	"github.com/teliso/DNSentry/internal/schedule"
 	"github.com/teliso/DNSentry/internal/services"
 
 	"github.com/teliso/DNSentry/internal/access"
@@ -42,6 +43,7 @@ type DNSServer struct {
 	maxConcurrentQueries  atomic.Int64
 	protectionPausedUntil atomic.Int64 // unix nanoseconds; 0 = filtering on
 	blockedServices       atomic.Pointer[services.Matcher]
+	schedules             atomic.Pointer[schedule.Set]
 	refreshInFlight       atomic.Int64
 	dohClients            map[string]*dohClientEntry
 	doh3Clients           map[string]*doh3ClientEntry
@@ -133,6 +135,7 @@ func (s *DNSServer) applyConfig(config Config) error {
 	s.configureAccess(config.Access)
 	s.setLocalRecords(config.LocalRecords)
 	s.blockedServices.Store(services.NewMatcher(config.BlockedServices))
+	s.schedules.Store(schedule.Compile(config.Schedule))
 	s.setUpstreamRoutes(config.UpstreamRoutes)
 	if previous.CacheEnabled != config.CacheEnabled || previous.CacheSize != config.CacheSize || previous.CacheTTLMin != config.CacheTTLMin || previous.CacheTTLMax != config.CacheTTLMax || previous.OptimisticCache != config.OptimisticCache || previous.OptimisticAnswerTTL != config.OptimisticAnswerTTL || previous.OptimisticMaxAge != config.OptimisticMaxAge || previous.EnableDNSSEC != config.EnableDNSSEC || dnssecChanged || previous.UpstreamMode != config.UpstreamMode || localRecordsChanged || !upstreamRoutesEqual(previous.UpstreamRoutes, config.UpstreamRoutes) || previous.PrivateReverse != config.PrivateReverse || previous.SafeSearch != config.SafeSearch || previous.BlockAAAA != config.BlockAAAA || accessChanged || !slices.Equal(previous.Upstreams, config.Upstreams) || !slices.Equal(previous.FallbackUpstreams, config.FallbackUpstreams) || !slices.Equal(previous.BootstrapDNS, config.BootstrapDNS) {
 		s.cache.Clear()

@@ -1,6 +1,9 @@
 package app
 
 import (
+	"context"
+	"time"
+
 	"github.com/miekg/dns"
 	"github.com/teliso/DNSentry/internal/dnsname"
 )
@@ -41,7 +44,7 @@ const safeSearchTTL = 300
 // (explicit upstream routes, safe search); the rebinding filter and DNSSEC
 // validation do not apply to them.
 func (s *DNSServer) trustedName(config *Config, request *dns.Msg) bool {
-	return s.routeFor(request) != nil || isSafeSearchQuery(config, request)
+	return s.routeFor(request) != nil || s.isSafeSearchQuery(config, request)
 }
 
 // safeSearchTarget returns the filtered host name for domain, if it has one.
@@ -50,10 +53,37 @@ func safeSearchTarget(domain string) (string, bool) {
 	return target, ok
 }
 
+// safeSearchOn is true when safe search is switched on, or a schedule window
+// that forces it is open.
+func (s *DNSServer) safeSearchOn(config *Config) bool {
+	return config.SafeSearch || s.schedules.Load().SafeSearch(time.Now())
+}
+
+// watchSchedule empties the cache when a schedule window changes whether safe
+// search is forced, so answers cached under the old state do not outlive it.
+func (s *DNSServer) watchSchedule(ctx context.Context) {
+	ticker := time.NewTicker(20 * time.Second)
+	defer ticker.Stop()
+	config := s.configSnapshot()
+	last := s.safeSearchOn(&config)
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			config = s.configSnapshot()
+			if now := s.safeSearchOn(&config); now != last {
+				last = now
+				s.clearCache()
+			}
+		}
+	}
+}
+
 // isSafeSearchQuery reports whether the query is answered by safe search: the
 // setting is on and the name is one of the redirected hosts.
-func isSafeSearchQuery(config *Config, request *dns.Msg) bool {
-	if !config.SafeSearch || len(request.Question) != 1 {
+func (s *DNSServer) isSafeSearchQuery(config *Config, request *dns.Msg) bool {
+	if !s.safeSearchOn(config) || len(request.Question) != 1 {
 		return false
 	}
 	_, ok := safeSearchTarget(dnsname.Normalize(request.Question[0].Name))

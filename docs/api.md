@@ -65,7 +65,7 @@ POST /api/protection
 
 ### `GET /status`
 
-返回一个大的对象，主要字段：`version`、`restart_required`、`protection`（过滤是否开启及自动恢复时间）、`config_path`、`rules_file`、`total_queries`、`blocked_queries`、`rules`、`local_rules`、`cache`（命中率、条目、字节数、预取次数等）、`dnssec`、`security`（被拒绝 / 限速 / 过载 / Rebinding 的计数）、`dnscrypt`（运行状态与 stamp）、`series`（最近 30 分钟每分钟的查询和拦截数）、`dashboard`（排行）、`upstream_health`（每个上游的健康状态和 30 分钟 `history`）、`upstream_routes`（分流及其上游健康）、`fallback_upstream_health`、`rule_sources`（规则源及运行状态）。
+返回一个大的对象，主要字段：`version`、`restart_required`、`active_schedules`（此刻生效中的计划名称）、`server_time`、`protection`（过滤是否开启及自动恢复时间）、`config_path`、`rules_file`、`total_queries`、`blocked_queries`、`rules`、`local_rules`、`cache`（命中率、条目、字节数、预取次数等）、`dnssec`、`security`（被拒绝 / 限速 / 过载 / Rebinding 的计数）、`dnscrypt`（运行状态与 stamp）、`series`（最近 30 分钟每分钟的查询和拦截数）、`dashboard`（排行）、`upstream_health`（每个上游的健康状态和 30 分钟 `history`）、`upstream_routes`（分流及其上游健康）、`fallback_upstream_health`、`rule_sources`（规则源及运行状态）。
 
 ### `GET /config` / `PUT /config`
 

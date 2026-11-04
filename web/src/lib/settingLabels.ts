@@ -23,6 +23,8 @@ const LABELS: Record<string, string> = {
   'dns.dnssec_trust_anchor_file': 'DNSSEC 信任锚文件',
   'dns.dnssec_auto_update': 'DNSSEC 自动更新',
   'web.listen': '控制台监听地址',
+  'schedule.timezone': '计划时区',
+  'schedule.rules': '计划任务',
   'notifications.webhooks': '通知 Webhook',
   'notifications.events': '通知的事件',
   'web.tls.enabled': '控制台 HTTPS',

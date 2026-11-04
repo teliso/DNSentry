@@ -66,6 +66,7 @@ export function normalizeConfig(raw: Config): Config {
     ...raw,
     dns_listens: cleanList(raw.dns_listens),
     web_tls: { ...defaultWebTls, ...raw.web_tls },
+    schedule: { timezone: raw.schedule?.timezone ?? '', rules: (raw.schedule?.rules ?? []).map((rule) => ({ ...rule, days: [...(rule.days ?? [])], services: [...(rule.services ?? [])] })) },
     notifications: { webhooks: raw.notifications?.webhooks ?? [], events: raw.notifications?.events ?? [] },
     upstreams: cleanList(raw.upstreams),
     fallback_upstreams: cleanList(raw.fallback_upstreams),
@@ -90,6 +91,8 @@ export function serializeConfig(config: Config): Config {
   const copy = JSON.parse(JSON.stringify(config)) as Config; // also unwraps Svelte proxies
   copy.upstreams = cleanList(copy.upstreams);
   copy.fallback_upstreams = cleanList(copy.fallback_upstreams);
+  copy.schedule.timezone = copy.schedule.timezone.trim();
+  copy.schedule.rules = copy.schedule.rules.map((rule) => ({ ...rule, name: rule.name.trim(), days: [...new Set(rule.days)].sort((a, b) => a - b), services: [...new Set(rule.services)].sort() }));
   copy.notifications.webhooks = copy.notifications.webhooks.map((hook) => ({ ...hook, name: hook.name.trim(), url: hook.url.trim() })).filter((hook) => hook.url !== '');
   copy.blocked_services = [...new Set(cleanList(copy.blocked_services))].sort();
   copy.bootstrap_dns = cleanList(copy.bootstrap_dns);

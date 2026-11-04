@@ -77,7 +77,7 @@ func (s *DNSServer) ServeDNS(writer dns.ResponseWriter, request *dns.Msg) {
 	clientIP := queryClientIP(writer)
 	var rule rules.Entry // filter rule that decided the query, if any
 	var ruleText string  // set instead of rule when a blocked service or safe search decided
-	if config.SafeSearch {
+	if s.safeSearchOn(&config) {
 		if target, ok := safeSearchTarget(domain); ok {
 			ruleText = "安全搜索 → " + target
 		}
@@ -117,11 +117,19 @@ func (s *DNSServer) ServeDNS(writer dns.ResponseWriter, request *dns.Msg) {
 		rule, _ = s.rules.Match(domain)
 		// A blocked service applies unless the user's own allow rule says otherwise.
 		if rule.Action != rules.ActionAllow {
-			if service, ok := s.blockedServices.Load().Match(domain); ok {
+			service, ok := s.blockedServices.Load().Match(domain)
+			reason := "服务：" + service.Name
+			if !ok {
+				var window string
+				if window, service, ok = s.schedules.Load().MatchService(started, domain); ok {
+					reason = "计划「" + window + "」：" + service.Name
+				}
+			}
+			if ok {
 				response := filterUpstreamResponse(blockedResponse(request, question, &config), request)
 				addExtendedError(response, request, dns.ExtendedErrorCodeFiltered, "DNSentry: "+service.Name+" is blocked")
 				_ = writer.WriteMsg(response)
-				ruleText = "服务：" + service.Name
+				ruleText = reason
 				logQuery(string(rules.ActionBlock), "")
 				return
 			}

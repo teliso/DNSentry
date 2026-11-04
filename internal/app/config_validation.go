@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/teliso/DNSentry/internal/dnssec"
+	"github.com/teliso/DNSentry/internal/schedule"
 	"github.com/teliso/DNSentry/internal/services"
 
 	"github.com/teliso/DNSentry/internal/access"
@@ -185,6 +186,9 @@ func validateConfig(config *Config) (*Config, error) {
 		config.Access.MaxConcurrentQueries = 2048
 	}
 	if err := validateEncryptionConfig(config.Encryption); err != nil {
+		return nil, err
+	}
+	if err := schedule.Normalize(&config.Schedule); err != nil {
 		return nil, err
 	}
 	if err := validateNotifications(&config.Notifications); err != nil {

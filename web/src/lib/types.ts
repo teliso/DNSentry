@@ -84,6 +84,9 @@ export type Status = {
   /** Saved configuration has startup-only changes that need a service restart. */
   restart_required: boolean;
   web_tls: WebTlsInfo;
+  /** Names of the schedule windows that are open right now. */
+  active_schedules: string[];
+  server_time: string;
   protection: Protection;
   version: string;
   config_path: string;
@@ -166,6 +169,19 @@ export type RouteStatus = { name?: string; domains: string[]; upstreams: Upstrea
 export type UpstreamMode = 'load_balance' | 'parallel' | 'fastest_addr';
 export type BlockingMode = 'nxdomain' | 'null_ip' | 'custom_ip' | 'refused';
 
+/** A weekly window that blocks services / forces safe search (see internal/schedule). */
+export type ScheduleRule = {
+  name: string;
+  enabled: boolean;
+  /** Weekdays the window starts on, 0 = Sunday; empty = every day. */
+  days: number[];
+  start: string;
+  end: string;
+  services: string[];
+  safe_search: boolean;
+};
+export type ScheduleConfig = { timezone: string; rules: ScheduleRule[] };
+
 export type WebhookFormat = 'json' | 'plain';
 export type Webhook = { name: string; url: string; format: WebhookFormat; enabled: boolean };
 export type NotificationEvent = 'upstream' | 'rule_source';
@@ -191,6 +207,7 @@ export type Config = {
   http_listen: string;
   web_tls: WebTlsConfig;
   notifications: NotificationsConfig;
+  schedule: ScheduleConfig;
   upstreams: string[];
   fallback_upstreams: string[];
   upstream_mode: UpstreamMode;

@@ -10,6 +10,7 @@ import (
 	"os"
 	"strings"
 	"time"
+	_ "time/tzdata" // time zone names work even where the system has no zoneinfo (containers)
 
 	"github.com/teliso/DNSentry/internal/app"
 	"github.com/teliso/DNSentry/internal/buildinfo"

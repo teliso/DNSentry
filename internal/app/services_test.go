@@ -12,8 +12,10 @@ import (
 	"github.com/teliso/DNSentry/internal/cache"
 	"github.com/teliso/DNSentry/internal/querylog"
 	"github.com/teliso/DNSentry/internal/rules"
+	"github.com/teliso/DNSentry/internal/schedule"
 	"github.com/teliso/DNSentry/internal/services"
 	"github.com/teliso/DNSentry/internal/upstream"
+	"gopkg.in/yaml.v3"
 )
 
 func newFilterTestServer(t *testing.T, ruleText string, mutate func(*Config)) (*DNSServer, *atomic.Int32) {
@@ -150,5 +152,62 @@ func TestBlockedResponsesCarryExtendedErrorsAndNegativeCaching(t *testing.T) {
 	}
 	if soa := https.Ns[0].(*dns.SOA); soa.Minttl != 10 || soa.Hdr.Ttl != 10 {
 		t.Fatalf("negative cache time = %d/%d", soa.Hdr.Ttl, soa.Minttl)
+	}
+}
+
+func TestScheduledWindowsBlockServicesAndForceSafeSearch(t *testing.T) {
+	always := schedule.Config{Timezone: "UTC", Rules: []schedule.Rule{{Name: "family", Enabled: true, Start: "00:00", End: "00:00", Services: []string{"tiktok"}, SafeSearch: true}}}
+	if err := schedule.Normalize(&always); err != nil {
+		t.Fatal(err)
+	}
+	server, _ := newFilterTestServer(t, "@@||allowed.tiktok.com^\n", nil)
+	server.schedules.Store(schedule.Compile(always))
+
+	if response := ask(server, "www.tiktok.com.", dns.TypeA); response == nil || response.Rcode != dns.RcodeNameError {
+		t.Fatalf("a scheduled service must be blocked inside its window: %v", response)
+	}
+	if list := server.logs.List(); list[0].Rule != "计划「family」：TikTok" || list[0].Action != "block" {
+		t.Fatalf("log entry = %#v", list[0])
+	}
+	if response := ask(server, "allowed.tiktok.com.", dns.TypeA); response == nil || len(response.Answer) != 1 {
+		t.Fatalf("an allow rule must beat a schedule: %v", response)
+	}
+	if response := ask(server, "www.google.com.", dns.TypeA); response == nil || len(response.Answer) != 2 {
+		t.Fatalf("a schedule must be able to force safe search: %v", response)
+	}
+	if names := activeSchedules(server); len(names) != 1 || names[0] != "family" {
+		t.Fatalf("active = %v", names)
+	}
+
+	// Outside the window (here: disabled) nothing applies.
+	off := always
+	off.Rules = []schedule.Rule{{Name: "family", Enabled: false, Start: "00:00", End: "00:00", Services: []string{"tiktok"}}}
+	server.schedules.Store(schedule.Compile(off))
+	if response := ask(server, "www.tiktok.com.", dns.TypeA); response == nil || len(response.Answer) != 1 {
+		t.Fatalf("a closed window must not block: %v", response)
+	}
+	if names := activeSchedules(server); names == nil || len(names) != 0 {
+		t.Fatalf("active = %#v, want an empty list", names)
+	}
+}
+
+func TestScheduleIsValidatedWithTheConfiguration(t *testing.T) {
+	config := testConfig()
+	config.Schedule = schedule.Config{Rules: []schedule.Rule{{Enabled: true, Start: "25:00", End: "07:00", Services: []string{"steam"}}}}
+	if _, err := validateConfig(config); err == nil {
+		t.Fatal("an invalid schedule was accepted")
+	}
+	config = testConfig()
+	config.Schedule = schedule.Config{Timezone: "Asia/Shanghai", Rules: []schedule.Rule{{Name: " games ", Enabled: true, Days: []int{5, 6}, Start: "22:00", End: "07:00", Services: []string{"steam"}}}}
+	validated, err := validateConfig(config)
+	if err != nil || validated.Schedule.Rules[0].Name != "games" {
+		t.Fatalf("validated = %+v %v", validated.Schedule, err)
+	}
+	data, _ := yaml.Marshal(newYAMLConfig(validated))
+	if !strings.Contains(string(data), "schedule:") || !strings.Contains(string(data), "Asia/Shanghai") {
+		t.Fatalf("schedule not written:\n%s", data)
+	}
+	if data, _ := yaml.Marshal(newYAMLConfig(testConfig())); strings.Contains(string(data), "schedule") {
+		t.Fatal("an unused schedule must not be written")
 	}
 }
